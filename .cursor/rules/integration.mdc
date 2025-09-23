@@ -1,0 +1,106 @@
+---
+alwaysApply: true
+---
+
+## Integration Rule — Clanker x Lever (Base Sepolia Fork + Code/Test wiring)
+
+This document standardizes how we integrate the monolithic `MasterLever_v1` with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
+
+## Network Fork
+
+- **Chain**: Base Sepolia
+- **Chain ID**: 84532
+
+### Clanker Contracts (Base Sepolia)
+
+| Contract                      | Address                                      |
+| ----------------------------- | -------------------------------------------- |
+| ClankerHookDynamicFeeV2       | `0xBF4983dC0f2F8FE78C5cf8Fc621f294A993728Cc` |
+| ClankerHookStaticFeeV2        | `0x11b51DBC2f7F683b81CeDa83DC0078D57bA328cc` |
+| ClankerSniperAuctionV2        | `0x8CBD6694A9DFc0eF4D1cd333e013B88E7003E10A` |
+| ClankerSniperUtilV2           | `0x4DC6348D38E3e199D7Ea032c8cfE4EbDe94b442A` |
+| ClankerAirdropV2              | `0x5c68F1560a5913c176Fc5238038098970B567B19` |
+| ClankerPoolExtensionAllowlist | `0x532d79D18F0F1782884662fCC1e74581A3289680` |
+
+Notes:
+
+- These are read-only anchors for integration and testing. Actual pool deployments (PoolKey/PoolId) are per-token and not global.
+
+## Contract Integration (src/_.sol, src/interfaces/I_.sol)
+
+- **Core contracts**
+
+  - `src/MasterLever_v1.sol`
+    - Stores per-pool config keyed by `leverId` (see protocol rule).
+    - `registerPool(underlying, poolManager, poolKeyEncoded, name, symbol)` creates or wires an ERC20 wrapper (OpenZeppelin based) and persists the `leverId` mapping.
+    - Mint/redeem escrow with FCFS solvency; staking with global `rewardIndexX64`; `harvest(leverId)` with v4 unlock discipline collecting protocol fees.
+  - `src/IssuanceToken.sol`
+    - OpenZeppelin ERC20 + AccessControl.
+    - Roles: `DEFAULT_ADMIN_ROLE` = deployer; `MINTER_ROLE` = deployer and `MasterLever_v1`.
+    - Decimals should mirror underlying.
+
+- **Interfaces (minimize dependencies)**
+
+  - `src/interfaces/IMasterLever.sol`: external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
+  - `src/interfaces/IPoolManager.sol`: minimal subset for `unlock`, `collectProtocolFees`, `protocolFeesAccrued`, and `setProtocolFeeController` if used.
+  - `src/interfaces/IClankerHookDynamicFee.sol` (optional): read-only vars for fee state if frontends/analytics query via MasterLever.
+  - Prefer `bytes poolKeyEncoded` over importing full Uniswap v4 types; compute `PoolId` from ABI-encoded `PoolKey` inside the contract.
+
+- **Wiring and safety**
+  - MasterLever must be set (or allowed) as protocol fee controller for pools you intend to harvest; otherwise fees remain unclaimed until attribution is enabled (see Fee Permissions in protocol rule).
+  - Enforce no duplicate registration for the same `underlying`.
+  - Optional: enforce currency exclusivity per `IPoolManager` to avoid ambiguous fee buckets; otherwise use extension metering.
+  - Emit events for registration, mint, redeem, stake, unstake, claim, harvest.
+
+## Tests Integration (test/\*.t.sol)
+
+- **Fork configuration**
+
+  - Set env variable `BASE_SEPOLIA_RPC_URL`.
+  - Foundry CLI:
+    ```bash
+    forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532
+    ```
+  - In tests, select fork:
+    ```solidity
+    vm.createSelectFork(vm.envString("BASE_SEPOLIA_RPC_URL"));
+    ```
+
+- **Recommended test files**
+
+  - `test/MasterLever.Register.t.sol`:
+    - Deploy `MasterLever_v1`.
+    - Provide live `poolManager` and `poolKeyEncoded` (or mock if needed) and call `registerPool`.
+    - Assert wrapper roles: deployer and MasterLever have `MINTER_ROLE`.
+  - `test/MasterLever.MintRedeemFCFS.t.sol`:
+    - Transfer underlying to `MasterLever_v1` and mint wrapper to user; track `underlyingEscrowed` and `wrapper.totalSupply()`.
+    - Over-mint via deployer and assert FCFS redemption behavior.
+  - `test/MasterLever.StakeRewards.t.sol`:
+    - Stake wrapper; simulate or collect fees; assert `rewardIndexX64` accrual and `claim` payout.
+  - `test/MasterLever.Harvest.t.sol`:
+    - With controller permissions set, call `harvest(leverId)`; verify unlock/collect path and per-pool crediting.
+    - If buckets are shared, assert metering caps application.
+
+- **Utilities and mocks**
+  - If a real pool is not available on the fork, add minimal mocks for `IPoolManager` and call paths that return zero but exercise the unlock discipline without reverting.
+  - Provide helpers to encode `PoolKey` into `bytes` for `registerPool`.
+
+## Foundry Tips
+
+- In `foundry.toml`, you may add:
+
+  ```toml
+  [profile.default]
+  evm_version = "cancun"
+  optimizer = true
+  optimizer_runs = 1_000_000
+
+  [rpc_endpoints]
+  base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+  ```
+
+- Use `StdCheats` and `vm` cheatcodes for fork selection and env access.
+
+---
+
+This rule is normative for integration and testing. Keep contract behavior aligned with the Protocol Rule (`.cursor/rules/protocol.mdc`) and Clanker integration expectations.
