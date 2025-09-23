@@ -37,7 +37,7 @@ Notes:
 │   └── v4-core/            # Uniswap v4 core contracts
 ├── src/
 │   ├── interfaces/
-│   │   ├── IMasterLever.sol              # Lever protocol interface
+│   │   ├── IMasterLever_v1.sol              # Lever protocol interface
 │   │   └── external/                     # External dependencies
 │   │       ├── IPoolManager.sol          # Uniswap v4 PoolManager (minimal)
 │   │       ├── IProtocolFees.sol         # Protocol fee management
@@ -87,7 +87,7 @@ Notes:
 
 - **Interfaces** (implemented)
 
-  - `src/interfaces/IMasterLever.sol`: complete external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
+  - `src/interfaces/IMasterLever_v1.sol`: complete external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
   - `src/interfaces/external/IPoolManager.sol`: minimal subset for `unlock`, `collectProtocolFees`, `protocolFeesAccrued`.
   - `src/interfaces/external/IProtocolFees.sol`: protocol fee controller interface.
   - `src/interfaces/external/IClankerHookDynamicFee.sol`: read-only vars for fee state and dynamic fee queries.

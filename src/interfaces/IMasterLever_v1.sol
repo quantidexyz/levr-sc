@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// @title IMasterLever - Interface for the Lever protocol's MasterLever contract
+/// @title IMasterLever_v1 - Interface for the Lever protocol's MasterLever contract
 /// @notice Provides ERC20 wrapper tokens with 1:1 peg to underlying Clanker tokens,
 /// staking rewards from protocol fees, and FCFS redemption solvency
-interface IMasterLever {
+interface IMasterLever_v1 {
     /// @notice Thrown when attempting to redeem more than available escrow
     error InsufficientEscrow();
 
