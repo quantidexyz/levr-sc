@@ -152,3 +152,15 @@ flowchart TD
 - Protocol fee controller set; harvest to treasury
 - Buyback executor with safety rails (rate limits, slippage limits, pausable)
 - Monitoring of dynamic fee state and MEV module operability
+
+### Token metadata (Clanker factory)
+
+- Clanker factory exposes on-chain token metadata via `TokenConfig` during deploy:
+  - `tokenAdmin`, `name`, `symbol`, `salt`, `image` (string/URI), `metadata` (string/URI/JSON), `context` (string), `originatingChainId`.
+- Deploy paths:
+  - `deployTokenZeroSupply(TokenConfig)`
+  - `deployToken(DeploymentConfig)` where `DeploymentConfig.tokenConfig` := `TokenConfig`.
+- Events:
+  - `TokenCreated` includes: `tokenAddress`, `tokenAdmin`, `tokenImage`, `tokenName`, `tokenSymbol`, `tokenMetadata`, `tokenContext`, `poolHook`, `PoolId`, `pairedToken`, `locker`, `mevModule`, `extensions`.
+- UI/indexers:
+  - UIs read name/symbol/decimals on-chain and may read `image/metadata/context`, but many still prefer curated token lists; listing/logo may require submitting to their registry even if events exist on-chain.
