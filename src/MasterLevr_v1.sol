@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -138,12 +138,14 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
     ) external {
         LevrPool storage pool = levr[levrId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
-        if (pool.underlyingEscrowed < amountWrapper)
+        if (pool.underlyingEscrowed < amountWrapper) {
             revert InsufficientEscrow();
+        }
 
         // Check user has enough wrapper tokens
-        if (IERC20(pool.wrapper).balanceOf(msg.sender) < amountWrapper)
+        if (IERC20(pool.wrapper).balanceOf(msg.sender) < amountWrapper) {
             revert InsufficientBalance();
+        }
 
         // Burn wrapper tokens
         LevrERC20(pool.wrapper).burnFrom(msg.sender, amountWrapper);
