@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/types/PoolId.sol";
+
 /// @title IMasterLever_v1 - Interface for the Lever protocol's MasterLever contract
 /// @notice Provides ERC20 wrapper tokens with 1:1 peg to underlying Clanker tokens,
 /// staking rewards from protocol fees, and FCFS redemption solvency
@@ -31,6 +33,41 @@ interface IMasterLever_v1 {
 
     /// @notice Thrown when attempting to claim rewards but none are available
     error NoRewardsToClaim();
+
+    /// @notice Pool configuration and accounting state
+    struct LeverPool {
+        address underlying;
+        address wrapper;
+        address poolManager;
+        bytes poolKeyEncoded;
+        PoolId poolId;
+        uint256 underlyingEscrowed;
+        uint256 stakedSupply;
+        uint256 rewardIndexX64;
+        uint256 lastHarvest;
+        uint256 lastRateUpdate;
+        uint256 ratePerSecondX64;
+    }
+
+    /// @notice User staking state for a pool
+    struct UserStake {
+        uint256 amount;
+        uint256 indexX64;
+        uint256 claimable;
+    }
+
+    /// @notice Actions for IPoolManager.unlock callback
+    enum Actions {
+        HARVEST_FEES
+    }
+
+    /// @notice Data passed to unlock callback
+    struct CallbackData {
+        Actions action;
+        uint256 leverId;
+        address rewardToken;
+        uint256 amount;
+    }
 
     /// @notice Emitted when a pool is registered
     event PoolRegistered(

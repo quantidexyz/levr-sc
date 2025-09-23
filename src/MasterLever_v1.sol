@@ -18,28 +18,6 @@ contract MasterLever_v1 is IMasterLever_v1 {
     using SafeERC20 for IERC20;
     using PoolIdLibrary for PoolKey;
 
-    /// @notice Pool configuration and accounting state
-    struct LeverPool {
-        address underlying;
-        address wrapper;
-        address poolManager;
-        bytes poolKeyEncoded;
-        PoolId poolId;
-        uint256 underlyingEscrowed;
-        uint256 stakedSupply;
-        uint256 rewardIndexX64;
-        uint256 lastHarvest;
-        uint256 lastRateUpdate;
-        uint256 ratePerSecondX64;
-    }
-
-    /// @notice User staking state for a pool
-    struct UserStake {
-        uint256 amount;
-        uint256 indexX64;
-        uint256 claimable;
-    }
-
     /// @notice Next lever ID to assign
     uint256 private _nextLeverId = 1;
 
@@ -52,21 +30,8 @@ contract MasterLever_v1 is IMasterLever_v1 {
     /// @notice Mapping from (leverId, user) to staking state
     mapping(uint256 => mapping(address => UserStake)) public userStakes;
 
-/// @notice Q64.64 fixed point representation of 1 (using 1e18 for testing to avoid large numbers)
-uint256 private constant Q64 = 1e18;
-
-    /// @notice Actions for IPoolManager.unlock callback
-    enum Actions {
-        HARVEST_FEES
-    }
-
-    /// @notice Data passed to unlock callback
-    struct CallbackData {
-        Actions action;
-        uint256 leverId;
-        address rewardToken;
-        uint256 amount;
-    }
+    /// @notice Q64.64 fixed point representation of 1 (using 1e18 for testing to avoid large numbers)
+    uint256 private constant Q64 = 1e18;
 
     /// @notice Constructor - no initialization needed
     constructor() {}
@@ -81,7 +46,8 @@ uint256 private constant Q64 = 1e18;
     ) external returns (uint256 leverId, address wrapper) {
         if (underlying == address(0)) revert InvalidUnderlying();
         if (poolManager == address(0)) revert InvalidPoolManager();
-        if (leverIdByUnderlying[underlying] != 0) revert PoolAlreadyRegistered();
+        if (leverIdByUnderlying[underlying] != 0)
+            revert PoolAlreadyRegistered();
 
         // Decode pool key to compute pool ID
         PoolKey memory poolKey = abi.decode(poolKeyEncoded, (PoolKey));
@@ -116,16 +82,30 @@ uint256 private constant Q64 = 1e18;
             ratePerSecondX64: 0
         });
 
-        emit PoolRegistered(leverId, underlying, wrapper, poolManager, poolKeyEncoded);
+        emit PoolRegistered(
+            leverId,
+            underlying,
+            wrapper,
+            poolManager,
+            poolKeyEncoded
+        );
     }
 
     /// @inheritdoc IMasterLever_v1
-    function mint(uint256 leverId, uint256 amountUnderlying, address to) external {
+    function mint(
+        uint256 leverId,
+        uint256 amountUnderlying,
+        address to
+    ) external {
         LeverPool storage pool = lever[leverId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
 
         // Transfer underlying tokens to this contract
-        IERC20(pool.underlying).safeTransferFrom(msg.sender, address(this), amountUnderlying);
+        IERC20(pool.underlying).safeTransferFrom(
+            msg.sender,
+            address(this),
+            amountUnderlying
+        );
 
         // Mint wrapper tokens
         LeverERC20(pool.wrapper).mint(to, amountUnderlying);
@@ -134,17 +114,27 @@ uint256 private constant Q64 = 1e18;
         pool.underlyingEscrowed += amountUnderlying;
 
         emit Minted(leverId, to, amountUnderlying, amountUnderlying);
-        emit SolvencyChanged(leverId, pool.underlyingEscrowed, IERC20(pool.wrapper).totalSupply());
+        emit SolvencyChanged(
+            leverId,
+            pool.underlyingEscrowed,
+            IERC20(pool.wrapper).totalSupply()
+        );
     }
 
     /// @inheritdoc IMasterLever_v1
-    function redeem(uint256 leverId, uint256 amountWrapper, address to) external {
+    function redeem(
+        uint256 leverId,
+        uint256 amountWrapper,
+        address to
+    ) external {
         LeverPool storage pool = lever[leverId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
-        if (pool.underlyingEscrowed < amountWrapper) revert InsufficientEscrow();
+        if (pool.underlyingEscrowed < amountWrapper)
+            revert InsufficientEscrow();
 
         // Check user has enough wrapper tokens
-        if (IERC20(pool.wrapper).balanceOf(msg.sender) < amountWrapper) revert InsufficientBalance();
+        if (IERC20(pool.wrapper).balanceOf(msg.sender) < amountWrapper)
+            revert InsufficientBalance();
 
         // Burn wrapper tokens
         LeverERC20(pool.wrapper).burnFrom(msg.sender, amountWrapper);
@@ -156,7 +146,11 @@ uint256 private constant Q64 = 1e18;
         pool.underlyingEscrowed -= amountWrapper;
 
         emit Redeemed(leverId, msg.sender, amountWrapper, amountWrapper);
-        emit SolvencyChanged(leverId, pool.underlyingEscrowed, IERC20(pool.wrapper).totalSupply());
+        emit SolvencyChanged(
+            leverId,
+            pool.underlyingEscrowed,
+            IERC20(pool.wrapper).totalSupply()
+        );
     }
 
     /// @inheritdoc IMasterLever_v1
@@ -170,7 +164,11 @@ uint256 private constant Q64 = 1e18;
         _updateUserRewards(leverId, to);
 
         // Transfer wrapper tokens from user
-        IERC20(pool.wrapper).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(pool.wrapper).safeTransferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
 
         // Update user's stake
         userStake.amount += amount;
@@ -253,7 +251,9 @@ uint256 private constant Q64 = 1e18;
     /// @notice Callback function called by IPoolManager.unlock
     /// @param data Encoded callback data
     /// @return result Return data
-    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+    function unlockCallback(
+        bytes calldata data
+    ) external returns (bytes memory) {
         CallbackData memory callbackData = abi.decode(data, (CallbackData));
 
         if (callbackData.action == Actions.HARVEST_FEES) {
@@ -281,10 +281,15 @@ uint256 private constant Q64 = 1e18;
 
             if (totalHarvested > 0 && pool.stakedSupply > 0) {
                 // Update reward index
-                uint256 newRewardsX64 = (totalHarvested * Q64) / pool.stakedSupply;
+                uint256 newRewardsX64 = (totalHarvested * Q64) /
+                    pool.stakedSupply;
                 pool.rewardIndexX64 += newRewardsX64;
 
-                emit Harvested(callbackData.leverId, callbackData.rewardToken, totalHarvested);
+                emit Harvested(
+                    callbackData.leverId,
+                    callbackData.rewardToken,
+                    totalHarvested
+                );
             }
 
             pool.lastHarvest = block.timestamp;
@@ -307,18 +312,26 @@ uint256 private constant Q64 = 1e18;
     }
 
     /// @inheritdoc IMasterLever_v1
-    function getRatePerSecondX64(uint256 leverId) external view returns (uint256) {
+    function getRatePerSecondX64(
+        uint256 leverId
+    ) external view returns (uint256) {
         LeverPool storage pool = lever[leverId];
         return pool.ratePerSecondX64;
     }
 
     /// @inheritdoc IMasterLever_v1
-    function getUserStake(uint256 leverId, address user) external view returns (uint256) {
+    function getUserStake(
+        uint256 leverId,
+        address user
+    ) external view returns (uint256) {
         return userStakes[leverId][user].amount;
     }
 
     /// @inheritdoc IMasterLever_v1
-    function getClaimableRewards(uint256 leverId, address user) external view returns (uint256) {
+    function getClaimableRewards(
+        uint256 leverId,
+        address user
+    ) external view returns (uint256) {
         UserStake storage userStake = userStakes[leverId][user];
         LeverPool storage pool = lever[leverId];
 
@@ -327,7 +340,8 @@ uint256 private constant Q64 = 1e18;
         uint256 userStakeAmount = userStake.amount;
 
         if (currentIndex > userIndex && userStakeAmount > 0) {
-            uint256 accrued = ((currentIndex - userIndex) * userStakeAmount) / Q64;
+            uint256 accrued = ((currentIndex - userIndex) * userStakeAmount) /
+                Q64;
             return userStake.claimable + accrued;
         }
 
@@ -335,7 +349,9 @@ uint256 private constant Q64 = 1e18;
     }
 
     /// @inheritdoc IMasterLever_v1
-    function getPoolInfo(uint256 leverId)
+    function getPoolInfo(
+        uint256 leverId
+    )
         external
         view
         returns (
@@ -357,7 +373,9 @@ uint256 private constant Q64 = 1e18;
     }
 
     /// @inheritdoc IMasterLever_v1
-    function getLeverIdByUnderlying(address underlying) external view returns (uint256) {
+    function getLeverIdByUnderlying(
+        address underlying
+    ) external view returns (uint256) {
         return leverIdByUnderlying[underlying];
     }
 
@@ -373,7 +391,8 @@ uint256 private constant Q64 = 1e18;
         uint256 userStakeAmount = userStake.amount;
 
         if (currentIndex > userIndex && userStakeAmount > 0) {
-            uint256 accrued = ((currentIndex - userIndex) * userStakeAmount) / Q64;
+            uint256 accrued = ((currentIndex - userIndex) * userStakeAmount) /
+                Q64;
             userStake.claimable += accrued;
         }
 
