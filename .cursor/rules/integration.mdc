@@ -22,9 +22,59 @@ Notes:
 
 - These are read-only anchors for integration and testing. Actual pool deployments (PoolKey/PoolId) are per-token and not global.
 
+## Project Structure
+
+```
+/Users/anon/Desktop/mguleryuz/lever/
+├── .cursor/rules/
+│   ├── integration.mdc     # This file
+│   ├── protocol.mdc        # Lever protocol rules
+│   ├── clanker_sc.mdc      # Clanker Smart Contract overview
+│   └── clanker_sdk.mdc     # Clanker SDK usage
+├── lib/
+│   ├── forge-std/          # Foundry testing utilities
+│   ├── openzeppelin-contracts/  # OZ contracts
+│   └── v4-core/            # Uniswap v4 core contracts
+├── src/
+│   ├── interfaces/
+│   │   ├── IMasterLever.sol              # Lever protocol interface
+│   │   └── external/                     # External dependencies
+│   │       ├── IPoolManager.sol          # Uniswap v4 PoolManager (minimal)
+│   │       ├── IProtocolFees.sol         # Protocol fee management
+│   │       ├── IClankerHookDynamicFee.sol    # Dynamic fee queries
+│   │       ├── IClankerHookV2.sol            # Main Clanker hook
+│   │       ├── IClankerHook.sol              # Base Clanker hook
+│   │       ├── IClankerHookV2PoolExtension.sol   # Pool extensions
+│   │       ├── IClankerPoolExtensionAllowlist.sol # Extension governance
+│   │       └── IOwnerAdmins.sol            # Admin management
+│   └── *.sol                    # Contract implementations (TBD)
+├── test/
+│   └── *.t.sol                 # Foundry tests (TBD)
+├── script/
+│   └── ExampleDeploy.s.sol     # Deployment scripts
+├── foundry.toml                # Foundry configuration
+├── remappings.txt              # Import remappings
+└── Makefile                    # Build automation
+```
+
+## Dependencies & Remappings
+
+- **Installed via forge:**
+
+  - `@uniswap/v4-core` - Uniswap v4 core contracts
+  - `forge-std` - Foundry testing utilities
+  - `openzeppelin-contracts` - OpenZeppelin contracts
+
+- **Remappings** (`remappings.txt`):
+  ```
+  @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+  @uniswap/v4-core/=lib/v4-core/src/
+  forge-std/=lib/forge-std/src/
+  ```
+
 ## Contract Integration (src/_.sol, src/interfaces/I_.sol)
 
-- **Core contracts**
+- **Core contracts** (to be implemented)
 
   - `src/MasterLever_v1.sol`
     - Stores per-pool config keyed by `leverId` (see protocol rule).
@@ -35,11 +85,17 @@ Notes:
     - Roles: `DEFAULT_ADMIN_ROLE` = deployer; `MINTER_ROLE` = deployer and `MasterLever_v1`.
     - Decimals should mirror underlying.
 
-- **Interfaces (minimize dependencies)**
+- **Interfaces** (implemented)
 
-  - `src/interfaces/IMasterLever.sol`: external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
-  - `src/interfaces/external/IPoolManager.sol`: minimal subset for `unlock`, `collectProtocolFees`, `protocolFeesAccrued`, and `setProtocolFeeController` if used.
-  - `src/interfaces/external/IClankerHookDynamicFee.sol` (optional): read-only vars for fee state if frontends/analytics query via MasterLever.
+  - `src/interfaces/IMasterLever.sol`: complete external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
+  - `src/interfaces/external/IPoolManager.sol`: minimal subset for `unlock`, `collectProtocolFees`, `protocolFeesAccrued`.
+  - `src/interfaces/external/IProtocolFees.sol`: protocol fee controller interface.
+  - `src/interfaces/external/IClankerHookDynamicFee.sol`: read-only vars for fee state and dynamic fee queries.
+  - `src/interfaces/external/IClankerHookV2.sol`: main Clanker hook interface with MEV module functions.
+  - `src/interfaces/external/IClankerHook.sol`: base Clanker hook interface.
+  - `src/interfaces/external/IClankerHookV2PoolExtension.sol`: pool extension callbacks.
+  - `src/interfaces/external/IClankerPoolExtensionAllowlist.sol`: extension governance.
+  - `src/interfaces/external/IOwnerAdmins.sol`: admin management interface.
   - Prefer `bytes poolKeyEncoded` over importing full Uniswap v4 types; compute `PoolId` from ABI-encoded `PoolKey` inside the contract.
 
 - **Wiring and safety**
@@ -81,18 +137,37 @@ Notes:
   - If a real pool is not available on the fork, add minimal mocks for `IPoolManager` and call paths that return zero but exercise the unlock discipline without reverting.
   - Provide helpers to encode `PoolKey` into `bytes` for `registerPool`.
 
-## Foundry Tips
+## Foundry Configuration
 
-- In `foundry.toml`, you may add:
+- **`foundry.toml`**:
 
   ```toml
   [profile.default]
+  src = "src"
+  out = "out"
+  libs = ["lib"]
   evm_version = "cancun"
   optimizer = true
   optimizer_runs = 1_000_000
 
   [rpc_endpoints]
   base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+  ```
+
+- **`remappings.txt`** (automatically loaded):
+
+  ```
+  @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+  @uniswap/v4-core/=lib/v4-core/src/
+  forge-std/=lib/forge-std/src/
+  ```
+
+- **Build commands:**
+
+  ```bash
+  forge build          # Build contracts
+  forge build --silent # Build without verbose output
+  forge test           # Run tests
   ```
 
 - Use `StdCheats` and `vm` cheatcodes for fork selection and env access.
