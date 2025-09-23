@@ -2,9 +2,9 @@
 alwaysApply: true
 ---
 
-## Lever Protocol Rules — MasterLevr v1 (Monolithic Architecture)
+## Levr Protocol Rules — MasterLevr v1 (Monolithic Architecture)
 
-This document defines how the Lever protocol operates in a monolithic setup centered on `MasterLevr_v1`, including ERC20 wrapper tokens, solvency (FCFS redemptions), staking, fee distribution from Clanker v4 pools, and observability (peg, APY). It is source-of-truth for integration and implementation decisions across the codebase.
+This document defines how the Levr protocol operates in a monolithic setup centered on `MasterLevr_v1`, including ERC20 wrapper tokens, solvency (FCFS redemptions), staking, fee distribution from Clanker v4 pools, and observability (peg, APY). It is source-of-truth for integration and implementation decisions across the codebase.
 
 ### Scope
 
@@ -20,7 +20,7 @@ This document defines how the Lever protocol operates in a monolithic setup cent
 
 ### MasterLevr_v1
 
-- Stores per-pool configuration and accounting in a mapping from `leverId` to a struct. The canonical keys include:
+- Stores per-pool configuration and accounting in a mapping from `levrId` to a struct. The canonical keys include:
 
   - `underlying`: Clanker-launched ERC20 address
   - `wrapper`: ERC20 issuance token address (OpenZeppelin-based), 1:1 unit mapping to underlying
@@ -35,9 +35,9 @@ This document defines how the Lever protocol operates in a monolithic setup cent
 
 - Global mappings:
 
-  - `leverIdByUnderlying[underlying] -> leverId`
-  - `lever[leverId] -> LeverPool`
-  - `userStake[leverId][user]`, `userIndexX64[leverId][user]`, `userClaimable[leverId][user]`
+  - `levrIdByUnderlying[underlying] -> levrId`
+  - `levr[levrId] -> LevrPool`
+  - `userStake[levrId][user]`, `userIndexX64[levrId][user]`, `userClaimable[levrId][user]`
 
 - Authority:
   - Acts as protocol fee controller for relevant pools, or is configured as the collector via governance.
@@ -75,7 +75,7 @@ This document defines how the Lever protocol operates in a monolithic setup cent
 
 3. `MasterLevr_v1` computes `PoolId`, stores config, and deploys or wires the ERC20 wrapper token for this `underlying`:
    - Grants `MINTER_ROLE` to `MasterLevr_v1` and to the deployer/admin
-   - Persists `leverIdByUnderlying` and `lever[leverId]`
+   - Persists `levrIdByUnderlying` and `levr[levrId]`
 
 From this point forward, all flows are available with only the `MasterLevr_v1` address known to participants.
 
@@ -106,9 +106,9 @@ Applies to both freshly deployed and already-launched Clanker tokens:
   - Frontends should surface solvency and peg ratio for transparency.
 
 - Events (recommended):
-  - `Minted(leverId, user, amountUnderlying, amountWrapper)`
-  - `Redeemed(leverId, user, amountWrapper, amountUnderlyingPaid)`
-  - `SolvencyChanged(leverId, underlyingEscrowed, wrapperSupply)`
+  - `Minted(levrId, user, amountUnderlying, amountWrapper)`
+  - `Redeemed(levrId, user, amountWrapper, amountUnderlyingPaid)`
+  - `SolvencyChanged(levrId, underlyingEscrowed, wrapperSupply)`
 
 ## Staking and Rewards (Fee Distribution)
 
@@ -121,14 +121,14 @@ Applies to both freshly deployed and already-launched Clanker tokens:
   - `claimable += (userStake * (rewardIndexX64 - userIndexX64)) >> 64`
 
 - Core methods:
-  - `stake(leverId, amount, to)`
-  - `unstake(leverId, amount, to)`
-  - `claim(leverId, to)` — pays out the fee currency accrued for that pool (typically the paired token or underlying per configuration)
+  - `stake(levrId, amount, to)`
+  - `unstake(levrId, amount, to)`
+  - `claim(levrId, to)` — pays out the fee currency accrued for that pool (typically the paired token or underlying per configuration)
 
 ## Fee Harvesting from Clanker v4
 
 - `MasterLevr_v1` is configured as the protocol fee controller/collector for the pool.
-- Anyone may call `harvest(leverId)` to collect protocol fees using v4 unlock discipline:
+- Anyone may call `harvest(levrId)` to collect protocol fees using v4 unlock discipline:
   - Calls `IPoolManager.unlock` with a callback that executes `collectProtocolFees(recipient=MasterLevr_v1, currency, amount)`
   - Ensures settlement nets to zero prior to re-locking; otherwise reverts per v4 constraints
   - On success, credits the harvested amounts into the pool’s reward accounting and updates `rewardIndexX64`
@@ -137,8 +137,8 @@ Applies to both freshly deployed and already-launched Clanker tokens:
 
 - Choose one path to enable fee collection attribution:
 
-  1. Controller handoff (preferred): set `MasterLevr_v1` as the protocol fee controller for the pool so `harvest(leverId)` can directly collect fees.
-  2. Extension metering: attach an allowlisted pool extension that calls `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap; `harvest(leverId)` collects up to the tracked entitlement.
+  1. Controller handoff (preferred): set `MasterLevr_v1` as the protocol fee controller for the pool so `harvest(levrId)` can directly collect fees.
+  2. Extension metering: attach an allowlisted pool extension that calls `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap; `harvest(levrId)` collects up to the tracked entitlement.
   3. Isolation: use a dedicated `IPoolManager` instance so currency buckets are not shared with unrelated pools.
   4. Exclusivity: enforce that no two registered pools share the same fee currency on the same manager.
 
@@ -148,24 +148,24 @@ Applies to both freshly deployed and already-launched Clanker tokens:
 
 - Attribution model:
 
-  - Fees are not pushed to `MasterLevr_v1`; they are pulled per-pool via `harvest(leverId)`.
-  - Attribution is by call context: during `harvest(leverId)`, the contract collects only the currencies that belong to that pool’s `PoolKey` and immediately credits them to that `leverId`’s reward index.
+  - Fees are not pushed to `MasterLevr_v1`; they are pulled per-pool via `harvest(levrId)`.
+  - Attribution is by call context: during `harvest(levrId)`, the contract collects only the currencies that belong to that pool’s `PoolKey` and immediately credits them to that `levrId`’s reward index.
 
 - Shared currency buckets on the same `IPoolManager`:
 
   - Because `protocolFeesAccrued(currency)` is aggregated per currency (not per pool), avoid ambiguity by one of the following patterns:
-    1. Pool-extension metering (recommended): a Clanker pool extension invokes `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap to track per-pool entitlements. On `harvest(leverId)`, allocate from the global currency bucket up to the owed entitlement for that `poolId`.
+    1. Pool-extension metering (recommended): a Clanker pool extension invokes `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap to track per-pool entitlements. On `harvest(levrId)`, allocate from the global currency bucket up to the owed entitlement for that `poolId`.
     2. Isolation: use a dedicated `IPoolManager` (or deployment) for registered pools so currency buckets are not shared with unrelated pools.
-    3. Exclusivity: enforce a registry invariant that no two registered pools share the same fee currency on the same manager (e.g., `currency -> leverId` map) to prevent ambiguous attribution.
+    3. Exclusivity: enforce a registry invariant that no two registered pools share the same fee currency on the same manager (e.g., `currency -> levrId` map) to prevent ambiguous attribution.
 
-- If none of the above are enforced and multiple pools share a currency bucket, `harvest(leverId)` must conservatively cap collection to the pool’s tracked entitlement (if any); otherwise, harvesting could misattribute fees. Frontends should surface which strategy is active.
+- If none of the above are enforced and multiple pools share a currency bucket, `harvest(levrId)` must conservatively cap collection to the pool’s tracked entitlement (if any); otherwise, harvesting could misattribute fees. Frontends should surface which strategy is active.
 
 ## Peg and APY Observability
 
 - Expose read-only views per pool:
 
-  - `getPegBps(leverId) -> uint256`: `underlyingEscrowed * 1e4 / wrapper.totalSupply()` (returns 0 if supply is 0)
-  - `getRatePerSecondX64(leverId) -> uint256`: rolling rewards rate for frontends to annualize
+  - `getPegBps(levrId) -> uint256`: `underlyingEscrowed * 1e4 / wrapper.totalSupply()` (returns 0 if supply is 0)
+  - `getRatePerSecondX64(levrId) -> uint256`: rolling rewards rate for frontends to annualize
   - Optionally provide windowed averages over the last N seconds/harvests
 
 - APY is an off-chain presentation: `ratePerSecond * 31,536,000` as a baseline, with caveats on variable fees/TVL.
@@ -200,23 +200,23 @@ function registerPool(
     bytes calldata poolKeyEncoded,
     string calldata name,
     string calldata symbol
-) external returns (uint256 leverId, address wrapper);
+) external returns (uint256 levrId, address wrapper);
 
 // Mint/Redeem (user flows)
-function mint(uint256 leverId, uint256 amountUnderlying, address to) external;
-function redeem(uint256 leverId, uint256 amountWrapper, address to) external;
+function mint(uint256 levrId, uint256 amountUnderlying, address to) external;
+function redeem(uint256 levrId, uint256 amountWrapper, address to) external;
 
 // Staking
-function stake(uint256 leverId, uint256 amount, address to) external;
-function unstake(uint256 leverId, uint256 amount, address to) external;
-function claim(uint256 leverId, address to) external;
+function stake(uint256 levrId, uint256 amount, address to) external;
+function unstake(uint256 levrId, uint256 amount, address to) external;
+function claim(uint256 levrId, address to) external;
 
 // Fees
-function harvest(uint256 leverId) external;
+function harvest(uint256 levrId) external;
 
 // Views
-function getPegBps(uint256 leverId) external view returns (uint256);
-function getRatePerSecondX64(uint256 leverId) external view returns (uint256);
+function getPegBps(uint256 levrId) external view returns (uint256);
+function getRatePerSecondX64(uint256 levrId) external view returns (uint256);
 ```
 
 ## Implementation Notes
@@ -239,9 +239,9 @@ function getRatePerSecondX64(uint256 leverId) external view returns (uint256);
 
 This rule is normative. Contract implementations and SDK integrations should align with the above semantics. Any divergence should update this document first.
 
-## Lever Protocol Rules — MasterLevr v1 (Monolithic Architecture)
+## Levr Protocol Rules — MasterLevr v1 (Monolithic Architecture)
 
-This document defines how the Lever protocol operates in a monolithic setup centered on `MasterLevr_v1`, including ERC20 wrapper tokens, solvency (FCFS redemptions), staking, fee distribution from Clanker v4 pools, and observability (peg, APY). It is source-of-truth for integration and implementation decisions across the codebase.
+This document defines how the Levr protocol operates in a monolithic setup centered on `MasterLevr_v1`, including ERC20 wrapper tokens, solvency (FCFS redemptions), staking, fee distribution from Clanker v4 pools, and observability (peg, APY). It is source-of-truth for integration and implementation decisions across the codebase.
 
 ### Scope
 
@@ -257,7 +257,7 @@ This document defines how the Lever protocol operates in a monolithic setup cent
 
 ### MasterLevr_v1
 
-- Stores per-pool configuration and accounting in a mapping from `leverId` to a struct. The canonical keys include:
+- Stores per-pool configuration and accounting in a mapping from `levrId` to a struct. The canonical keys include:
 
   - `underlying`: Clanker-launched ERC20 address
   - `wrapper`: ERC20 issuance token address (OpenZeppelin-based), 1:1 unit mapping to underlying
@@ -272,9 +272,9 @@ This document defines how the Lever protocol operates in a monolithic setup cent
 
 - Global mappings:
 
-  - `leverIdByUnderlying[underlying] -> leverId`
-  - `lever[leverId] -> LeverPool`
-  - `userStake[leverId][user]`, `userIndexX64[leverId][user]`, `userClaimable[leverId][user]`
+  - `levrIdByUnderlying[underlying] -> levrId`
+  - `levr[levrId] -> LevrPool`
+  - `userStake[levrId][user]`, `userIndexX64[levrId][user]`, `userClaimable[levrId][user]`
 
 - Authority:
   - Acts as protocol fee controller for relevant pools, or is configured as the collector via governance.
@@ -312,7 +312,7 @@ This document defines how the Lever protocol operates in a monolithic setup cent
 
 3. `MasterLevr_v1` computes `PoolId`, stores config, and deploys or wires the ERC20 wrapper token for this `underlying`:
    - Grants `MINTER_ROLE` to `MasterLevr_v1` and to the deployer/admin
-   - Persists `leverIdByUnderlying` and `lever[leverId]`
+   - Persists `levrIdByUnderlying` and `levr[levrId]`
 
 From this point forward, all flows are available with only the `MasterLevr_v1` address known to participants.
 
@@ -337,9 +337,9 @@ From this point forward, all flows are available with only the `MasterLevr_v1` a
   - Frontends should surface solvency and peg ratio for transparency.
 
 - Events (recommended):
-  - `Minted(leverId, user, amountUnderlying, amountWrapper)`
-  - `Redeemed(leverId, user, amountWrapper, amountUnderlyingPaid)`
-  - `SolvencyChanged(leverId, underlyingEscrowed, wrapperSupply)`
+  - `Minted(levrId, user, amountUnderlying, amountWrapper)`
+  - `Redeemed(levrId, user, amountWrapper, amountUnderlyingPaid)`
+  - `SolvencyChanged(levrId, underlyingEscrowed, wrapperSupply)`
 
 ## Staking and Rewards (Fee Distribution)
 
@@ -352,14 +352,14 @@ From this point forward, all flows are available with only the `MasterLevr_v1` a
   - `claimable += (userStake * (rewardIndexX64 - userIndexX64)) >> 64`
 
 - Core methods:
-  - `stake(leverId, amount, to)`
-  - `unstake(leverId, amount, to)`
-  - `claim(leverId, to)` — pays out the fee currency accrued for that pool (typically the paired token or underlying per configuration)
+  - `stake(levrId, amount, to)`
+  - `unstake(levrId, amount, to)`
+  - `claim(levrId, to)` — pays out the fee currency accrued for that pool (typically the paired token or underlying per configuration)
 
 ## Fee Harvesting from Clanker v4
 
 - `MasterLevr_v1` is configured as the protocol fee controller/collector for the pool.
-- Anyone may call `harvest(leverId)` to collect protocol fees using v4 unlock discipline:
+- Anyone may call `harvest(levrId)` to collect protocol fees using v4 unlock discipline:
   - Calls `IPoolManager.unlock` with a callback that executes `collectProtocolFees(recipient=MasterLevr_v1, currency, amount)`
   - Ensures settlement nets to zero prior to re-locking; otherwise reverts per v4 constraints
   - On success, credits the harvested amounts into the pool’s reward accounting and updates `rewardIndexX64`
@@ -368,24 +368,24 @@ From this point forward, all flows are available with only the `MasterLevr_v1` a
 
 - Attribution model:
 
-  - Fees are not pushed to `MasterLevr_v1`; they are pulled per-pool via `harvest(leverId)`.
-  - Attribution is by call context: during `harvest(leverId)`, the contract collects only the currencies that belong to that pool’s `PoolKey` and immediately credits them to that `leverId`’s reward index.
+  - Fees are not pushed to `MasterLevr_v1`; they are pulled per-pool via `harvest(levrId)`.
+  - Attribution is by call context: during `harvest(levrId)`, the contract collects only the currencies that belong to that pool’s `PoolKey` and immediately credits them to that `levrId`’s reward index.
 
 - Shared currency buckets on the same `IPoolManager`:
 
   - Because `protocolFeesAccrued(currency)` is aggregated per currency (not per pool), avoid ambiguity by one of the following patterns:
-    1. Pool-extension metering (recommended): a Clanker pool extension invokes `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap to track per-pool entitlements. On `harvest(leverId)`, allocate from the global currency bucket up to the owed entitlement for that `poolId`.
+    1. Pool-extension metering (recommended): a Clanker pool extension invokes `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap to track per-pool entitlements. On `harvest(levrId)`, allocate from the global currency bucket up to the owed entitlement for that `poolId`.
     2. Isolation: use a dedicated `IPoolManager` (or deployment) for registered pools so currency buckets are not shared with unrelated pools.
-    3. Exclusivity: enforce a registry invariant that no two registered pools share the same fee currency on the same manager (e.g., `currency -> leverId` map) to prevent ambiguous attribution.
+    3. Exclusivity: enforce a registry invariant that no two registered pools share the same fee currency on the same manager (e.g., `currency -> levrId` map) to prevent ambiguous attribution.
 
-- If none of the above are enforced and multiple pools share a currency bucket, `harvest(leverId)` must conservatively cap collection to the pool’s tracked entitlement (if any); otherwise, harvesting could misattribute fees. Frontends should surface which strategy is active.
+- If none of the above are enforced and multiple pools share a currency bucket, `harvest(levrId)` must conservatively cap collection to the pool’s tracked entitlement (if any); otherwise, harvesting could misattribute fees. Frontends should surface which strategy is active.
 
 ## Peg and APY Observability
 
 - Expose read-only views per pool:
 
-  - `getPegBps(leverId) -> uint256`: `underlyingEscrowed * 1e4 / wrapper.totalSupply()` (returns 0 if supply is 0)
-  - `getRatePerSecondX64(leverId) -> uint256`: rolling rewards rate for frontends to annualize
+  - `getPegBps(levrId) -> uint256`: `underlyingEscrowed * 1e4 / wrapper.totalSupply()` (returns 0 if supply is 0)
+  - `getRatePerSecondX64(levrId) -> uint256`: rolling rewards rate for frontends to annualize
   - Optionally provide windowed averages over the last N seconds/harvests
 
 - APY is an off-chain presentation: `ratePerSecond * 31,536,000` as a baseline, with caveats on variable fees/TVL.
@@ -420,23 +420,23 @@ function registerPool(
     bytes calldata poolKeyEncoded,
     string calldata name,
     string calldata symbol
-) external returns (uint256 leverId, address wrapper);
+) external returns (uint256 levrId, address wrapper);
 
 // Mint/Redeem (user flows)
-function mint(uint256 leverId, uint256 amountUnderlying, address to) external;
-function redeem(uint256 leverId, uint256 amountWrapper, address to) external;
+function mint(uint256 levrId, uint256 amountUnderlying, address to) external;
+function redeem(uint256 levrId, uint256 amountWrapper, address to) external;
 
 // Staking
-function stake(uint256 leverId, uint256 amount, address to) external;
-function unstake(uint256 leverId, uint256 amount, address to) external;
-function claim(uint256 leverId, address to) external;
+function stake(uint256 levrId, uint256 amount, address to) external;
+function unstake(uint256 levrId, uint256 amount, address to) external;
+function claim(uint256 levrId, address to) external;
 
 // Fees
-function harvest(uint256 leverId) external;
+function harvest(uint256 levrId) external;
 
 // Views
-function getPegBps(uint256 leverId) external view returns (uint256);
-function getRatePerSecondX64(uint256 leverId) external view returns (uint256);
+function getPegBps(uint256 levrId) external view returns (uint256);
+function getRatePerSecondX64(uint256 levrId) external view returns (uint256);
 ```
 
 ## Implementation Notes

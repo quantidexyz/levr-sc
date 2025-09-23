@@ -172,14 +172,14 @@ contract MasterLevrV1Test is Test {
         // === REGISTRATION ===
         console.log("1. Testing token registration...");
         vm.startPrank(deployer);
-        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+        (uint256 levrId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
             poolKeyEncoded
         );
         vm.stopPrank();
 
-        assertEq(leverId, 1);
+        assertEq(levrId, 1);
         assertTrue(wrapper != address(0));
         console.log(
             "Token registered successfully, wrapper deployed at:",
@@ -190,31 +190,31 @@ contract MasterLevrV1Test is Test {
         console.log("2. Testing token minting...");
         vm.startPrank(user1);
         uint256 mintAmount = 100 ether;
-        masterLevr.mint(leverId, mintAmount, user1);
+        masterLevr.mint(levrId, mintAmount, user1);
 
         assertEq(underlyingToken.balanceOf(user1), 900 ether);
         assertEq(underlyingToken.balanceOf(address(masterLevr)), mintAmount);
         assertEq(LevrERC20(wrapper).balanceOf(user1), mintAmount);
-        assertEq(masterLevr.getPegBps(leverId), 10000); // 100% peg
+        assertEq(masterLevr.getPegBps(levrId), 10000); // 100% peg
         console.log(
             "Tokens minted successfully, peg ratio:",
-            masterLevr.getPegBps(leverId)
+            masterLevr.getPegBps(levrId)
         );
 
         // === STAKING ===
         console.log("3. Testing token staking...");
         LevrERC20(wrapper).approve(address(masterLevr), type(uint256).max);
         uint256 stakeAmount = 50 ether;
-        masterLevr.stake(leverId, stakeAmount, user1);
+        masterLevr.stake(levrId, stakeAmount, user1);
 
-        assertEq(masterLevr.getUserStake(leverId, user1), stakeAmount);
+        assertEq(masterLevr.getUserStake(levrId, user1), stakeAmount);
         assertEq(LevrERC20(wrapper).balanceOf(user1), 50 ether); // Remaining after staking
         assertEq(
             LevrERC20(wrapper).balanceOf(address(masterLevr)),
             stakeAmount
         );
 
-        (, , , , uint256 stakedSupply) = masterLevr.getPoolInfo(leverId);
+        (, , , , uint256 stakedSupply) = masterLevr.getPoolInfo(levrId);
         assertEq(stakedSupply, stakeAmount);
         console.log("Tokens staked successfully, staked supply:", stakedSupply);
 
@@ -227,7 +227,7 @@ contract MasterLevrV1Test is Test {
         );
 
         // Harvest fees
-        masterLevr.harvest(leverId);
+        masterLevr.harvest(levrId);
         assertTrue(poolManager.harvestCalled());
         console.log("Fees harvested successfully");
 
@@ -239,19 +239,19 @@ contract MasterLevrV1Test is Test {
 
         // === UNSTAKING ===
         console.log("6. Testing token unstaking...");
-        masterLevr.unstake(leverId, stakeAmount, user1);
+        masterLevr.unstake(levrId, stakeAmount, user1);
 
-        assertEq(masterLevr.getUserStake(leverId, user1), 0);
+        assertEq(masterLevr.getUserStake(levrId, user1), 0);
         assertEq(LevrERC20(wrapper).balanceOf(user1), 100 ether); // Back to original amount
         assertEq(LevrERC20(wrapper).balanceOf(address(masterLevr)), 0);
 
-        (, , , , uint256 stakedSupplyAfter) = masterLevr.getPoolInfo(leverId);
+        (, , , , uint256 stakedSupplyAfter) = masterLevr.getPoolInfo(levrId);
         assertEq(stakedSupplyAfter, 0);
         console.log("Tokens unstaked successfully");
 
         // === REDEEMING ===
         console.log("7. Testing token redemption...");
-        masterLevr.redeem(leverId, mintAmount, user1);
+        masterLevr.redeem(levrId, mintAmount, user1);
 
         assertEq(underlyingToken.balanceOf(user1), 1000 ether); // Back to original
         assertEq(underlyingToken.balanceOf(address(masterLevr)), 0);
@@ -270,7 +270,7 @@ contract MasterLevrV1Test is Test {
     function testPegRatioMaintenance() public {
         // Register pool
         vm.startPrank(deployer);
-        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+        (uint256 levrId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
             poolKeyEncoded
@@ -278,12 +278,12 @@ contract MasterLevrV1Test is Test {
         vm.stopPrank();
 
         // Initially 0% peg (no supply)
-        assertEq(masterLevr.getPegBps(leverId), 0);
+        assertEq(masterLevr.getPegBps(levrId), 0);
 
         // Mint tokens
         vm.startPrank(user1);
-        masterLevr.mint(leverId, 100 ether, user1);
-        assertEq(masterLevr.getPegBps(leverId), 10000); // 100% peg
+        masterLevr.mint(levrId, 100 ether, user1);
+        assertEq(masterLevr.getPegBps(levrId), 10000); // 100% peg
 
         // Simulate over-minting by deployer (deployer needs to grant themselves MINTER_ROLE first)
         vm.startPrank(deployer);
@@ -295,7 +295,7 @@ contract MasterLevrV1Test is Test {
         vm.stopPrank();
 
         // Peg should now be 100 * 10000 / 150 = 6667 bps (66.67%)
-        assertEq(masterLevr.getPegBps(leverId), 6666); // Allow for rounding
+        assertEq(masterLevr.getPegBps(levrId), 6666); // Allow for rounding
         console.log(
             "Peg ratio correctly maintained during over-minting scenario"
         );
@@ -304,7 +304,7 @@ contract MasterLevrV1Test is Test {
     function testInsufficientEscrowProtection() public {
         // Register pool
         vm.startPrank(deployer);
-        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+        (uint256 levrId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
             poolKeyEncoded
@@ -313,18 +313,18 @@ contract MasterLevrV1Test is Test {
 
         // Mint some tokens
         vm.startPrank(user1);
-        masterLevr.mint(leverId, 50 ether, user1);
+        masterLevr.mint(levrId, 50 ether, user1);
 
         // Try to redeem more than escrowed - should revert
         vm.expectRevert(IMasterLevr_v1.InsufficientEscrow.selector);
-        masterLevr.redeem(leverId, 100 ether, user1);
+        masterLevr.redeem(levrId, 100 ether, user1);
         console.log("Insufficient escrow protection working correctly");
     }
 
     function testFeeControllerVerification() public {
         // Register pool
         vm.startPrank(deployer);
-        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+        (uint256 levrId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
             poolKeyEncoded
@@ -336,7 +336,7 @@ contract MasterLevrV1Test is Test {
 
         // Attempt to harvest - should revert
         vm.expectRevert(IMasterLevr_v1.InvalidCaller.selector);
-        masterLevr.harvest(leverId);
+        masterLevr.harvest(levrId);
 
         console.log("Fee controller verification working correctly");
     }
@@ -344,7 +344,7 @@ contract MasterLevrV1Test is Test {
     function testProperRewardCurrencyHandling() public {
         // Register pool
         vm.startPrank(deployer);
-        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+        (uint256 levrId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
             poolKeyEncoded
@@ -353,9 +353,9 @@ contract MasterLevrV1Test is Test {
 
         // Mint and stake tokens
         vm.startPrank(user1);
-        masterLevr.mint(leverId, 100 ether, user1);
+        masterLevr.mint(levrId, 100 ether, user1);
         LevrERC20(wrapper).approve(address(masterLevr), type(uint256).max);
-        masterLevr.stake(leverId, 50 ether, user1);
+        masterLevr.stake(levrId, 50 ether, user1);
         vm.stopPrank();
 
         // Add protocol fees for the underlying token currency
@@ -365,22 +365,22 @@ contract MasterLevrV1Test is Test {
         );
 
         // Harvest fees
-        masterLevr.harvest(leverId);
+        masterLevr.harvest(levrId);
 
         // Check that the pool's reward token was set correctly
         (, , , , , address rewardToken) = masterLevr.getPoolInfoWithRewardToken(
-            leverId
+            levrId
         );
         assertEq(rewardToken, address(underlyingToken));
 
         // Check claimable rewards
-        uint256 claimable = masterLevr.getClaimableRewards(leverId, user1);
+        uint256 claimable = masterLevr.getClaimableRewards(levrId, user1);
         assertGt(claimable, 0);
 
         // Claim rewards
         vm.startPrank(user1);
         uint256 balanceBefore = underlyingToken.balanceOf(user1);
-        masterLevr.claim(leverId, user1);
+        masterLevr.claim(levrId, user1);
         uint256 balanceAfter = underlyingToken.balanceOf(user1);
         assertEq(balanceAfter - balanceBefore, claimable);
         vm.stopPrank();
@@ -391,7 +391,7 @@ contract MasterLevrV1Test is Test {
     function testHarvestWithNoFees() public {
         // Register pool
         vm.startPrank(deployer);
-        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+        (uint256 levrId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
             poolKeyEncoded
@@ -399,10 +399,10 @@ contract MasterLevrV1Test is Test {
         vm.stopPrank();
 
         // Try to harvest with no fees - should not revert but do nothing
-        masterLevr.harvest(leverId);
+        masterLevr.harvest(levrId);
 
         // Check that no rewards were distributed
-        uint256 claimable = masterLevr.getClaimableRewards(leverId, user1);
+        uint256 claimable = masterLevr.getClaimableRewards(levrId, user1);
         assertEq(claimable, 0);
 
         console.log("Harvest with no fees handled correctly");

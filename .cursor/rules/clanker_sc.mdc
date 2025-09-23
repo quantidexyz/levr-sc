@@ -4,7 +4,7 @@ alwaysApply: true
 
 ### Clanker integration rule
 
-This rule documents how Clanker pools/tokens are launched, how fees are produced and distributed via Uniswap v4 hooks, and the mechanics your contracts can leverage to wrap tokens, route fees, and perform actions like buybacks.
+This rule documents how Clanker pools/tokens are launched, how fees are produced and distributed via Uniswap v4 hooks, and the mechanics your contracts can levrage to wrap tokens, route fees, and perform actions like buybacks.
 
 ### Scope and goals
 
@@ -95,7 +95,7 @@ flowchart TD
 - Extensions can be gated by `IClankerPoolExtensionAllowlist`; factory-only pools may be permitted to attach extensions (`OnlyFactoryPoolsCanHaveExtensions`).
 - Failures can be surfaced via events: `PoolExtensionSuccess/Failed` with `PoolId` and swap params.
 
-### What you can leverage for wrapping and buybacks
+### What you can levrage for wrapping and buybacks
 
 1. 1:1 wrapping flow
 

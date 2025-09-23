@@ -5,7 +5,7 @@ import {Currency} from "@uniswap/v4-core/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
 import {IProtocolFees} from "./IProtocolFees.sol";
 
-/// @notice Minimal interface for the PoolManager - only functions needed for Lever
+/// @notice Minimal interface for the PoolManager - only functions needed for Levr
 interface IPoolManager is IProtocolFees {
     /// @notice Thrown when unlock is called, but the contract is already unlocked
     error AlreadyUnlocked();

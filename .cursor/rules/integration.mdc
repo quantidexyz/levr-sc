@@ -1,4 +1,4 @@
-## Integration Rule — Clanker x Lever (Base Sepolia Fork + Code/Test wiring)
+## Integration Rule — Clanker x Levr (Base Sepolia Fork + Code/Test wiring)
 
 This document standardizes how we integrate the monolithic `MasterLevr_v1` with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
 
@@ -25,10 +25,10 @@ Notes:
 ## Project Structure
 
 ```
-/Users/anon/Desktop/mguleryuz/lever/
+/Users/anon/Desktop/mguleryuz/levr/
 ├── .cursor/rules/
 │   ├── integration.mdc     # This file
-│   ├── protocol.mdc        # Lever protocol rules
+│   ├── protocol.mdc        # Levr protocol rules
 │   ├── clanker_sc.mdc      # Clanker Smart Contract overview
 │   └── clanker_sdk.mdc     # Clanker SDK usage
 ├── lib/
@@ -37,7 +37,7 @@ Notes:
 │   └── v4-core/            # Uniswap v4 core contracts
 ├── src/
 │   ├── interfaces/
-│   │   ├── IMasterLevr_v1.sol              # Lever protocol interface
+│   │   ├── IMasterLevr_v1.sol              # Levr protocol interface
 │   │   └── external/                     # External dependencies
 │   │       ├── IPoolManager.sol          # Uniswap v4 PoolManager (minimal)
 │   │       ├── IProtocolFees.sol         # Protocol fee management
@@ -77,9 +77,9 @@ Notes:
 - **Core contracts** (to be implemented)
 
   - `src/MasterLevr_v1.sol`
-    - Stores per-pool config keyed by `leverId` (see protocol rule).
-    - `registerPool(underlying, poolManager, poolKeyEncoded, name, symbol)` creates or wires an ERC20 wrapper (OpenZeppelin based) and persists the `leverId` mapping.
-    - Mint/redeem escrow with FCFS solvency; staking with global `rewardIndexX64`; `harvest(leverId)` with v4 unlock discipline collecting protocol fees.
+    - Stores per-pool config keyed by `levrId` (see protocol rule).
+    - `registerPool(underlying, poolManager, poolKeyEncoded, name, symbol)` creates or wires an ERC20 wrapper (OpenZeppelin based) and persists the `levrId` mapping.
+    - Mint/redeem escrow with FCFS solvency; staking with global `rewardIndexX64`; `harvest(levrId)` with v4 unlock discipline collecting protocol fees.
   - `src/IssuanceToken.sol`
     - OpenZeppelin ERC20 + AccessControl.
     - Roles: `DEFAULT_ADMIN_ROLE` = deployer; `MINTER_ROLE` = deployer and `MasterLevr_v1`.
@@ -130,7 +130,7 @@ Notes:
   - `test/MasterLevr.StakeRewards.t.sol`:
     - Stake wrapper; simulate or collect fees; assert `rewardIndexX64` accrual and `claim` payout.
   - `test/MasterLevr.Harvest.t.sol`:
-    - With controller permissions set, call `harvest(leverId)`; verify unlock/collect path and per-pool crediting.
+    - With controller permissions set, call `harvest(levrId)`; verify unlock/collect path and per-pool crediting.
     - If buckets are shared, assert metering caps application.
 
 - **Utilities and mocks**

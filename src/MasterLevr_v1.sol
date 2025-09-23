@@ -13,23 +13,23 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/types/PoolId.sol";
 import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/types/BalanceDelta.sol";
 
-/// @title MasterLevr_v1 - Lever protocol's monolithic wrapper and staking contract
+/// @title MasterLevr_v1 - Levr protocol's monolithic wrapper and staking contract
 /// @notice Provides ERC20 wrapper tokens with 1:1 peg to underlying Clanker tokens,
 /// staking rewards from protocol fees, and FCFS redemption solvency
 contract MasterLevr_v1 is IMasterLevr_v1 {
     using SafeERC20 for IERC20;
     using PoolIdLibrary for PoolKey;
 
-    /// @notice Next lever ID to assign
-    uint256 private _nextLeverId = 1;
+    /// @notice Next levr ID to assign
+    uint256 private _nextLevrId = 1;
 
-    /// @notice Mapping from leverId to pool configuration
-    mapping(uint256 => LeverPool) public lever;
+    /// @notice Mapping from levrId to pool configuration
+    mapping(uint256 => LevrPool) public levr;
 
-    /// @notice Mapping from underlying address to leverId
-    mapping(address => uint256) public leverIdByUnderlying;
+    /// @notice Mapping from underlying address to levrId
+    mapping(address => uint256) public levrIdByUnderlying;
 
-    /// @notice Mapping from (leverId, user) to staking state
+    /// @notice Mapping from (levrId, user) to staking state
     mapping(uint256 => mapping(address => UserStake)) public userStakes;
 
     /// @notice Q64.64 fixed point representation of 1 (using 1e18 for testing to avoid large numbers)
@@ -43,11 +43,10 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         address underlying,
         address poolManager,
         bytes calldata poolKeyEncoded
-    ) external returns (uint256 leverId, address wrapper) {
+    ) external returns (uint256 levrId, address wrapper) {
         if (underlying == address(0)) revert InvalidUnderlying();
         if (poolManager == address(0)) revert InvalidPoolManager();
-        if (leverIdByUnderlying[underlying] != 0)
-            revert PoolAlreadyRegistered();
+        if (levrIdByUnderlying[underlying] != 0) revert PoolAlreadyRegistered();
 
         // Get underlying token metadata
         IERC20Metadata underlyingToken = IERC20Metadata(underlying);
@@ -72,12 +71,12 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
             )
         );
 
-        // Assign lever ID
-        leverId = _nextLeverId++;
-        leverIdByUnderlying[underlying] = leverId;
+        // Assign levr ID
+        levrId = _nextLevrId++;
+        levrIdByUnderlying[underlying] = levrId;
 
         // Store pool configuration
-        lever[leverId] = LeverPool({
+        levr[levrId] = LevrPool({
             underlying: underlying,
             wrapper: wrapper,
             poolManager: poolManager,
@@ -93,7 +92,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         });
 
         emit PoolRegistered(
-            leverId,
+            levrId,
             underlying,
             wrapper,
             poolManager,
@@ -103,11 +102,11 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
 
     /// @inheritdoc IMasterLevr_v1
     function mint(
-        uint256 leverId,
+        uint256 levrId,
         uint256 amountUnderlying,
         address to
     ) external {
-        LeverPool storage pool = lever[leverId];
+        LevrPool storage pool = levr[levrId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
 
         // Transfer underlying tokens to this contract
@@ -123,9 +122,9 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         // Update escrow
         pool.underlyingEscrowed += amountUnderlying;
 
-        emit Minted(leverId, to, amountUnderlying, amountUnderlying);
+        emit Minted(levrId, to, amountUnderlying, amountUnderlying);
         emit SolvencyChanged(
-            leverId,
+            levrId,
             pool.underlyingEscrowed,
             IERC20(pool.wrapper).totalSupply()
         );
@@ -133,11 +132,11 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
 
     /// @inheritdoc IMasterLevr_v1
     function redeem(
-        uint256 leverId,
+        uint256 levrId,
         uint256 amountWrapper,
         address to
     ) external {
-        LeverPool storage pool = lever[leverId];
+        LevrPool storage pool = levr[levrId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
         if (pool.underlyingEscrowed < amountWrapper)
             revert InsufficientEscrow();
@@ -155,23 +154,23 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         // Update escrow
         pool.underlyingEscrowed -= amountWrapper;
 
-        emit Redeemed(leverId, msg.sender, amountWrapper, amountWrapper);
+        emit Redeemed(levrId, msg.sender, amountWrapper, amountWrapper);
         emit SolvencyChanged(
-            leverId,
+            levrId,
             pool.underlyingEscrowed,
             IERC20(pool.wrapper).totalSupply()
         );
     }
 
     /// @inheritdoc IMasterLevr_v1
-    function stake(uint256 leverId, uint256 amount, address to) external {
-        LeverPool storage pool = lever[leverId];
+    function stake(uint256 levrId, uint256 amount, address to) external {
+        LevrPool storage pool = levr[levrId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
 
-        UserStake storage userStake = userStakes[leverId][to];
+        UserStake storage userStake = userStakes[levrId][to];
 
         // Update user's claimable rewards before changing stake
-        _updateUserRewards(leverId, to);
+        _updateUserRewards(levrId, to);
 
         // Transfer wrapper tokens from user
         IERC20(pool.wrapper).safeTransferFrom(
@@ -184,19 +183,19 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         userStake.amount += amount;
         pool.stakedSupply += amount;
 
-        emit Staked(leverId, to, amount);
+        emit Staked(levrId, to, amount);
     }
 
     /// @inheritdoc IMasterLevr_v1
-    function unstake(uint256 leverId, uint256 amount, address to) external {
-        LeverPool storage pool = lever[leverId];
+    function unstake(uint256 levrId, uint256 amount, address to) external {
+        LevrPool storage pool = levr[levrId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
 
-        UserStake storage userStake = userStakes[leverId][msg.sender];
+        UserStake storage userStake = userStakes[levrId][msg.sender];
         if (userStake.amount < amount) revert InsufficientStake();
 
         // Update user's claimable rewards before changing stake
-        _updateUserRewards(leverId, msg.sender);
+        _updateUserRewards(levrId, msg.sender);
 
         // Update user's stake
         userStake.amount -= amount;
@@ -205,18 +204,18 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         // Transfer wrapper tokens to recipient
         IERC20(pool.wrapper).safeTransfer(to, amount);
 
-        emit Unstaked(leverId, msg.sender, amount);
+        emit Unstaked(levrId, msg.sender, amount);
     }
 
     /// @inheritdoc IMasterLevr_v1
-    function claim(uint256 leverId, address to) external {
-        LeverPool storage pool = lever[leverId];
+    function claim(uint256 levrId, address to) external {
+        LevrPool storage pool = levr[levrId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
 
-        UserStake storage userStake = userStakes[leverId][msg.sender];
+        UserStake storage userStake = userStakes[levrId][msg.sender];
 
         // Update user's claimable rewards
-        _updateUserRewards(leverId, msg.sender);
+        _updateUserRewards(levrId, msg.sender);
 
         uint256 claimable = userStake.claimable;
         if (claimable == 0) revert NoRewardsToClaim();
@@ -227,12 +226,12 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         if (pool.rewardToken == address(0)) revert NoRewardsToClaim();
         IERC20(pool.rewardToken).safeTransfer(to, claimable);
 
-        emit Claimed(leverId, msg.sender, pool.rewardToken, claimable);
+        emit Claimed(levrId, msg.sender, pool.rewardToken, claimable);
     }
 
     /// @inheritdoc IMasterLevr_v1
-    function harvest(uint256 leverId) external {
-        LeverPool storage pool = lever[leverId];
+    function harvest(uint256 levrId) external {
+        LevrPool storage pool = levr[levrId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
 
         IPoolManager poolManager = IPoolManager(pool.poolManager);
@@ -245,7 +244,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         // Use unlock callback to harvest fees
         CallbackData memory callbackData = CallbackData({
             action: Actions.HARVEST_FEES,
-            leverId: leverId,
+            levrId: levrId,
             rewardToken: address(0), // Will be determined in callback
             amount: 0 // Will be determined in callback
         });
@@ -253,7 +252,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         poolManager.unlock(abi.encode(callbackData));
 
         // Update rate calculation
-        _updateRate(leverId);
+        _updateRate(levrId);
     }
 
     /// @notice Callback function called by IPoolManager.unlock
@@ -265,7 +264,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         CallbackData memory callbackData = abi.decode(data, (CallbackData));
 
         if (callbackData.action == Actions.HARVEST_FEES) {
-            LeverPool storage pool = lever[callbackData.leverId];
+            LevrPool storage pool = levr[callbackData.levrId];
             IPoolManager poolManager = IPoolManager(pool.poolManager);
 
             // Verify we are the protocol fee controller
@@ -327,7 +326,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
                 pool.rewardIndexX64 += newRewardsX64;
 
                 emit Harvested(
-                    callbackData.leverId,
+                    callbackData.levrId,
                     rewardTokenAddress,
                     amountCollected
                 );
@@ -347,8 +346,8 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
     }
 
     /// @inheritdoc IMasterLevr_v1
-    function getPegBps(uint256 leverId) external view returns (uint256 bps) {
-        LeverPool storage pool = lever[leverId];
+    function getPegBps(uint256 levrId) external view returns (uint256 bps) {
+        LevrPool storage pool = levr[levrId];
         if (pool.wrapper == address(0)) return 0;
 
         uint256 supply = IERC20(pool.wrapper).totalSupply();
@@ -359,27 +358,27 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
 
     /// @inheritdoc IMasterLevr_v1
     function getRatePerSecondX64(
-        uint256 leverId
+        uint256 levrId
     ) external view returns (uint256) {
-        LeverPool storage pool = lever[leverId];
+        LevrPool storage pool = levr[levrId];
         return pool.ratePerSecondX64;
     }
 
     /// @inheritdoc IMasterLevr_v1
     function getUserStake(
-        uint256 leverId,
+        uint256 levrId,
         address user
     ) external view returns (uint256) {
-        return userStakes[leverId][user].amount;
+        return userStakes[levrId][user].amount;
     }
 
     /// @inheritdoc IMasterLevr_v1
     function getClaimableRewards(
-        uint256 leverId,
+        uint256 levrId,
         address user
     ) external view returns (uint256) {
-        UserStake storage userStake = userStakes[leverId][user];
-        LeverPool storage pool = lever[leverId];
+        UserStake storage userStake = userStakes[levrId][user];
+        LevrPool storage pool = levr[levrId];
 
         uint256 currentIndex = pool.rewardIndexX64;
         uint256 userIndex = userStake.indexX64;
@@ -396,7 +395,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
 
     /// @inheritdoc IMasterLevr_v1
     function getPoolInfo(
-        uint256 leverId
+        uint256 levrId
     )
         external
         view
@@ -408,7 +407,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
             uint256 stakedSupply
         )
     {
-        LeverPool storage pool = lever[leverId];
+        LevrPool storage pool = levr[levrId];
         return (
             pool.underlying,
             pool.wrapper,
@@ -420,7 +419,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
 
     /// @inheritdoc IMasterLevr_v1
     function getPoolInfoWithRewardToken(
-        uint256 leverId
+        uint256 levrId
     )
         external
         view
@@ -433,7 +432,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
             address rewardToken
         )
     {
-        LeverPool storage pool = lever[leverId];
+        LevrPool storage pool = levr[levrId];
         return (
             pool.underlying,
             pool.wrapper,
@@ -445,18 +444,18 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
     }
 
     /// @inheritdoc IMasterLevr_v1
-    function getLeverIdByUnderlying(
+    function getLevrIdByUnderlying(
         address underlying
     ) external view returns (uint256) {
-        return leverIdByUnderlying[underlying];
+        return levrIdByUnderlying[underlying];
     }
 
     /// @notice Update user's claimable rewards
-    /// @param leverId Pool ID
+    /// @param levrId Pool ID
     /// @param user User address
-    function _updateUserRewards(uint256 leverId, address user) internal {
-        UserStake storage userStake = userStakes[leverId][user];
-        LeverPool storage pool = lever[leverId];
+    function _updateUserRewards(uint256 levrId, address user) internal {
+        UserStake storage userStake = userStakes[levrId][user];
+        LevrPool storage pool = levr[levrId];
 
         uint256 currentIndex = pool.rewardIndexX64;
         uint256 userIndex = userStake.indexX64;
@@ -472,9 +471,9 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
     }
 
     /// @notice Update the reward rate calculation
-    /// @param leverId Pool ID
-    function _updateRate(uint256 leverId) internal {
-        LeverPool storage pool = lever[leverId];
+    /// @param levrId Pool ID
+    function _updateRate(uint256 levrId) internal {
+        LevrPool storage pool = levr[levrId];
 
         uint256 timeElapsed = block.timestamp - pool.lastRateUpdate;
         if (timeElapsed > 0 && pool.stakedSupply > 0) {
@@ -485,9 +484,9 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
     }
 
     /// @notice Test function to set reward index (for testing only)
-    /// @param leverId Pool ID
+    /// @param levrId Pool ID
     /// @param index New reward index
-    function testSetRewardIndex(uint256 leverId, uint256 index) external {
-        lever[leverId].rewardIndexX64 = index;
+    function testSetRewardIndex(uint256 levrId, uint256 index) external {
+        levr[levrId].rewardIndexX64 = index;
     }
 }

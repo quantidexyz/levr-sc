@@ -5,7 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 
-/// @title LevrERC20 - Wrapper token for Lever protocol
+/// @title LevrERC20 - Wrapper token for Levr protocol
 /// @notice ERC20 token with controlled minting and burning for 1:1 peg to underlying assets
 contract LevrERC20 is ERC20, AccessControl, ERC20Permit {
     /// @notice Role for addresses that can mint and burn tokens
