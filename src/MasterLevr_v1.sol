@@ -88,7 +88,8 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
             rewardIndexX64: 0,
             lastHarvest: block.timestamp,
             lastRateUpdate: block.timestamp,
-            ratePerSecondX64: 0
+            ratePerSecondX64: 0,
+            rewardToken: address(0) // Will be set on first harvest
         });
 
         emit PoolRegistered(
@@ -222,11 +223,11 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
 
         userStake.claimable = 0;
 
-        // For simplicity, assume rewards are in the underlying token
-        // In production, this would need to track which currency the rewards are in
-        IERC20(pool.underlying).safeTransfer(to, claimable);
+        // Transfer rewards in the correct currency
+        if (pool.rewardToken == address(0)) revert NoRewardsToClaim();
+        IERC20(pool.rewardToken).safeTransfer(to, claimable);
 
-        emit Claimed(leverId, msg.sender, pool.underlying, claimable);
+        emit Claimed(leverId, msg.sender, pool.rewardToken, claimable);
     }
 
     /// @inheritdoc IMasterLevr_v1
@@ -234,21 +235,19 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         LeverPool storage pool = lever[leverId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
 
-        // Decode pool key
-        PoolKey memory poolKey = abi.decode(pool.poolKeyEncoded, (PoolKey));
-
-        // For simplicity, harvest both currencies in the pool
-        // In production, this would need to be more sophisticated
-        Currency currency0 = poolKey.currency0;
-
         IPoolManager poolManager = IPoolManager(pool.poolManager);
+
+        // Verify we are the protocol fee controller before attempting harvest
+        if (poolManager.protocolFeeController() != address(this)) {
+            revert InvalidCaller();
+        }
 
         // Use unlock callback to harvest fees
         CallbackData memory callbackData = CallbackData({
             action: Actions.HARVEST_FEES,
             leverId: leverId,
-            rewardToken: Currency.unwrap(currency0), // Assume currency0 is the reward token
-            amount: poolManager.protocolFeesAccrued(currency0)
+            rewardToken: address(0), // Will be determined in callback
+            amount: 0 // Will be determined in callback
         });
 
         poolManager.unlock(abi.encode(callbackData));
@@ -269,41 +268,79 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
             LeverPool storage pool = lever[callbackData.leverId];
             IPoolManager poolManager = IPoolManager(pool.poolManager);
 
-            // Collect protocol fees
+            // Verify we are the protocol fee controller
+            if (poolManager.protocolFeeController() != address(this)) {
+                revert InvalidCaller();
+            }
+
+            // Decode pool key
             PoolKey memory poolKey = abi.decode(pool.poolKeyEncoded, (PoolKey));
 
-            // Collect fees for both currencies
-            uint256 amount0Collected = poolManager.collectProtocolFees(
+            // Determine which currency to harvest rewards from
+            // For Clanker pools, typically the non-ETH currency gets the fees
+            Currency rewardCurrency;
+            address rewardTokenAddress;
+
+            if (Currency.unwrap(poolKey.currency0) == pool.underlying) {
+                rewardCurrency = poolKey.currency0;
+                rewardTokenAddress = Currency.unwrap(poolKey.currency0);
+            } else if (Currency.unwrap(poolKey.currency1) == pool.underlying) {
+                rewardCurrency = poolKey.currency1;
+                rewardTokenAddress = Currency.unwrap(poolKey.currency1);
+            } else {
+                // Default to currency0 if neither matches underlying
+                rewardCurrency = poolKey.currency0;
+                rewardTokenAddress = Currency.unwrap(poolKey.currency0);
+            }
+
+            // Get available fees for the reward currency
+            uint256 availableFees = poolManager.protocolFeesAccrued(
+                rewardCurrency
+            );
+            if (availableFees == 0) {
+                return abi.encode(0, 0);
+            }
+
+            // Collect protocol fees - this creates a positive delta that must be settled
+            uint256 amountCollected = poolManager.collectProtocolFees(
                 address(this),
-                poolKey.currency0,
-                callbackData.amount
+                rewardCurrency,
+                availableFees
             );
 
-            uint256 amount1Collected = poolManager.collectProtocolFees(
-                address(this),
-                poolKey.currency1,
-                poolManager.protocolFeesAccrued(poolKey.currency1)
-            );
+            // Since we collected fees, we have a positive delta for rewardCurrency
+            // In v4, we need to either:
+            // 1. Use these tokens in a swap (settling the delta)
+            // 2. Account for them properly
+            // For fee harvesting, we simply acknowledge we've collected them
+            // The tokens are now at address(this) and can be used for rewards
 
-            // For simplicity, assume currency0 is the reward token
-            uint256 totalHarvested = amount0Collected;
+            if (amountCollected > 0 && pool.stakedSupply > 0) {
+                // Set reward token on first harvest
+                if (pool.rewardToken == address(0)) {
+                    pool.rewardToken = rewardTokenAddress;
+                }
 
-            if (totalHarvested > 0 && pool.stakedSupply > 0) {
                 // Update reward index
-                uint256 newRewardsX64 = (totalHarvested * Q64) /
+                uint256 newRewardsX64 = (amountCollected * Q64) /
                     pool.stakedSupply;
                 pool.rewardIndexX64 += newRewardsX64;
 
                 emit Harvested(
                     callbackData.leverId,
-                    callbackData.rewardToken,
-                    totalHarvested
+                    rewardTokenAddress,
+                    amountCollected
                 );
             }
 
             pool.lastHarvest = block.timestamp;
 
-            return abi.encode(amount0Collected, amount1Collected);
+            // Return collected amounts for both currencies (0 for non-reward currency)
+            return
+                abi.encode(
+                    rewardCurrency == poolKey.currency0 ? amountCollected : 0,
+                    rewardCurrency == poolKey.currency1 ? amountCollected : 0
+                );
         }
 
         revert("Unknown action");
@@ -378,6 +415,32 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
             pool.poolManager,
             pool.underlyingEscrowed,
             pool.stakedSupply
+        );
+    }
+
+    /// @inheritdoc IMasterLevr_v1
+    function getPoolInfoWithRewardToken(
+        uint256 leverId
+    )
+        external
+        view
+        returns (
+            address underlying,
+            address wrapper,
+            address poolManager,
+            uint256 underlyingEscrowed,
+            uint256 stakedSupply,
+            address rewardToken
+        )
+    {
+        LeverPool storage pool = lever[leverId];
+        return (
+            pool.underlying,
+            pool.wrapper,
+            pool.poolManager,
+            pool.underlyingEscrowed,
+            pool.stakedSupply,
+            pool.rewardToken
         );
     }
 

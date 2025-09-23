@@ -320,4 +320,91 @@ contract MasterLevrV1Test is Test {
         masterLevr.redeem(leverId, 100 ether, user1);
         console.log("Insufficient escrow protection working correctly");
     }
+
+    function testFeeControllerVerification() public {
+        // Register pool
+        vm.startPrank(deployer);
+        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+            address(underlyingToken),
+            address(poolManager),
+            poolKeyEncoded
+        );
+        vm.stopPrank();
+
+        // Change the fee controller to a different address
+        poolManager.setProtocolFeeController(address(0x999));
+
+        // Attempt to harvest - should revert
+        vm.expectRevert(IMasterLevr_v1.InvalidCaller.selector);
+        masterLevr.harvest(leverId);
+
+        console.log("Fee controller verification working correctly");
+    }
+
+    function testProperRewardCurrencyHandling() public {
+        // Register pool
+        vm.startPrank(deployer);
+        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+            address(underlyingToken),
+            address(poolManager),
+            poolKeyEncoded
+        );
+        vm.stopPrank();
+
+        // Mint and stake tokens
+        vm.startPrank(user1);
+        masterLevr.mint(leverId, 100 ether, user1);
+        LevrERC20(wrapper).approve(address(masterLevr), type(uint256).max);
+        masterLevr.stake(leverId, 50 ether, user1);
+        vm.stopPrank();
+
+        // Add protocol fees for the underlying token currency
+        poolManager.setProtocolFeesAccrued(
+            Currency.wrap(address(underlyingToken)),
+            10 ether
+        );
+
+        // Harvest fees
+        masterLevr.harvest(leverId);
+
+        // Check that the pool's reward token was set correctly
+        (, , , , , address rewardToken) = masterLevr.getPoolInfoWithRewardToken(
+            leverId
+        );
+        assertEq(rewardToken, address(underlyingToken));
+
+        // Check claimable rewards
+        uint256 claimable = masterLevr.getClaimableRewards(leverId, user1);
+        assertGt(claimable, 0);
+
+        // Claim rewards
+        vm.startPrank(user1);
+        uint256 balanceBefore = underlyingToken.balanceOf(user1);
+        masterLevr.claim(leverId, user1);
+        uint256 balanceAfter = underlyingToken.balanceOf(user1);
+        assertEq(balanceAfter - balanceBefore, claimable);
+        vm.stopPrank();
+
+        console.log("Proper reward currency handling working correctly");
+    }
+
+    function testHarvestWithNoFees() public {
+        // Register pool
+        vm.startPrank(deployer);
+        (uint256 leverId, address wrapper) = masterLevr.registerPool(
+            address(underlyingToken),
+            address(poolManager),
+            poolKeyEncoded
+        );
+        vm.stopPrank();
+
+        // Try to harvest with no fees - should not revert but do nothing
+        masterLevr.harvest(leverId);
+
+        // Check that no rewards were distributed
+        uint256 claimable = masterLevr.getClaimableRewards(leverId, user1);
+        assertEq(claimable, 0);
+
+        console.log("Harvest with no fees handled correctly");
+    }
 }

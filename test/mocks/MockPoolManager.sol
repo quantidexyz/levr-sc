@@ -9,6 +9,7 @@ contract MockPoolManager is IPoolManager {
     mapping(Currency => uint256) private _protocolFeesAccrued;
     bool private _harvestCalled;
     address private masterLevr;
+    address private _protocolFeeController;
 
     function setProtocolFeesAccrued(
         Currency currency,
@@ -19,6 +20,11 @@ contract MockPoolManager is IPoolManager {
 
     function setMasterLevr(address _masterLevr) external {
         masterLevr = _masterLevr;
+        _protocolFeeController = _masterLevr; // Set as fee controller by default
+    }
+
+    function setProtocolFeeController(address controller) external {
+        _protocolFeeController = controller;
     }
 
     function protocolFeesAccrued(
@@ -64,12 +70,9 @@ contract MockPoolManager is IPoolManager {
     }
 
     // Stub implementations for other interface methods
-    function setProtocolFeeController(address) external pure {
-        revert("Not implemented in mock");
-    }
 
     function protocolFeeController() external view returns (address) {
-        return address(this);
+        return _protocolFeeController;
     }
 
     function setProtocolFee(PoolKey memory, uint24) external pure {

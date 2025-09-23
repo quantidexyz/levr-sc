@@ -34,6 +34,9 @@ interface IMasterLevr_v1 {
     /// @notice Thrown when attempting to claim rewards but none are available
     error NoRewardsToClaim();
 
+    /// @notice Thrown when collectProtocolFees is not called by the controller
+    error InvalidCaller();
+
     /// @notice Pool configuration and accounting state
     struct LeverPool {
         address underlying;
@@ -47,6 +50,7 @@ interface IMasterLevr_v1 {
         uint256 lastHarvest;
         uint256 lastRateUpdate;
         uint256 ratePerSecondX64;
+        address rewardToken; // Currency address where rewards are distributed
     }
 
     /// @notice User staking state for a pool
@@ -227,6 +231,28 @@ interface IMasterLevr_v1 {
             address poolManager,
             uint256 underlyingEscrowed,
             uint256 stakedSupply
+        );
+
+    /// @notice Get complete pool information including reward token
+    /// @param leverId The pool identifier
+    /// @return underlying Underlying token address
+    /// @return wrapper Wrapper token address
+    /// @return poolManager PoolManager address
+    /// @return underlyingEscrowed Amount of underlying tokens escrowed
+    /// @return stakedSupply Total wrapper tokens staked
+    /// @return rewardToken Address of the token used for rewards
+    function getPoolInfoWithRewardToken(
+        uint256 leverId
+    )
+        external
+        view
+        returns (
+            address underlying,
+            address wrapper,
+            address poolManager,
+            uint256 underlyingEscrowed,
+            uint256 stakedSupply,
+            address rewardToken
         );
 
     /// @notice Get the leverId for a given underlying token
