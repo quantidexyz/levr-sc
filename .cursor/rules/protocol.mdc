@@ -1,0 +1,203 @@
+## Lever Protocol Rules — MasterLever v1 (Monolithic Architecture)
+
+This document defines how the Lever protocol operates in a monolithic setup centered on `MasterLever_v1`, including ERC20 wrapper tokens, solvency (FCFS redemptions), staking, fee distribution from Clanker v4 pools, and observability (peg, APY). It is source-of-truth for integration and implementation decisions across the codebase.
+
+### Scope
+
+- Single `MasterLever_v1` contract orchestrates:
+  - Registration of Clanker-launched tokens and associated v4 pool identity
+  - Wrapping via per-pool ERC20 issuance tokens (OpenZeppelin-based)
+  - Mint/redeem flows with underlying escrow held by `MasterLever_v1`
+  - Staking of the wrapped token and reward distribution
+  - Harvesting protocol fees from Clanker v4 `IPoolManager`
+  - Peg and APY tracking (read-only views)
+
+## Components and Roles
+
+### MasterLever_v1
+
+- Stores per-pool configuration and accounting in a mapping from `leverId` to a struct. The canonical keys include:
+
+  - `underlying`: Clanker-launched ERC20 address
+  - `wrapper`: ERC20 issuance token address (OpenZeppelin-based), 1:1 unit mapping to underlying
+  - `poolManager`: v4 `IPoolManager` address
+  - `poolKeyEncoded`: `abi.encode(PoolKey)` for the v4 pool; used to derive `PoolId`
+  - `poolId`: derived v4 `PoolId`
+  - `underlyingEscrowed`: total underlying tokens currently escrowed in `MasterLever_v1`
+  - `syntheticSupply`: wrapper total supply mirror (sanity check; read from wrapper if needed)
+  - `stakedSupply`: total wrapper tokens staked in `MasterLever_v1`
+  - `rewardIndexX64`: global rewards accumulator (Q64 fixed-point)
+  - `lastHarvest`: last harvest timestamp
+
+- Global mappings:
+
+  - `leverIdByUnderlying[underlying] -> leverId`
+  - `lever[leverId] -> LeverPool`
+  - `userStake[leverId][user]`, `userIndexX64[leverId][user]`, `userClaimable[leverId][user]`
+
+- Authority:
+  - Acts as protocol fee controller for relevant pools, or is configured as the collector via governance.
+  - Is a designated minter/burner of each `wrapper` token.
+
+### ERC20 Issuance Token (Wrapper)
+
+- Standard OpenZeppelin ERC20 with AccessControl.
+
+  - `DEFAULT_ADMIN_ROLE`: deployer of the wrapper (project owner)
+  - `MINTER_ROLE`: granted to `MasterLever_v1` and also to the deployer
+  - Optional `PAUSER_ROLE` if we include pausability
+
+- Behavior:
+
+  - `mint(address to, uint256 amount)`: restricted to `MINTER_ROLE`
+  - `burn(address from, uint256 amount)`: restricted to `MINTER_ROLE` (for redemptions via MasterLever), or `burn(uint256)` for self-burn if enabled
+  - Decimals should mirror the underlying token’s decimals
+  - Name/Symbol: may encode the underlying identity, e.g., `<SYMBOL>W` or `w<SYMBOL>`
+
+- Ownership and Roles:
+  - The wrapper deployer retains admin rights and has `MINTER_ROLE` so they can mint at their discretion
+  - `MasterLever_v1` also has `MINTER_ROLE` to handle user mint/redeem and staking flows
+
+## Setup and Registration (Only MasterLever Address Known)
+
+1. Token deployer creates the Clanker token using the Clanker SDK, ensuring `MasterLever_v1` will be the protocol fee controller or collector for the pool (via factory/hook configuration where applicable).
+
+2. Anyone can call `registerPool` on `MasterLever_v1` with:
+
+   - `underlying` address
+   - `poolManager` address (v4 core)
+   - `poolKeyEncoded` (ABI-encoded `PoolKey`) or enough parameters to build it
+   - Optionally, wrapper metadata (name, symbol, decimals) if not inferred
+
+3. `MasterLever_v1` computes `PoolId`, stores config, and deploys or wires the ERC20 wrapper token for this `underlying`:
+   - Grants `MINTER_ROLE` to `MasterLever_v1` and to the deployer/admin
+   - Persists `leverIdByUnderlying` and `lever[leverId]`
+
+From this point forward, all flows are available with only the `MasterLever_v1` address known to participants.
+
+## Mint / Redeem and Escrow Solvency (FCFS)
+
+- Underlying escrow is maintained entirely inside `MasterLever_v1`.
+
+  - User mint: user transfers `amount` of underlying to `MasterLever_v1`; `MasterLever_v1` mints `amount` of wrapper to the recipient and increments `underlyingEscrowed`.
+  - User redeem: user submits `amount` of wrapper to `MasterLever_v1`; `MasterLever_v1` burns the wrapper and transfers up to `amount` of underlying out of escrow.
+
+- Deployer mint freedom:
+
+  - Because the deployer has `MINTER_ROLE`, they can mint wrapper beyond current escrow levels.
+  - The protocol adopts First-Come-First-Served (FCFS) solvency for redemptions:
+    - Redemptions are fulfilled strictly from `underlyingEscrowed`
+    - If `underlyingEscrowed < redeemAmount`, the transaction reverts (or partially fulfills if explicitly supported) — there is no debt queuing.
+    - Users who redeem earlier are prioritized; once escrow is depleted, later redeemers must wait for additional deposits/harvests.
+
+- Invariants and tracking:
+
+  - `pegRatioBps = underlyingEscrowed * 1e4 / wrapper.totalSupply()`
+  - Frontends should surface solvency and peg ratio for transparency.
+
+- Events (recommended):
+  - `Minted(leverId, user, amountUnderlying, amountWrapper)`
+  - `Redeemed(leverId, user, amountWrapper, amountUnderlyingPaid)`
+  - `SolvencyChanged(leverId, underlyingEscrowed, wrapperSupply)`
+
+## Staking and Rewards (Fee Distribution)
+
+- Users can stake their wrapper tokens in `MasterLever_v1` to earn fees harvested from the associated v4 pool.
+
+- Reward accounting uses a global index per pool:
+
+  - `rewardIndexX64` accumulates as `harvestAmount << 64 / stakedSupply`
+  - Each user tracks `userIndexX64` at stake/unstake/claim boundaries
+  - `claimable += (userStake * (rewardIndexX64 - userIndexX64)) >> 64`
+
+- Core methods:
+  - `stake(leverId, amount, to)`
+  - `unstake(leverId, amount, to)`
+  - `claim(leverId, to)` — pays out the fee currency accrued for that pool (typically the paired token or underlying per configuration)
+
+## Fee Harvesting from Clanker v4
+
+- `MasterLever_v1` is configured as the protocol fee controller/collector for the pool.
+- Anyone may call `harvest(leverId)` to collect protocol fees using v4 unlock discipline:
+  - Calls `IPoolManager.unlock` with a callback that executes `collectProtocolFees(recipient=MasterLever_v1, currency, amount)`
+  - Ensures settlement nets to zero prior to re-locking; otherwise reverts per v4 constraints
+  - On success, credits the harvested amounts into the pool’s reward accounting and updates `rewardIndexX64`
+
+## Peg and APY Observability
+
+- Expose read-only views per pool:
+
+  - `getPegBps(leverId) -> uint256`: `underlyingEscrowed * 1e4 / wrapper.totalSupply()` (returns 0 if supply is 0)
+  - `getRatePerSecondX64(leverId) -> uint256`: rolling rewards rate for frontends to annualize
+  - Optionally provide windowed averages over the last N seconds/harvests
+
+- APY is an off-chain presentation: `ratePerSecond * 31,536,000` as a baseline, with caveats on variable fees/TVL.
+
+## Security, Roles, and Constraints
+
+- Roles:
+
+  - Wrapper `DEFAULT_ADMIN_ROLE`: deployer
+  - Wrapper `MINTER_ROLE`: deployer and `MasterLever_v1`
+  - Optionally gate `registerPool` behind governance or allow anyone with guardrails (immutability of keys once set)
+
+- Constraints:
+
+  - `MasterLever_v1` must have permission to collect protocol fees for a pool; otherwise harvesting is impossible
+  - Address ordering and `PoolKey` correctness are enforced by v4 (`currency0 < currency1`, valid tick spacing)
+  - Dynamic fee/MEV caps are respected by the underlying hook; not modified by `MasterLever_v1` unless explicitly supported
+  - FCFS solvency means no redemption guarantees if deployers over-mint — frontends and docs must warn users
+
+- Safety:
+  - Adhere to v4 unlock discipline; ensure currency settlement nets to zero before re-locking
+  - Track and emit events for registration, mint, redeem, stake, unstake, claim, harvest
+  - Consider reentrancy guards around state mutations and external transfers
+
+## Minimal External Interface (Indicative)
+
+```solidity
+// Registration
+function registerPool(
+    address underlying,
+    address poolManager,
+    bytes calldata poolKeyEncoded,
+    string calldata name,
+    string calldata symbol
+) external returns (uint256 leverId, address wrapper);
+
+// Mint/Redeem (user flows)
+function mint(uint256 leverId, uint256 amountUnderlying, address to) external;
+function redeem(uint256 leverId, uint256 amountWrapper, address to) external;
+
+// Staking
+function stake(uint256 leverId, uint256 amount, address to) external;
+function unstake(uint256 leverId, uint256 amount, address to) external;
+function claim(uint256 leverId, address to) external;
+
+// Fees
+function harvest(uint256 leverId) external;
+
+// Views
+function getPegBps(uint256 leverId) external view returns (uint256);
+function getRatePerSecondX64(uint256 leverId) external view returns (uint256);
+```
+
+## Implementation Notes
+
+- Wrapper deployment can be minimal proxies (clones) pointing to a single ERC20 implementation to keep gas low while maintaining per-pool metadata and role configuration.
+- Wrapper decimals should mirror the underlying token to preserve 1:1 unit expectations.
+- Peg ratio and solvency should be surfaced in UIs prominently, with FCFS caveats.
+- If partial redemption is supported, define and emit `Redeemed` with the actual fulfilled amount; otherwise revert on insufficient escrow.
+
+## Clanker v4 Integration Reminders
+
+- `MasterLever_v1` should be set as protocol fee controller (or have the appropriate permissions) during Clanker SDK deployment.
+- Use `IPoolManager.collectProtocolFees` inside an `unlock` flow to harvest and credit rewards.
+- Optional reads for UI/analytics:
+  - `IClankerHookDynamicFee.poolConfigVars(poolId)` / `poolFeeVars(poolId)`
+  - `IClankerHookV2.mevModuleOperational(poolId)` / `mevModuleEnabled(poolId)`
+  - `IPoolManager.protocolFeesAccrued(currency)` / `protocolFeeController()`
+
+---
+
+This rule is normative. Contract implementations and SDK integrations should align with the above semantics. Any divergence should update this document first.
