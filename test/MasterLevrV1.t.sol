@@ -165,13 +165,15 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
 
         assertEq(leverId, 1);
         assertTrue(wrapper != address(0));
+
+        // Check wrapper token name and symbol
+        assertEq(LevrERC20(wrapper).name(), "Levr Test Token");
+        assertEq(LevrERC20(wrapper).symbol(), "wTEST");
 
         // Check pool info
         (
@@ -203,9 +205,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 
@@ -239,9 +239,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 
@@ -262,9 +260,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 
@@ -299,9 +295,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 
@@ -329,9 +323,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 
@@ -363,9 +355,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 
@@ -409,9 +399,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 
@@ -451,9 +439,7 @@ contract MasterLevrV1Test is Test {
         (uint256 leverId, address wrapper) = masterLevr.registerPool(
             address(underlyingToken),
             address(poolManager),
-            poolKeyEncoded,
-            "Wrapped Test",
-            "wTEST"
+            poolKeyEncoded
         );
         vm.stopPrank();
 

@@ -2,9 +2,11 @@
 pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IMasterLevr_v1} from "./interfaces/IMasterLevr_v1.sol";
 import {LevrERC20} from "./LevrERC20.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IPoolManager} from "./interfaces/external/IPoolManager.sol";
 import {Currency} from "@uniswap/v4-core/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/types/PoolId.sol";
@@ -40,14 +42,21 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
     function registerPool(
         address underlying,
         address poolManager,
-        bytes calldata poolKeyEncoded,
-        string calldata name,
-        string calldata symbol
+        bytes calldata poolKeyEncoded
     ) external returns (uint256 leverId, address wrapper) {
         if (underlying == address(0)) revert InvalidUnderlying();
         if (poolManager == address(0)) revert InvalidPoolManager();
         if (leverIdByUnderlying[underlying] != 0)
             revert PoolAlreadyRegistered();
+
+        // Get underlying token metadata
+        IERC20Metadata underlyingToken = IERC20Metadata(underlying);
+        string memory underlyingName = underlyingToken.name();
+        string memory underlyingSymbol = underlyingToken.symbol();
+
+        // Generate wrapper token name and symbol
+        string memory wrapperName = string.concat("Levr ", underlyingName);
+        string memory wrapperSymbol = string.concat("w", underlyingSymbol);
 
         // Decode pool key to compute pool ID
         PoolKey memory poolKey = abi.decode(poolKeyEncoded, (PoolKey));
@@ -56,8 +65,8 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
         // Deploy wrapper token
         wrapper = address(
             new LevrERC20(
-                name,
-                symbol,
+                wrapperName,
+                wrapperSymbol,
                 msg.sender, // deployer gets admin role
                 address(this) // this contract gets minter role
             )

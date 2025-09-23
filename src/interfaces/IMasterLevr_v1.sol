@@ -130,16 +130,12 @@ interface IMasterLevr_v1 {
     /// @param underlying The Clanker-launched ERC20 token address
     /// @param poolManager The Uniswap v4 PoolManager address
     /// @param poolKeyEncoded ABI-encoded PoolKey for the v4 pool
-    /// @param name Name for the wrapper ERC20 token
-    /// @param symbol Symbol for the wrapper ERC20 token
     /// @return leverId Unique identifier for this pool
-    /// @return wrapper Address of the deployed wrapper ERC20 token
+    /// @return wrapper Address of the deployed wrapper ERC20 token (with name "Levr <underlying_name>" and symbol "w<underlying_symbol>")
     function registerPool(
         address underlying,
         address poolManager,
-        bytes calldata poolKeyEncoded,
-        string calldata name,
-        string calldata symbol
+        bytes calldata poolKeyEncoded
     ) external returns (uint256 leverId, address wrapper);
 
     /// @notice Mint wrapper tokens by depositing underlying tokens
