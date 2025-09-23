@@ -17,6 +17,21 @@ interface IMasterLever_v1 {
     /// @notice Thrown when harvest amount exceeds tracked entitlement
     error HarvestAmountTooLarge();
 
+    /// @notice Thrown when invalid underlying address is provided
+    error InvalidUnderlying();
+
+    /// @notice Thrown when invalid pool manager address is provided
+    error InvalidPoolManager();
+
+    /// @notice Thrown when attempting to register a pool that is already registered
+    error PoolAlreadyRegistered();
+
+    /// @notice Thrown when user has insufficient staked amount for unstaking
+    error InsufficientStake();
+
+    /// @notice Thrown when attempting to claim rewards but none are available
+    error NoRewardsToClaim();
+
     /// @notice Emitted when a pool is registered
     event PoolRegistered(
         uint256 indexed leverId,
