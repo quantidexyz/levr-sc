@@ -1,0 +1,74 @@
+---
+alwaysApply: true
+---
+
+```mermaid
+flowchart TD
+
+%% ===== USER =====
+subgraph USER_OPS [USER OPERATIONS]
+    U[Users]:::user
+    T[Trading]:::action
+end
+
+%% ===== CLANKER (LAUNCH & FEES) =====
+subgraph CLANKER [CLANKER]
+    P[Liquidity Pools]:::protocol
+    F[Fee Collection]:::protocol
+    D[Fee Distribution]:::protocol
+end
+
+%% ===== LEVER SYSTEM =====
+subgraph LEVER_SYS [LEVER SYSTEM]
+    LV[Lever Contract]:::protocol
+    LT[Lever Token]:::action
+    ES[Emission System]:::protocol
+    LF[Mint/Redeem Fees]:::treasury
+end
+
+%% ===== TREASURY & REWARDS =====
+subgraph OUTPUT_OPS [TREASURY & REWARDS]
+    TR[Treasury]:::treasury
+    R[Staker Rewards]:::reward
+end
+
+%% ===== GOVERNANCE =====
+subgraph GOV_OPS [GOVERNANCE OPERATIONS]
+    G[Governance]:::gov
+    PA[Parameter Control]:::gov
+end
+
+%% ===== CONNECTIONS =====
+U -->|launch via Clanker UI| P
+T -->|all trading via pools| P
+
+U -->|stake Clanker token to mint LT| LV
+LV -->|mint LT| LT
+LT -->|redeem Clanker token| LV
+LV -->|release original| U
+
+P -->|collects| F
+F -->|distributes| D
+D -->|fee share to Lever| LV
+LV -->|"to stakers (fee interest)"| R
+
+LT -->|stake in Lever| LV
+LV -->|stake directs| ES
+ES -->|emits rewards| R
+
+LV -->|mint fee| LF
+LV -->|redeem fee| LF
+LF -->|to treasury| TR
+LF -->|optional buybacks| P
+
+G -->|controls| PA
+PA -->|sets| D
+
+%% ===== STYLING =====
+classDef user fill:#2d5a2d,stroke:#ffffff,stroke-width:3px,color:#ffffff
+classDef action fill:#4a5568,stroke:#ffffff,stroke-width:3px,color:#ffffff
+classDef protocol fill:#1e40af,stroke:#ffffff,stroke-width:3px,color:#ffffff
+classDef treasury fill:#0f766e,stroke:#ffffff,stroke-width:3px,color:#ffffff
+classDef gov fill:#991b1b,stroke:#ffffff,stroke-width:3px,color:#ffffff
+classDef reward fill:#d97706,stroke:#ffffff,stroke-width:3px,color:#ffffff
+```
