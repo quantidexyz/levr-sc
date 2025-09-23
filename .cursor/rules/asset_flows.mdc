@@ -5,7 +5,7 @@ alwaysApply: false
 
 ### Combined self‑managed deployment (Lever × Clanker v4) — Asset & fee flows
 
-This rule describes how we deploy and operate Lever contracts alongside Clanker v4 pools in a single, self‑managed flow. It focuses on asset custody (wrap/unwrap), pool initialization, fee accrual, harvesting via v4 protocol fees, and post‑harvest routing (rewards/treasury/buybacks).
+This rule describes how we deploy and operate Lever contracts alongside Clanker v4 pools in a single, self‑managed flow. It focuses on asset custody (wrap/unwrap) via core `Locker + WrappedToken`, pool initialization, fee accrual, harvesting via v4 protocol fees, and post‑harvest routing (rewards/treasury/buybacks).
 
 See also: `clanker.mdc` for interfaces, fee caps, and hook/extension semantics.
 
@@ -18,9 +18,8 @@ See also: `clanker.mdc` for interfaces, fee caps, and hook/extension semantics.
 
 ### Components (by role)
 
-- Lever core: `Lever`, `LeverTreasury`, `StakerRewards`
+- Lever core: `Lever`, `LeverTreasury`, `Locker`, `WrappedToken`, `StakerRewards`
 - Fee plumbing: `LeverFeeController` (protocol fee controller), `ProtocolFeeHarvester` (keeper‑called)
-- Wrapping: `Locker` (escrows original), `WrappedToken` (1:1 synthetic)
 - Clanker v4: `IPoolManager`, `IClankerHook`/`IClankerHookV2`, optional `MEVModule`, optional `PoolExtension`
 
 ### High‑level deployment and operation
@@ -28,8 +27,7 @@ See also: `clanker.mdc` for interfaces, fee caps, and hook/extension semantics.
 ```mermaid
 flowchart TD
   subgraph Deploy
-    D[Deployer] -->|deploys| L[Lever, Treasury, Rewards]
-    D -->|deploys| W[Locker + WrappedToken]
+    D[Deployer] -->|deploys| L[Lever, Treasury, Locker, WrappedToken, Rewards]
     D -->|deploys| F[LeverFeeController]
     D -->|deploys| H[ProtocolFeeHarvester]
     D -->|factory path| C[IClankerHook.initializePool]
@@ -60,7 +58,7 @@ flowchart TD
 ### Orchestrated deployment sequence
 
 1. Deploy Lever core: `Lever`, `LeverTreasury`, `StakerRewards`.
-2. Deploy wrapper: `Locker` (escrows original token) and `WrappedToken` (mints/burns 1:1 on lock/unlock).
+2. Deploy wrapper (core): `Locker` (escrows original token) and `WrappedToken` (mints/burns 1:1 on lock/unlock). Wire `Locker` as MINTER/BURNER.
 3. Initialize Clanker pool (prefer factory path):
    - Call `IClankerHook.initializePool(clankerToken, pairToken, tickIfToken0IsClanker, tickSpacing, locker, mevModule, poolData)`.
    - Ensure correct `currency0 < currency1` ordering and proper initial price via `IPoolManager.initialize` (hook runs around it).
@@ -79,6 +77,8 @@ flowchart TD
 
   - User approves and deposits original token into `Locker`.
   - `Locker` mints `WrappedToken` 1:1 and escrows the original; on redemption it burns and releases.
+
+  - Full‑control mode (opt‑in): governance may add a controller with MINTER/BURNER while keeping `Locker` authorities active (concurrent). Perform pause + reconciliation + timelocked two‑step. Note: 1:1 backing is no longer guaranteed if governance mints beyond escrow; communicate policy clearly.
 
 - Trading/swaps:
 
@@ -101,6 +101,13 @@ flowchart TD
 - Unlock discipline: multi‑step sequences run under `IPoolManager.unlock(...)` with a conforming callback; ensure net settlement = 0 on exit.
 - Caps/validations: respect protocol/dynamic fee caps (`MAX_LP_FEE`, `MAX_MEV_LP_FEE`, protocol fee bounds) and pool ordering (`currency0 < currency1`).
 - Pausability: wrappers/treasury/buyback executors should be pausable; keep extension logic minimal to avoid halting swaps.
+- Full‑control switch: require pause + reconciliation check + timelock; emit events; support concurrent authorities with optional per‑authority mint caps/rate limits; notify Clanker LPs/pools.
+
+### Redemption behavior under shortfall (recommended)
+
+- First‑come‑first‑serve: process redemptions in arrival order.
+- Partial fills allowed up to available escrow; remainder can be queued or retried later.
+- Consider a redemption queue with timestamps, per‑tx fill events, and an auto‑pause threshold when shortfall is large.
 
 ### Interfaces and calls (reference)
 
