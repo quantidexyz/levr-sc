@@ -1,74 +1,120 @@
----
-alwaysApply: true
----
+### Combined self‑managed deployment (Lever × Clanker v4) — Asset & fee flows
+
+This rule describes how we deploy and operate Lever contracts alongside Clanker v4 pools in a single, self‑managed flow. It focuses on asset custody (wrap/unwrap), pool initialization, fee accrual, harvesting via v4 protocol fees, and post‑harvest routing (rewards/treasury/buybacks).
+
+See also: `clanker.mdc` for interfaces, fee caps, and hook/extension semantics.
+
+### Goals
+
+- Single orchestrated deployment that wires Lever core + wrapper + Clanker pool(s)
+- Predictable fee routing to Lever via v4 protocol fees
+- Clear, minimal on‑swap logic; real execution via batched/keeper flows
+- Operational safety: unlock discipline, allowlists, pausability, capped fees
+
+### Components (by role)
+
+- Lever core: `Lever`, `LeverTreasury`, `StakerRewards`
+- Fee plumbing: `LeverFeeController` (protocol fee controller), `ProtocolFeeHarvester` (keeper‑called)
+- Wrapping: `Locker` (escrows original), `WrappedToken` (1:1 synthetic)
+- Clanker v4: `IPoolManager`, `IClankerHook`/`IClankerHookV2`, optional `MEVModule`, optional `PoolExtension`
+
+### High‑level deployment and operation
 
 ```mermaid
 flowchart TD
+  subgraph Deploy
+    D[Deployer] -->|deploys| L[Lever, Treasury, Rewards]
+    D -->|deploys| W[Locker + WrappedToken]
+    D -->|deploys| F[LeverFeeController]
+    D -->|deploys| H[ProtocolFeeHarvester]
+    D -->|factory path| C[IClankerHook.initializePool]
+    C -->|creates| P[PoolKey/PoolId]
+    D -->|seed optional| LP[Initial Liquidity]
+    D -->|set| PC[setProtocolFeeController]
+    D -->|set| PF[setProtocolFee per Pool]
+  end
 
-%% ===== USER =====
-subgraph USER_OPS [USER OPERATIONS]
-    U[Users]:::user
-    T[Trading]:::action
-end
+  subgraph Operate
+    U[User] -->|deposit original| K[Locker]
+    K -->|mint 1:1| WT[WrappedToken]
+    T[Trader] -->|swap| PM[IPoolManager]
+    PM -->|before/after| HK[Clanker Hook]
+    HK -->|optional| X[PoolExtension afterSwap]
+  end
 
-%% ===== CLANKER (LAUNCH & FEES) =====
-subgraph CLANKER [CLANKER]
-    P[Liquidity Pools]:::protocol
-    F[Fee Collection]:::protocol
-    D[Fee Distribution]:::protocol
-end
-
-%% ===== LEVER SYSTEM =====
-subgraph LEVER_SYS [LEVER SYSTEM]
-    LV[Lever Contract]:::protocol
-    LT[Lever Token]:::action
-    ES[Emission System]:::protocol
-    LF[Mint/Redeem Fees]:::treasury
-end
-
-%% ===== TREASURY & REWARDS =====
-subgraph OUTPUT_OPS [TREASURY & REWARDS]
-    TR[Treasury]:::treasury
-    R[Staker Rewards]:::reward
-end
-
-%% ===== GOVERNANCE =====
-subgraph GOV_OPS [GOVERNANCE OPERATIONS]
-    G[Governance]:::gov
-    PA[Parameter Control]:::gov
-end
-
-%% ===== CONNECTIONS =====
-U -->|launch via Clanker UI| P
-T -->|all trading via pools| P
-
-U -->|stake Clanker token to mint LT| LV
-LV -->|mint LT| LT
-LT -->|redeem Clanker token| LV
-LV -->|release original| U
-
-P -->|collects| F
-F -->|distributes| D
-D -->|fee share to Lever| LV
-LV -->|"to stakers (fee interest)"| R
-
-LT -->|stake in Lever| LV
-LV -->|stake directs| ES
-ES -->|emits rewards| R
-
-LV -->|mint fee| LF
-LV -->|redeem fee| LF
-LF -->|to treasury| TR
-LF -->|optional buybacks| P
-
-G -->|controls| PA
-PA -->|sets| D
-
-%% ===== STYLING =====
-classDef user fill:#2d5a2d,stroke:#ffffff,stroke-width:3px,color:#ffffff
-classDef action fill:#4a5568,stroke:#ffffff,stroke-width:3px,color:#ffffff
-classDef protocol fill:#1e40af,stroke:#ffffff,stroke-width:3px,color:#ffffff
-classDef treasury fill:#0f766e,stroke:#ffffff,stroke-width:3px,color:#ffffff
-classDef gov fill:#991b1b,stroke:#ffffff,stroke-width:3px,color:#ffffff
-classDef reward fill:#d97706,stroke:#ffffff,stroke-width:3px,color:#ffffff
+  subgraph Fees & Buybacks
+    PM -->|protocol fee accrual| PB[Protocol Fee Bucket]
+    S[Keeper] -->|call harvest| H
+    H -->|unlock->collectProtocolFees| TRE[LeverTreasury]
+    TRE -->|policy| R[StakerRewards]
+    TRE -->|policy| TR[Treasury]
+    TRE -->|optional| BB[Buyback Executor]
+  end
 ```
+
+### Orchestrated deployment sequence
+
+1. Deploy Lever core: `Lever`, `LeverTreasury`, `StakerRewards`.
+2. Deploy wrapper: `Locker` (escrows original token) and `WrappedToken` (mints/burns 1:1 on lock/unlock).
+3. Initialize Clanker pool (prefer factory path):
+   - Call `IClankerHook.initializePool(clankerToken, pairToken, tickIfToken0IsClanker, tickSpacing, locker, mevModule, poolData)`.
+   - Ensure correct `currency0 < currency1` ordering and proper initial price via `IPoolManager.initialize` (hook runs around it).
+   - Optionally attach an allowlisted `PoolExtension` and/or enable the MEV module per policy windows.
+   - Optionally seed initial liquidity via `IPoolManager`/`IPositionManager`.
+4. Configure fees and controllers:
+   - `IPoolManager.setProtocolFeeController(LeverFeeController)`.
+   - For each target pool `PoolKey`, set a bounded protocol fee via `setProtocolFee(PoolKey, uint24)`.
+5. Stand up harvesting:
+   - `ProtocolFeeHarvester` will `unlock` and `collectProtocolFees(recipient=LeverTreasury, currency, amount)` on a keeper cadence.
+   - `LeverTreasury` splits to `StakerRewards`/`Treasury` and optionally triggers rate‑limited buybacks.
+
+### Asset flows
+
+- Deposit/wrap:
+
+  - User approves and deposits original token into `Locker`.
+  - `Locker` mints `WrappedToken` 1:1 and escrows the original; on redemption it burns and releases.
+
+- Trading/swaps:
+
+  - Traders interact with the Clanker pool via `IPoolManager.swap`.
+  - Hook may update dynamic fee vars; `PoolExtension.afterSwap` should remain minimal (e.g., accounting) to reduce revert risk.
+
+- Fee accrual and harvest:
+
+  - Protocol fees accrue per currency in `IPoolManager.protocolFeesAccrued(Currency)`.
+  - Keeper calls `ProtocolFeeHarvester.harvest(currencies[])` → `unlock` → loop `collectProtocolFees(LeverTreasury, currency, amount)`.
+  - Settlement must net to zero before re‑locking (v4 unlock discipline) or calls revert.
+
+- Post‑harvest distribution:
+  - `LeverTreasury` routes funds per policy: proportion to `StakerRewards`, remainder to `Treasury`.
+  - Optional: execute buybacks (via a deterministic router function with slippage/size limits). Keep buybacks off‑swap‑hook.
+
+### Roles, guards, and limits
+
+- Governance sets/owns: `LeverFeeController`, protocol fee rates, extension allowlists, MEV enablement (if any), keeper roles.
+- Unlock discipline: multi‑step sequences run under `IPoolManager.unlock(...)` with a conforming callback; ensure net settlement = 0 on exit.
+- Caps/validations: respect protocol/dynamic fee caps (`MAX_LP_FEE`, `MAX_MEV_LP_FEE`, protocol fee bounds) and pool ordering (`currency0 < currency1`).
+- Pausability: wrappers/treasury/buyback executors should be pausable; keep extension logic minimal to avoid halting swaps.
+
+### Interfaces and calls (reference)
+
+- Controller setup: `setProtocolFeeController(address)`, query `protocolFeeController()`.
+- Per‑pool fee: `setProtocolFee(PoolKey, uint24)`, harvest with `collectProtocolFees(recipient, Currency, amount)`.
+- State reads: `protocolFeesAccrued(Currency)`, dynamic fee vars via `IClankerHookDynamicFee.poolConfigVars/poolFeeVars`.
+- Pool init: `IClankerHook.initializePool(...)`, optional `initializeMevModule(...)`.
+- Optional MEV: `mevModuleSetFee(PoolKey, uint24)`, gated by `mevModuleOperational/enabled`.
+
+### Operational runbook
+
+- Keeper cadence: run harvest on a schedule or threshold (e.g., min amount per currency, max gas).
+- Emergency: pause wrappers and buybacks; fees can safely accumulate in manager until harvest resumes.
+- Upgrades: deploy new executors/treasury as needed; rotate fee controller via governance and re‑point recipients.
+
+### Minimal checklist
+
+- Locker + WrappedToken deployed; 1:1 accounting enforced
+- Clanker pool initialized (factory/open), correct `PoolKey` ordering and tick spacing
+- Protocol fee controller set and per‑pool protocol fee configured
+- Harvester deployed; keeper authorized; routes to `LeverTreasury`
+- Treasury distribution/buyback policy live; safety rails in place
