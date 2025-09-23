@@ -62,7 +62,7 @@ This document defines how the Lever protocol operates in a monolithic setup cent
   - The wrapper deployer retains admin rights and has `MINTER_ROLE` so they can mint at their discretion
   - `MasterLever_v1` also has `MINTER_ROLE` to handle user mint/redeem and staking flows
 
-## Setup and Registration (Only MasterLever Address Known)
+## Registration (Fresh or Existing; Only MasterLever Address Known)
 
 1. Token deployer creates the Clanker token using the Clanker SDK, ensuring `MasterLever_v1` will be the protocol fee controller or collector for the pool (via factory/hook configuration where applicable).
 
@@ -78,6 +78,12 @@ This document defines how the Lever protocol operates in a monolithic setup cent
    - Persists `leverIdByUnderlying` and `lever[leverId]`
 
 From this point forward, all flows are available with only the `MasterLever_v1` address known to participants.
+
+Applies to both freshly deployed and already-launched Clanker tokens:
+
+- For existing tokens, callers provide the live pool identifiers to `registerPool` and the flow is identical.
+- Holder migration is not required; users can deposit underlying to mint the wrapper 1:1 at any time.
+- Deployers may seed `underlyingEscrowed` by transferring underlying to `MasterLever_v1`.
 
 ## Mint / Redeem and Escrow Solvency (FCFS)
 
@@ -126,6 +132,17 @@ From this point forward, all flows are available with only the `MasterLever_v1` 
   - Calls `IPoolManager.unlock` with a callback that executes `collectProtocolFees(recipient=MasterLever_v1, currency, amount)`
   - Ensures settlement nets to zero prior to re-locking; otherwise reverts per v4 constraints
   - On success, credits the harvested amounts into the pool’s reward accounting and updates `rewardIndexX64`
+
+### Fee Permissions
+
+- Choose one path to enable fee collection attribution:
+
+  1. Controller handoff (preferred): set `MasterLever_v1` as the protocol fee controller for the pool so `harvest(leverId)` can directly collect fees.
+  2. Extension metering: attach an allowlisted pool extension that calls `MasterLever_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap; `harvest(leverId)` collects up to the tracked entitlement.
+  3. Isolation: use a dedicated `IPoolManager` instance so currency buckets are not shared with unrelated pools.
+  4. Exclusivity: enforce that no two registered pools share the same fee currency on the same manager.
+
+- If the controller cannot be changed and no extension is present, wrapping, mint/redeem, and staking still function; fee distribution is disabled until fees can be attributed/collected. UIs should display the fee status accordingly.
 
 ### Fee Attribution and Shared Currency Buckets
 
