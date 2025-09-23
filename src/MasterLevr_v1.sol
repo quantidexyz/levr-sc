@@ -3,18 +3,18 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IMasterLever_v1} from "./interfaces/IMasterLever_v1.sol";
-import {LeverERC20} from "./LeverERC20.sol";
+import {IMasterLevr_v1} from "./interfaces/IMasterLevr_v1.sol";
+import {LevrERC20} from "./LevrERC20.sol";
 import {IPoolManager} from "./interfaces/external/IPoolManager.sol";
 import {Currency} from "@uniswap/v4-core/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/types/PoolId.sol";
 import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/types/BalanceDelta.sol";
 
-/// @title MasterLever_v1 - Lever protocol's monolithic wrapper and staking contract
+/// @title MasterLevr_v1 - Lever protocol's monolithic wrapper and staking contract
 /// @notice Provides ERC20 wrapper tokens with 1:1 peg to underlying Clanker tokens,
 /// staking rewards from protocol fees, and FCFS redemption solvency
-contract MasterLever_v1 is IMasterLever_v1 {
+contract MasterLevr_v1 is IMasterLevr_v1 {
     using SafeERC20 for IERC20;
     using PoolIdLibrary for PoolKey;
 
@@ -36,7 +36,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
     /// @notice Constructor - no initialization needed
     constructor() {}
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function registerPool(
         address underlying,
         address poolManager,
@@ -55,7 +55,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
 
         // Deploy wrapper token
         wrapper = address(
-            new LeverERC20(
+            new LevrERC20(
                 name,
                 symbol,
                 msg.sender, // deployer gets admin role
@@ -91,7 +91,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         );
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function mint(
         uint256 leverId,
         uint256 amountUnderlying,
@@ -108,7 +108,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         );
 
         // Mint wrapper tokens
-        LeverERC20(pool.wrapper).mint(to, amountUnderlying);
+        LevrERC20(pool.wrapper).mint(to, amountUnderlying);
 
         // Update escrow
         pool.underlyingEscrowed += amountUnderlying;
@@ -121,7 +121,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         );
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function redeem(
         uint256 leverId,
         uint256 amountWrapper,
@@ -137,7 +137,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
             revert InsufficientBalance();
 
         // Burn wrapper tokens
-        LeverERC20(pool.wrapper).burnFrom(msg.sender, amountWrapper);
+        LevrERC20(pool.wrapper).burnFrom(msg.sender, amountWrapper);
 
         // Transfer underlying tokens
         IERC20(pool.underlying).safeTransfer(to, amountWrapper);
@@ -153,7 +153,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         );
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function stake(uint256 leverId, uint256 amount, address to) external {
         LeverPool storage pool = lever[leverId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
@@ -177,7 +177,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         emit Staked(leverId, to, amount);
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function unstake(uint256 leverId, uint256 amount, address to) external {
         LeverPool storage pool = lever[leverId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
@@ -198,7 +198,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         emit Unstaked(leverId, msg.sender, amount);
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function claim(uint256 leverId, address to) external {
         LeverPool storage pool = lever[leverId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
@@ -220,7 +220,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         emit Claimed(leverId, msg.sender, pool.underlying, claimable);
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function harvest(uint256 leverId) external {
         LeverPool storage pool = lever[leverId];
         if (pool.underlying == address(0)) revert PoolNotRegistered();
@@ -300,7 +300,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         revert("Unknown action");
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function getPegBps(uint256 leverId) external view returns (uint256 bps) {
         LeverPool storage pool = lever[leverId];
         if (pool.wrapper == address(0)) return 0;
@@ -311,7 +311,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         return (pool.underlyingEscrowed * 10000) / supply;
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function getRatePerSecondX64(
         uint256 leverId
     ) external view returns (uint256) {
@@ -319,7 +319,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         return pool.ratePerSecondX64;
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function getUserStake(
         uint256 leverId,
         address user
@@ -327,7 +327,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         return userStakes[leverId][user].amount;
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function getClaimableRewards(
         uint256 leverId,
         address user
@@ -348,7 +348,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         return userStake.claimable;
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function getPoolInfo(
         uint256 leverId
     )
@@ -372,7 +372,7 @@ contract MasterLever_v1 is IMasterLever_v1 {
         );
     }
 
-    /// @inheritdoc IMasterLever_v1
+    /// @inheritdoc IMasterLevr_v1
     function getLeverIdByUnderlying(
         address underlying
     ) external view returns (uint256) {

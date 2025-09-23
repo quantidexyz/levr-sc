@@ -5,9 +5,9 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 
-/// @title LeverERC20 - Wrapper token for Lever protocol
+/// @title LevrERC20 - Wrapper token for Lever protocol
 /// @notice ERC20 token with controlled minting and burning for 1:1 peg to underlying assets
-contract LeverERC20 is ERC20, AccessControl, ERC20Permit {
+contract LevrERC20 is ERC20, AccessControl, ERC20Permit {
     /// @notice Role for addresses that can mint and burn tokens
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 

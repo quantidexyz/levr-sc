@@ -1,6 +1,6 @@
 ## Integration Rule — Clanker x Lever (Base Sepolia Fork + Code/Test wiring)
 
-This document standardizes how we integrate the monolithic `MasterLever_v1` with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
+This document standardizes how we integrate the monolithic `MasterLevr_v1` with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
 
 ## Network Fork
 
@@ -37,7 +37,7 @@ Notes:
 │   └── v4-core/            # Uniswap v4 core contracts
 ├── src/
 │   ├── interfaces/
-│   │   ├── IMasterLever_v1.sol              # Lever protocol interface
+│   │   ├── IMasterLevr_v1.sol              # Lever protocol interface
 │   │   └── external/                     # External dependencies
 │   │       ├── IPoolManager.sol          # Uniswap v4 PoolManager (minimal)
 │   │       ├── IProtocolFees.sol         # Protocol fee management
@@ -76,18 +76,18 @@ Notes:
 
 - **Core contracts** (to be implemented)
 
-  - `src/MasterLever_v1.sol`
+  - `src/MasterLevr_v1.sol`
     - Stores per-pool config keyed by `leverId` (see protocol rule).
     - `registerPool(underlying, poolManager, poolKeyEncoded, name, symbol)` creates or wires an ERC20 wrapper (OpenZeppelin based) and persists the `leverId` mapping.
     - Mint/redeem escrow with FCFS solvency; staking with global `rewardIndexX64`; `harvest(leverId)` with v4 unlock discipline collecting protocol fees.
   - `src/IssuanceToken.sol`
     - OpenZeppelin ERC20 + AccessControl.
-    - Roles: `DEFAULT_ADMIN_ROLE` = deployer; `MINTER_ROLE` = deployer and `MasterLever_v1`.
+    - Roles: `DEFAULT_ADMIN_ROLE` = deployer; `MINTER_ROLE` = deployer and `MasterLevr_v1`.
     - Decimals should mirror underlying.
 
 - **Interfaces** (implemented)
 
-  - `src/interfaces/IMasterLever_v1.sol`: complete external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
+  - `src/interfaces/IMasterLevr_v1.sol`: complete external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
   - `src/interfaces/external/IPoolManager.sol`: minimal subset for `unlock`, `collectProtocolFees`, `protocolFeesAccrued`.
   - `src/interfaces/external/IProtocolFees.sol`: protocol fee controller interface.
   - `src/interfaces/external/IClankerHookDynamicFee.sol`: read-only vars for fee state and dynamic fee queries.
@@ -99,7 +99,7 @@ Notes:
   - Prefer `bytes poolKeyEncoded` over importing full Uniswap v4 types; compute `PoolId` from ABI-encoded `PoolKey` inside the contract.
 
 - **Wiring and safety**
-  - MasterLever must be set (or allowed) as protocol fee controller for pools you intend to harvest; otherwise fees remain unclaimed until attribution is enabled (see Fee Permissions in protocol rule).
+  - MasterLevr must be set (or allowed) as protocol fee controller for pools you intend to harvest; otherwise fees remain unclaimed until attribution is enabled (see Fee Permissions in protocol rule).
   - Enforce no duplicate registration for the same `underlying`.
   - Optional: enforce currency exclusivity per `IPoolManager` to avoid ambiguous fee buckets; otherwise use extension metering.
   - Emit events for registration, mint, redeem, stake, unstake, claim, harvest.
@@ -120,16 +120,16 @@ Notes:
 
 - **Recommended test files**
 
-  - `test/MasterLever.Register.t.sol`:
-    - Deploy `MasterLever_v1`.
+  - `test/MasterLevr.Register.t.sol`:
+    - Deploy `MasterLevr_v1`.
     - Provide live `poolManager` and `poolKeyEncoded` (or mock if needed) and call `registerPool`.
-    - Assert wrapper roles: deployer and MasterLever have `MINTER_ROLE`.
-  - `test/MasterLever.MintRedeemFCFS.t.sol`:
-    - Transfer underlying to `MasterLever_v1` and mint wrapper to user; track `underlyingEscrowed` and `wrapper.totalSupply()`.
+    - Assert wrapper roles: deployer and MasterLevr have `MINTER_ROLE`.
+  - `test/MasterLevr.MintRedeemFCFS.t.sol`:
+    - Transfer underlying to `MasterLevr_v1` and mint wrapper to user; track `underlyingEscrowed` and `wrapper.totalSupply()`.
     - Over-mint via deployer and assert FCFS redemption behavior.
-  - `test/MasterLever.StakeRewards.t.sol`:
+  - `test/MasterLevr.StakeRewards.t.sol`:
     - Stake wrapper; simulate or collect fees; assert `rewardIndexX64` accrual and `claim` payout.
-  - `test/MasterLever.Harvest.t.sol`:
+  - `test/MasterLevr.Harvest.t.sol`:
     - With controller permissions set, call `harvest(leverId)`; verify unlock/collect path and per-pool crediting.
     - If buckets are shared, assert metering caps application.
 

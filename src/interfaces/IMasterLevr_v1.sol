@@ -3,10 +3,10 @@ pragma solidity ^0.8.28;
 
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/types/PoolId.sol";
 
-/// @title IMasterLever_v1 - Interface for the Lever protocol's MasterLever contract
+/// @title IMasterLevr_v1 - Interface for the Lever protocol's MasterLevr contract
 /// @notice Provides ERC20 wrapper tokens with 1:1 peg to underlying Clanker tokens,
 /// staking rewards from protocol fees, and FCFS redemption solvency
-interface IMasterLever_v1 {
+interface IMasterLevr_v1 {
     /// @notice Thrown when attempting to redeem more than available escrow
     error InsufficientEscrow();
 

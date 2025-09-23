@@ -8,25 +8,32 @@ import {IPoolManager} from "../../src/interfaces/external/IPoolManager.sol";
 contract MockPoolManager is IPoolManager {
     mapping(Currency => uint256) private _protocolFeesAccrued;
     bool private _harvestCalled;
-    address private masterLever;
+    address private masterLevr;
 
-    function setProtocolFeesAccrued(Currency currency, uint256 amount) external {
+    function setProtocolFeesAccrued(
+        Currency currency,
+        uint256 amount
+    ) external {
         _protocolFeesAccrued[currency] = amount;
     }
 
-    function setMasterLever(address _masterLever) external {
-        masterLever = _masterLever;
+    function setMasterLevr(address _masterLevr) external {
+        masterLevr = _masterLevr;
     }
 
-    function protocolFeesAccrued(Currency currency) external view returns (uint256) {
+    function protocolFeesAccrued(
+        Currency currency
+    ) external view returns (uint256) {
         return _protocolFeesAccrued[currency];
     }
 
-    function unlock(bytes calldata data) external payable returns (bytes memory) {
-        // For this mock, we'll directly call the masterLever's unlockCallback
+    function unlock(
+        bytes calldata data
+    ) external payable returns (bytes memory) {
+        // For this mock, we'll directly call the masterLevr's unlockCallback
         // In the real v4, this would be a callback to the calling contract
-        // For simplicity, assume the data is the callback data for MasterLever_v1
-        (bool success, bytes memory result) = address(masterLever).call(
+        // For simplicity, assume the data is the callback data for MasterLevr_v1
+        (bool success, bytes memory result) = address(masterLevr).call(
             abi.encodeWithSignature("unlockCallback(bytes)", data)
         );
 
