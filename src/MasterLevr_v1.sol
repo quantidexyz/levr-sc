@@ -32,8 +32,8 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
     /// @notice Mapping from (levrId, user) to staking state
     mapping(uint256 => mapping(address => UserStake)) public userStakes;
 
-    /// @notice Q64.64 fixed point representation of 1 (using 1e18 for testing to avoid large numbers)
-    uint256 private constant Q64 = 1e18;
+    /// @notice Q64.64 fixed point representation of 1
+    uint256 private constant Q64 = 1 << 64;
 
     /// @notice Constructor - no initialization needed
     constructor() {}
@@ -66,6 +66,7 @@ contract MasterLevr_v1 is IMasterLevr_v1 {
             new LevrERC20(
                 wrapperName,
                 wrapperSymbol,
+                underlying,
                 msg.sender, // deployer gets admin role
                 address(this) // this contract gets minter role
             )
