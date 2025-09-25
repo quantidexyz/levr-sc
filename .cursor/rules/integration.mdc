@@ -115,7 +115,7 @@ Notes:
   - `unwrap(amount, to)`: Burn wrapper, return underlying (minus fees)
   - `transfer(to, amount)`: Execute governance-approved transfers
   - `applyBoost(amount)`: Apply staking boost
-  - `collectFees()`: Collect Clanker emissions
+  - Staking rewards accrual and claims for underlying and paired tokens
 - **Storage**:
   - Underlying token address
   - Governor and wrapper contract addresses
@@ -189,9 +189,8 @@ Notes:
 #### Treasury Tests
 
 - `test/LevrTreasuryV1.WrapUnwrap.t.sol`:
-  - End-to-end wrap/unwrap with fee calculation
-  - Fee split between protocol and project treasury
-  - Balance invariants and accounting
+  - End-to-end wrap/unwrap with protocol fee calculation
+  - Balance invariants and accounting (no project fee path)
 - `test/LevrTreasuryV1.Execution.t.sol`:
   - Governor-authorized transfers and boosts
   - Access control validation
@@ -213,7 +212,7 @@ Notes:
 - `test/integration/LevrV1.EndToEnd.t.sol`:
   - Complete user flow: deploy → register → wrap → propose → execute
   - Multi-project isolation
-  - Fee collection from Clanker emissions
+  - Protocol fee forwarding; staking rewards accrual for both pool tokens
 
 ### Utilities and Mocks
 

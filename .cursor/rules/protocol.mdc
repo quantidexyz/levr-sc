@@ -26,7 +26,6 @@ This document defines the contract architecture and implementation details for L
 
 - **Key Storage**:
   - `protocolFeeBps`: Fee in basis points for mint/redeem operations
-  - `projectFeeBpsOfProtocolFee`: Share of protocol fee going to project treasury
   - `submissionDeadlineSeconds`: Proposal deadline (default 7 days)
   - `maxSubmissionPerType`: Max proposals per type per 7-day window
   - `stakingBoostTiers`, `transferTiers`: Governance tier configurations
@@ -48,7 +47,7 @@ This document defines the contract architecture and implementation details for L
   - `underlying`: Address of the Clanker token
   - `governor`: Address of the project's governor contract
   - `wrapper`: Address of the project's wrapper token
-  - Fee collection balances and accounting
+  - Staking reward accounting (per-token accumulators)
 
 #### LevrGovernor_v1 (Per-Project)
 
@@ -107,7 +106,7 @@ This document defines the contract architecture and implementation details for L
 
 ```
 User → Underlying.transfer(treasury, amount)
-Treasury → calculateFees(amount) → deduct fees
+Treasury → calculateProtocolFee(amount) → deduct protocol fee
 Treasury → Wrapper.mint(user, amount - fees)
 ```
 
@@ -115,11 +114,11 @@ Treasury → Wrapper.mint(user, amount - fees)
 
 ```
 User → Wrapper.burn(treasury, amount)
-Treasury → calculateFees(amount) → deduct fees
+Treasury → calculateProtocolFee(amount) → deduct protocol fee
 Treasury → Underlying.transfer(user, amount - fees)
 ```
 
-Fee Split: Protocol treasury gets `protocolFeeBps` share, project treasury gets remaining fee portion.
+Fee Flow: Protocol treasury receives `protocolFeeBps` of operation amount. No project fee.
 
 #### Governance Proposals
 
@@ -142,11 +141,7 @@ Fee Split: Protocol treasury gets `protocolFeeBps` share, project treasury gets 
 
 #### Mint/Redeem Fees
 
-- **Protocol Fee**: `protocolFeeBps / 10000` of operation amount
-- **Project Fee**: `projectFeeBpsOfProtocolFee / 10000` of protocol fee
-- **Fee Split**:
-  - Protocol treasury: `protocolFee - projectFee`
-  - Project treasury: `projectFee`
+- **Protocol Fee**: `protocolFeeBps / 10000` of operation amount (forwarded to protocol treasury)
 
 #### Rounding and Precision
 
@@ -157,7 +152,7 @@ Fee Split: Protocol treasury gets `protocolFeeBps` share, project treasury gets 
 #### Invariants
 
 - Wrapper total supply ≤ underlying balance in treasury (accounting for collected fees)
-- Fee collections properly split between protocol and project treasuries
+- Protocol fees forwarded correctly to protocol treasury (no project fee path)
 - Governance proposals execute atomically with proper access controls
 
 ---
@@ -241,7 +236,6 @@ struct RegisterParams {
 
 struct FactoryConfig {
     uint16 protocolFeeBps;
-    uint16 projectFeeBpsOfProtocolFee;
     uint32 submissionDeadlineSeconds;
     uint16 maxSubmissionPerType;
     TierConfig[] transferTiers;
@@ -261,10 +255,12 @@ interface ILevrTreasury_v1 {
     function transfer(address to, uint256 amount) external;
     function applyBoost(uint256 amount) external;
 
-    function collectFees() external; // from Clanker emissions
+    function accrueRewards(address token, uint256 amount) external;
 
     function getUnderlyingBalance() external view returns (uint256);
-    function getCollectedFees() external view returns (uint256);
+    function stake(uint256 amount) external;
+    function unstake(uint256 amount, address to) external;
+    function claimRewards(address[] calldata tokens, address to) external;
 }
 ```
 

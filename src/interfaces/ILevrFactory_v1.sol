@@ -18,7 +18,6 @@ interface ILevrFactory_v1 {
     /// @notice Global protocol configuration stored in the factory.
     struct FactoryConfig {
         uint16 protocolFeeBps;
-        uint16 projectFeeBpsOfProtocolFee;
         uint32 submissionDeadlineSeconds;
         uint16 maxSubmissionPerType;
         TierConfig[] transferTiers;
@@ -71,9 +70,6 @@ interface ILevrFactory_v1 {
     // Config getters for periphery contracts
     /// @notice Protocol fee in basis points applied to wrap/unwrap.
     function protocolFeeBps() external view returns (uint16);
-
-    /// @notice Share of protocol fee going to project treasury (bps of fee).
-    function projectFeeBpsOfProtocolFee() external view returns (uint16);
 
     /// @notice Proposal execution deadline (seconds).
     function submissionDeadlineSeconds() external view returns (uint32);

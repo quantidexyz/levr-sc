@@ -13,7 +13,6 @@ import {LevrERC20} from "./LevrERC20.sol";
 
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     uint16 public override protocolFeeBps;
-    uint16 public override projectFeeBpsOfProtocolFee;
     uint32 public override submissionDeadlineSeconds;
     uint16 public override maxSubmissionPerType; // reserved for future rate limits
     uint256 public override minWTokenToSubmit;
@@ -127,7 +126,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
 
     function _applyConfig(FactoryConfig memory cfg) internal {
         protocolFeeBps = cfg.protocolFeeBps;
-        projectFeeBpsOfProtocolFee = cfg.projectFeeBpsOfProtocolFee;
         submissionDeadlineSeconds = cfg.submissionDeadlineSeconds;
         maxSubmissionPerType = cfg.maxSubmissionPerType;
         minWTokenToSubmit = cfg.minWTokenToSubmit;

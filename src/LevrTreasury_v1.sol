@@ -17,7 +17,7 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     address public governor;
     address public wrapper;
 
-    uint256 private collectedFees;
+    // no project fees; only protocol fees apply
     uint256 private _totalStaked;
     mapping(address => uint256) private _stakedBalance;
     // reward tokens registry and accounting
@@ -69,18 +69,12 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
         require(to != address(0), "TO_ZERO");
         IERC20(underlying).safeTransferFrom(msg.sender, address(this), amount);
 
-        (uint256 protocolFee, uint256 projectFee) = _calculateFees(amount);
+        uint256 protocolFee = _calculateProtocolFee(amount);
         uint256 totalFee = protocolFee;
-        if (projectFee > 0) {
-            collectedFees += projectFee;
-        }
 
         address protocolTreasury_ = ILevrFactory_v1(factory).protocolTreasury();
         if (protocolFee > 0 && protocolTreasury_ != address(0)) {
-            IERC20(underlying).safeTransfer(
-                protocolTreasury_,
-                protocolFee - projectFee
-            );
+            IERC20(underlying).safeTransfer(protocolTreasury_, protocolFee);
         }
 
         minted = amount - totalFee;
@@ -97,18 +91,12 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
         require(to != address(0), "TO_ZERO");
         ILevrERC20(wrapper).burn(msg.sender, amount);
 
-        (uint256 protocolFee, uint256 projectFee) = _calculateFees(amount);
+        uint256 protocolFee = _calculateProtocolFee(amount);
         uint256 totalFee = protocolFee;
-        if (projectFee > 0) {
-            collectedFees += projectFee;
-        }
 
         address protocolTreasury_ = ILevrFactory_v1(factory).protocolTreasury();
         if (protocolFee > 0 && protocolTreasury_ != address(0)) {
-            IERC20(underlying).safeTransfer(
-                protocolTreasury_,
-                protocolFee - projectFee
-            );
+            IERC20(underlying).safeTransfer(protocolTreasury_, protocolFee);
         }
 
         returned = amount - totalFee;
@@ -128,23 +116,11 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     }
 
     /// @inheritdoc ILevrTreasury_v1
-    function collectFees() external onlyGovernor {
-        uint256 fees = collectedFees;
-        if (fees == 0) return;
-        collectedFees = 0;
-        IERC20(underlying).safeTransfer(governor, fees);
-        emit FeesCollected(fees);
-    }
-
-    /// @inheritdoc ILevrTreasury_v1
     function getUnderlyingBalance() external view returns (uint256) {
         return IERC20(underlying).balanceOf(address(this));
     }
 
-    /// @inheritdoc ILevrTreasury_v1
-    function getCollectedFees() external view returns (uint256) {
-        return collectedFees;
-    }
+    // project fee collection removed
 
     /// @inheritdoc ILevrTreasury_v1
     function stake(uint256 amount) external nonReentrant {
@@ -265,13 +241,10 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
         }
     }
 
-    function _calculateFees(
+    function _calculateProtocolFee(
         uint256 amount
-    ) internal view returns (uint256 protocolFee, uint256 projectFee) {
+    ) internal view returns (uint256 protocolFee) {
         uint16 protocolFeeBps = ILevrFactory_v1(factory).protocolFeeBps();
-        uint16 projectShareBps = ILevrFactory_v1(factory)
-            .projectFeeBpsOfProtocolFee();
         protocolFee = (amount * protocolFeeBps) / 10_000;
-        projectFee = (protocolFee * projectShareBps) / 10_000;
     }
 }

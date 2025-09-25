@@ -65,10 +65,6 @@ interface ILevrTreasury_v1 {
         uint256 fees
     );
 
-    /// @notice Emitted when project fees are transferred to the governor.
-    /// @param amount Amount of fees transferred
-    event FeesCollected(uint256 amount);
-
     /// @notice Emitted when a boost is applied and rewards are accrued for stakers for a token.
     /// @param token Reward token accrued
     /// @param amount Amount of token allocated to stakers
@@ -132,16 +128,9 @@ interface ILevrTreasury_v1 {
     /// @param amount Amount of token to allocate to stakers
     function accrueRewards(address token, uint256 amount) external;
 
-    /// @notice Transfer accumulated project fees to the governor.
-    function collectFees() external;
-
     /// @notice Current underlying balance held by the treasury.
     /// @return balance Underlying token balance
     function getUnderlyingBalance() external view returns (uint256 balance);
-
-    /// @notice Accumulated project fee amount pending collection.
-    /// @return fees Pending fee amount
-    function getCollectedFees() external view returns (uint256 fees);
 
     /// @notice Stake wrapper tokens into this treasury.
     /// @param amount Amount of wrapper tokens to stake
