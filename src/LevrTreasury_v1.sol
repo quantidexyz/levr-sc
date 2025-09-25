@@ -18,6 +18,14 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     address public wrapper;
 
     uint256 private collectedFees;
+    uint256 private _totalStaked;
+    mapping(address => uint256) private _stakedBalance;
+    // reward tokens registry and accounting
+    // use ILevrTreasury_v1.RewardInfo for on-chain layout
+    address[] private _rewardTokens; // includes underlying by default
+    mapping(address => ILevrTreasury_v1.RewardInfo) private _rewardInfo; // token => info
+    mapping(address => mapping(address => int256)) private _rewardDebt; // user => token => debt
+    uint256 private constant ACC_SCALE = 1e18;
 
     constructor(address underlying_, address factory_) {
         if (underlying_ == address(0) || factory_ == address(0))
@@ -34,6 +42,12 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
             revert ILevrTreasury_v1.ZeroAddress();
         governor = governor_;
         wrapper = wrapper_;
+        // register underlying as a reward token by default
+        _rewardInfo[underlying] = ILevrTreasury_v1.RewardInfo({
+            accPerShare: 0,
+            exists: true
+        });
+        _rewardTokens.push(underlying);
         emit Initialized(underlying, governor_, wrapper_);
     }
 
@@ -109,8 +123,8 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     }
 
     /// @inheritdoc ILevrTreasury_v1
-    function applyBoost(uint256 /* amount */) external onlyGovernor {
-        // placeholder for future logic, effect tracked via events/governance in v1
+    function applyBoost(uint256 amount) external onlyGovernor {
+        _accrue(underlying, amount);
     }
 
     /// @inheritdoc ILevrTreasury_v1
@@ -130,6 +144,125 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     /// @inheritdoc ILevrTreasury_v1
     function getCollectedFees() external view returns (uint256) {
         return collectedFees;
+    }
+
+    /// @inheritdoc ILevrTreasury_v1
+    function stake(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
+        // pull wrapper from user to treasury as staked balance holder
+        IERC20(wrapper).safeTransferFrom(msg.sender, address(this), amount);
+        // increase debt for all reward tokens proportionally to new stake
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address rt = _rewardTokens[i];
+            uint256 acc = _rewardInfo[rt].accPerShare;
+            if (acc > 0) {
+                _rewardDebt[msg.sender][rt] += int256(
+                    (amount * acc) / ACC_SCALE
+                );
+            }
+        }
+        _stakedBalance[msg.sender] += amount;
+        _totalStaked += amount;
+        emit Staked(msg.sender, amount);
+    }
+
+    /// @inheritdoc ILevrTreasury_v1
+    function unstake(uint256 amount, address to) external nonReentrant {
+        if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
+        if (to == address(0)) revert ILevrTreasury_v1.ZeroAddress();
+        uint256 bal = _stakedBalance[msg.sender];
+        if (bal < amount) revert ILevrTreasury_v1.InsufficientStake();
+        // settle pending for all reward tokens before reducing stake
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address rt = _rewardTokens[i];
+            _settle(rt, msg.sender, to, bal);
+        }
+        _stakedBalance[msg.sender] = bal - amount;
+        // update debts to reflect new balance
+        uint256 newBal = _stakedBalance[msg.sender];
+        for (uint256 i2 = 0; i2 < len; i2++) {
+            address rt2 = _rewardTokens[i2];
+            uint256 acc2 = _rewardInfo[rt2].accPerShare;
+            _rewardDebt[msg.sender][rt2] = int256((newBal * acc2) / ACC_SCALE);
+        }
+        _totalStaked -= amount;
+        IERC20(wrapper).safeTransfer(to, amount);
+        emit Unstaked(msg.sender, to, amount);
+    }
+
+    /// @inheritdoc ILevrTreasury_v1
+    function stakedBalanceOf(
+        address account
+    ) external view returns (uint256 balance) {
+        return _stakedBalance[account];
+    }
+
+    /// @inheritdoc ILevrTreasury_v1
+    function totalStaked() external view returns (uint256 total) {
+        return _totalStaked;
+    }
+
+    /// @inheritdoc ILevrTreasury_v1
+    function accrueRewards(
+        address token,
+        uint256 amount
+    ) external onlyGovernor {
+        _accrue(token, amount);
+    }
+
+    /// @inheritdoc ILevrTreasury_v1
+    function claimRewards(
+        address[] calldata tokens,
+        address to
+    ) external nonReentrant {
+        if (to == address(0)) revert ILevrTreasury_v1.ZeroAddress();
+        uint256 bal = _stakedBalance[msg.sender];
+        for (uint256 i = 0; i < tokens.length; i++) {
+            _settle(tokens[i], msg.sender, to, bal);
+        }
+        // set debts to current after settlement
+        for (uint256 j = 0; j < tokens.length; j++) {
+            address rt = tokens[j];
+            uint256 acc = _rewardInfo[rt].accPerShare;
+            _rewardDebt[msg.sender][rt] = int256((bal * acc) / ACC_SCALE);
+        }
+    }
+
+    function _accrue(address token, uint256 amount) internal {
+        if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
+        uint256 staked = _totalStaked;
+        require(staked > 0, "NO_STAKE");
+        if (!_rewardInfo[token].exists) {
+            _rewardInfo[token] = ILevrTreasury_v1.RewardInfo({
+                accPerShare: 0,
+                exists: true
+            });
+            _rewardTokens.push(token);
+        }
+        ILevrTreasury_v1.RewardInfo storage info = _rewardInfo[token];
+        info.accPerShare += (amount * ACC_SCALE) / staked;
+        emit BoostApplied(token, amount, info.accPerShare);
+    }
+
+    function _settle(
+        address token,
+        address account,
+        address to,
+        uint256 bal
+    ) internal {
+        ILevrTreasury_v1.RewardInfo storage info = _rewardInfo[token];
+        if (!info.exists) return;
+        uint256 accumulated = (bal * info.accPerShare) / ACC_SCALE;
+        int256 debt = _rewardDebt[account][token];
+        if (accumulated > uint256(debt)) {
+            uint256 pending = accumulated - uint256(debt);
+            if (pending > 0) {
+                IERC20(token).safeTransfer(to, pending);
+                emit RewardsClaimed(account, to, token, pending);
+            }
+        }
     }
 
     function _calculateFees(
