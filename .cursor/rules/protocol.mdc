@@ -1,6 +1,7 @@
 ---
 alwaysApply: true
 ---
+
 ## Levr Protocol v1 — Contracts Architecture
 
 This document defines the contract architecture and implementation details for Levr Protocol v1, focusing on the modular contract system with factory, treasury, governor, and wrapper components. It is the source-of-truth for contract implementations and integration decisions.
@@ -8,7 +9,6 @@ This document defines the contract architecture and implementation details for L
 ### Scope and Compatibility
 
 - **Protocol version**: v1
-- **Compatibility**: Not backward compatible with v1. v1 uses a modular architecture with separate contracts for treasury, governance, and token wrapping.
 - **Architecture**: Modular system with `LevrFactory_v1` as the entry point, deploying per-project `LevrTreasury_v1`, `LevrGovernor_v1`, and `LevrERC20` wrapper contracts.
 
 ---
