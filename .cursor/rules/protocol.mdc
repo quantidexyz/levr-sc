@@ -1,460 +1,390 @@
 ---
 alwaysApply: true
 ---
+## Levr Protocol v1 — Contracts Architecture
 
-## Levr Protocol Rules — MasterLevr v1 (Monolithic Architecture)
+This document defines the contract architecture and implementation details for Levr Protocol v1, focusing on the modular contract system with factory, treasury, governor, and wrapper components. It is the source-of-truth for contract implementations and integration decisions.
 
-This document defines how the Levr protocol operates in a monolithic setup centered on `MasterLevr_v1`, including ERC20 wrapper tokens, solvency (FCFS redemptions), staking, fee distribution from Clanker v4 pools, and observability (peg, APY). It is source-of-truth for integration and implementation decisions across the codebase.
+### Scope and Compatibility
 
-### Scope
-
-- Single `MasterLevr_v1` contract orchestrates:
-  - Registration of Clanker-launched tokens and associated v4 pool identity
-  - Wrapping via per-pool ERC20 issuance tokens (OpenZeppelin-based)
-  - Mint/redeem flows with underlying escrow held by `MasterLevr_v1`
-  - Staking of the wrapped token and reward distribution
-  - Harvesting protocol fees from Clanker v4 `IPoolManager`
-  - Peg and APY tracking (read-only views)
-
-## Components and Roles
-
-### MasterLevr_v1
-
-- Stores per-pool configuration and accounting in a mapping from `levrId` to a struct. The canonical keys include:
-
-  - `underlying`: Clanker-launched ERC20 address
-  - `wrapper`: ERC20 issuance token address (OpenZeppelin-based), 1:1 unit mapping to underlying
-  - `poolManager`: v4 `IPoolManager` address
-  - `poolKeyEncoded`: `abi.encode(PoolKey)` for the v4 pool; used to derive `PoolId`
-  - `poolId`: derived v4 `PoolId`
-  - `underlyingEscrowed`: total underlying tokens currently escrowed in `MasterLevr_v1`
-  - `syntheticSupply`: wrapper total supply mirror (sanity check; read from wrapper if needed)
-  - `stakedSupply`: total wrapper tokens staked in `MasterLevr_v1`
-  - `rewardIndexX64`: global rewards accumulator (Q64 fixed-point)
-  - `lastHarvest`: last harvest timestamp
-
-- Global mappings:
-
-  - `levrIdByUnderlying[underlying] -> levrId`
-  - `levr[levrId] -> LevrPool`
-  - `userStake[levrId][user]`, `userIndexX64[levrId][user]`, `userClaimable[levrId][user]`
-
-- Authority:
-  - Acts as protocol fee controller for relevant pools, or is configured as the collector via governance.
-  - Is a designated minter/burner of each `wrapper` token.
-
-### ERC20 Issuance Token (Wrapper)
-
-- Standard OpenZeppelin ERC20 with AccessControl.
-
-  - `DEFAULT_ADMIN_ROLE`: deployer of the wrapper (project owner)
-  - `MINTER_ROLE`: granted to `MasterLevr_v1` and also to the deployer
-  - Optional `PAUSER_ROLE` if we include pausability
-
-- Behavior:
-
-  - `mint(address to, uint256 amount)`: restricted to `MINTER_ROLE`
-  - `burn(address from, uint256 amount)`: restricted to `MINTER_ROLE` (for redemptions via MasterLevr), or `burn(uint256)` for self-burn if enabled
-  - Decimals should mirror the underlying token’s decimals
-  - Name/Symbol: may encode the underlying identity, e.g., `<SYMBOL>W` or `w<SYMBOL>`
-
-- Ownership and Roles:
-  - The wrapper deployer retains admin rights and has `MINTER_ROLE` so they can mint at their discretion
-  - `MasterLevr_v1` also has `MINTER_ROLE` to handle user mint/redeem and staking flows
-
-## Registration (Fresh or Existing; Only MasterLevr Address Known)
-
-1. Token deployer creates the Clanker token using the Clanker SDK, ensuring `MasterLevr_v1` will be the protocol fee controller or collector for the pool (via factory/hook configuration where applicable).
-
-2. Anyone can call `registerPool` on `MasterLevr_v1` with:
-
-   - `underlying` address
-   - `poolManager` address (v4 core)
-   - `poolKeyEncoded` (ABI-encoded `PoolKey`) or enough parameters to build it
-   - Optionally, wrapper metadata (name, symbol, decimals) if not inferred
-
-3. `MasterLevr_v1` computes `PoolId`, stores config, and deploys or wires the ERC20 wrapper token for this `underlying`:
-   - Grants `MINTER_ROLE` to `MasterLevr_v1` and to the deployer/admin
-   - Persists `levrIdByUnderlying` and `levr[levrId]`
-
-From this point forward, all flows are available with only the `MasterLevr_v1` address known to participants.
-
-Applies to both freshly deployed and already-launched Clanker tokens:
-
-- For existing tokens, callers provide the live pool identifiers to `registerPool` and the flow is identical.
-- Holder migration is not required; users can deposit underlying to mint the wrapper 1:1 at any time.
-- Deployers may seed `underlyingEscrowed` by transferring underlying to `MasterLevr_v1`.
-
-## Mint / Redeem and Escrow Solvency (FCFS)
-
-- Underlying escrow is maintained entirely inside `MasterLevr_v1`.
-
-  - User mint: user transfers `amount` of underlying to `MasterLevr_v1`; `MasterLevr_v1` mints `amount` of wrapper to the recipient and increments `underlyingEscrowed`.
-  - User redeem: user submits `amount` of wrapper to `MasterLevr_v1`; `MasterLevr_v1` burns the wrapper and transfers up to `amount` of underlying out of escrow.
-
-- Deployer mint freedom:
-
-  - Because the deployer has `MINTER_ROLE`, they can mint wrapper beyond current escrow levels.
-  - The protocol adopts First-Come-First-Served (FCFS) solvency for redemptions:
-    - Redemptions are fulfilled strictly from `underlyingEscrowed`
-    - If `underlyingEscrowed < redeemAmount`, the transaction reverts (or partially fulfills if explicitly supported) — there is no debt queuing.
-    - Users who redeem earlier are prioritized; once escrow is depleted, later redeemers must wait for additional deposits/harvests.
-
-- Invariants and tracking:
-
-  - `pegRatioBps = underlyingEscrowed * 1e4 / wrapper.totalSupply()`
-  - Frontends should surface solvency and peg ratio for transparency.
-
-- Events (recommended):
-  - `Minted(levrId, user, amountUnderlying, amountWrapper)`
-  - `Redeemed(levrId, user, amountWrapper, amountUnderlyingPaid)`
-  - `SolvencyChanged(levrId, underlyingEscrowed, wrapperSupply)`
-
-## Staking and Rewards (Fee Distribution)
-
-- Users can stake their wrapper tokens in `MasterLevr_v1` to earn fees harvested from the associated v4 pool.
-
-- Reward accounting uses a global index per pool:
-
-  - `rewardIndexX64` accumulates as `harvestAmount << 64 / stakedSupply`
-  - Each user tracks `userIndexX64` at stake/unstake/claim boundaries
-  - `claimable += (userStake * (rewardIndexX64 - userIndexX64)) >> 64`
-
-- Core methods:
-  - `stake(levrId, amount, to)`
-  - `unstake(levrId, amount, to)`
-  - `claim(levrId, to)` — pays out the fee currency accrued for that pool (typically the paired token or underlying per configuration)
-
-## Fee Harvesting from Clanker v4
-
-- `MasterLevr_v1` is configured as the protocol fee controller/collector for the pool.
-- Anyone may call `harvest(levrId)` to collect protocol fees using v4 unlock discipline:
-  - Calls `IPoolManager.unlock` with a callback that executes `collectProtocolFees(recipient=MasterLevr_v1, currency, amount)`
-  - Ensures settlement nets to zero prior to re-locking; otherwise reverts per v4 constraints
-  - On success, credits the harvested amounts into the pool’s reward accounting and updates `rewardIndexX64`
-
-### Fee Permissions
-
-- Choose one path to enable fee collection attribution:
-
-  1. Controller handoff (preferred): set `MasterLevr_v1` as the protocol fee controller for the pool so `harvest(levrId)` can directly collect fees.
-  2. Extension metering: attach an allowlisted pool extension that calls `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap; `harvest(levrId)` collects up to the tracked entitlement.
-  3. Isolation: use a dedicated `IPoolManager` instance so currency buckets are not shared with unrelated pools.
-  4. Exclusivity: enforce that no two registered pools share the same fee currency on the same manager.
-
-- If the controller cannot be changed and no extension is present, wrapping, mint/redeem, and staking still function; fee distribution is disabled until fees can be attributed/collected. UIs should display the fee status accordingly.
-
-### Fee Attribution and Shared Currency Buckets
-
-- Attribution model:
-
-  - Fees are not pushed to `MasterLevr_v1`; they are pulled per-pool via `harvest(levrId)`.
-  - Attribution is by call context: during `harvest(levrId)`, the contract collects only the currencies that belong to that pool’s `PoolKey` and immediately credits them to that `levrId`’s reward index.
-
-- Shared currency buckets on the same `IPoolManager`:
-
-  - Because `protocolFeesAccrued(currency)` is aggregated per currency (not per pool), avoid ambiguity by one of the following patterns:
-    1. Pool-extension metering (recommended): a Clanker pool extension invokes `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap to track per-pool entitlements. On `harvest(levrId)`, allocate from the global currency bucket up to the owed entitlement for that `poolId`.
-    2. Isolation: use a dedicated `IPoolManager` (or deployment) for registered pools so currency buckets are not shared with unrelated pools.
-    3. Exclusivity: enforce a registry invariant that no two registered pools share the same fee currency on the same manager (e.g., `currency -> levrId` map) to prevent ambiguous attribution.
-
-- If none of the above are enforced and multiple pools share a currency bucket, `harvest(levrId)` must conservatively cap collection to the pool’s tracked entitlement (if any); otherwise, harvesting could misattribute fees. Frontends should surface which strategy is active.
-
-## Peg and APY Observability
-
-- Expose read-only views per pool:
-
-  - `getPegBps(levrId) -> uint256`: `underlyingEscrowed * 1e4 / wrapper.totalSupply()` (returns 0 if supply is 0)
-  - `getRatePerSecondX64(levrId) -> uint256`: rolling rewards rate for frontends to annualize
-  - Optionally provide windowed averages over the last N seconds/harvests
-
-- APY is an off-chain presentation: `ratePerSecond * 31,536,000` as a baseline, with caveats on variable fees/TVL.
-
-## Security, Roles, and Constraints
-
-- Roles:
-
-  - Wrapper `DEFAULT_ADMIN_ROLE`: deployer
-  - Wrapper `MINTER_ROLE`: deployer and `MasterLevr_v1`
-  - Optionally gate `registerPool` behind governance or allow anyone with guardrails (immutability of keys once set)
-
-- Constraints:
-
-  - `MasterLevr_v1` must have permission to collect protocol fees for a pool; otherwise harvesting is impossible
-  - Address ordering and `PoolKey` correctness are enforced by v4 (`currency0 < currency1`, valid tick spacing)
-  - Dynamic fee/MEV caps are respected by the underlying hook; not modified by `MasterLevr_v1` unless explicitly supported
-  - FCFS solvency means no redemption guarantees if deployers over-mint — frontends and docs must warn users
-
-- Safety:
-  - Adhere to v4 unlock discipline; ensure currency settlement nets to zero before re-locking
-  - Track and emit events for registration, mint, redeem, stake, unstake, claim, harvest
-  - Consider reentrancy guards around state mutations and external transfers
-
-## Minimal External Interface (Indicative)
-
-```solidity
-// Registration
-function registerPool(
-    address underlying,
-    address poolManager,
-    bytes calldata poolKeyEncoded,
-    string calldata name,
-    string calldata symbol
-) external returns (uint256 levrId, address wrapper);
-
-// Mint/Redeem (user flows)
-function mint(uint256 levrId, uint256 amountUnderlying, address to) external;
-function redeem(uint256 levrId, uint256 amountWrapper, address to) external;
-
-// Staking
-function stake(uint256 levrId, uint256 amount, address to) external;
-function unstake(uint256 levrId, uint256 amount, address to) external;
-function claim(uint256 levrId, address to) external;
-
-// Fees
-function harvest(uint256 levrId) external;
-
-// Views
-function getPegBps(uint256 levrId) external view returns (uint256);
-function getRatePerSecondX64(uint256 levrId) external view returns (uint256);
-```
-
-## Implementation Notes
-
-- Wrapper deployment can be minimal proxies (clones) pointing to a single ERC20 implementation to keep gas low while maintaining per-pool metadata and role configuration.
-- Wrapper decimals should mirror the underlying token to preserve 1:1 unit expectations.
-- Peg ratio and solvency should be surfaced in UIs prominently, with FCFS caveats.
-- If partial redemption is supported, define and emit `Redeemed` with the actual fulfilled amount; otherwise revert on insufficient escrow.
-
-## Clanker v4 Integration Reminders
-
-- `MasterLevr_v1` should be set as protocol fee controller (or have the appropriate permissions) during Clanker SDK deployment.
-- Use `IPoolManager.collectProtocolFees` inside an `unlock` flow to harvest and credit rewards.
-- Optional reads for UI/analytics:
-  - `IClankerHookDynamicFee.poolConfigVars(poolId)` / `poolFeeVars(poolId)`
-  - `IClankerHookV2.mevModuleOperational(poolId)` / `mevModuleEnabled(poolId)`
-  - `IPoolManager.protocolFeesAccrued(currency)` / `protocolFeeController()`
+- **Protocol version**: v1
+- **Compatibility**: Not backward compatible with v1. v1 uses a modular architecture with separate contracts for treasury, governance, and token wrapping.
+- **Architecture**: Modular system with `LevrFactory_v1` as the entry point, deploying per-project `LevrTreasury_v1`, `LevrGovernor_v1`, and `LevrERC20` wrapper contracts.
 
 ---
 
-This rule is normative. Contract implementations and SDK integrations should align with the above semantics. Any divergence should update this document first.
+### Core Contract Entities
 
-## Levr Protocol Rules — MasterLevr v1 (Monolithic Architecture)
+#### LevrFactory_v1
 
-This document defines how the Levr protocol operates in a monolithic setup centered on `MasterLevr_v1`, including ERC20 wrapper tokens, solvency (FCFS redemptions), staking, fee distribution from Clanker v4 pools, and observability (peg, APY). It is source-of-truth for integration and implementation decisions across the codebase.
+- **Role**: Global configuration owner and deployment/registry entrypoint for projects
+- **Responsibilities**:
 
-### Scope
+  - Deploy/clone per-project contracts (`LevrTreasury_v1`, `LevrGovernor_v1`, `LevrERC20`)
+  - Manage protocol-wide configuration (fees, limits, tiers, deadlines)
+  - Register projects with optional treasury reuse
 
-- Single `MasterLevr_v1` contract orchestrates:
-  - Registration of Clanker-launched tokens and associated v4 pool identity
-  - Wrapping via per-pool ERC20 issuance tokens (OpenZeppelin-based)
-  - Mint/redeem flows with underlying escrow held by `MasterLevr_v1`
-  - Staking of the wrapped token and reward distribution
-  - Harvesting protocol fees from Clanker v4 `IPoolManager`
-  - Peg and APY tracking (read-only views)
+- **Key Storage**:
+  - `protocolFeeBps`: Fee in basis points for mint/redeem operations
+  - `projectFeeBpsOfProtocolFee`: Share of protocol fee going to project treasury
+  - `submissionDeadlineSeconds`: Proposal deadline (default 7 days)
+  - `maxSubmissionPerType`: Max proposals per type per 7-day window
+  - `stakingBoostTiers`, `transferTiers`: Governance tier configurations
+  - `minWTokenToSubmit`: Minimum wrapper balance to submit proposals
+  - `protocolTreasury`: Protocol fee recipient address
+  - Contract implementation addresses for cloning
 
-## Components and Roles
+#### LevrTreasury_v1 (Per-Project)
 
-### MasterLevr_v1
+- **Role**: Custody and execution contract for project assets and governance decisions
+- **Responsibilities**:
 
-- Stores per-pool configuration and accounting in a mapping from `levrId` to a struct. The canonical keys include:
+  - Hold underlying reserve tokens and fee receipts
+  - Execute transfers and boost applications authorized by governor
+  - Handle wrap/unwrap operations with fee collection
+  - Receive and manage Clanker fee emissions
 
-  - `underlying`: Clanker-launched ERC20 address
-  - `wrapper`: ERC20 issuance token address (OpenZeppelin-based), 1:1 unit mapping to underlying
-  - `poolManager`: v4 `IPoolManager` address
-  - `poolKeyEncoded`: `abi.encode(PoolKey)` for the v4 pool; used to derive `PoolId`
-  - `poolId`: derived v4 `PoolId`
-  - `underlyingEscrowed`: total underlying tokens currently escrowed in `MasterLevr_v1`
-  - `syntheticSupply`: wrapper total supply mirror (sanity check; read from wrapper if needed)
-  - `stakedSupply`: total wrapper tokens staked in `MasterLevr_v1`
-  - `rewardIndexX64`: global rewards accumulator (Q64 fixed-point)
-  - `lastHarvest`: last harvest timestamp
+- **Key Storage**:
+  - `underlying`: Address of the Clanker token
+  - `governor`: Address of the project's governor contract
+  - `wrapper`: Address of the project's wrapper token
+  - Fee collection balances and accounting
 
-- Global mappings:
+#### LevrGovernor_v1 (Per-Project)
 
-  - `levrIdByUnderlying[underlying] -> levrId`
-  - `levr[levrId] -> LevrPool`
-  - `userStake[levrId][user]`, `userIndexX64[levrId][user]`, `userClaimable[levrId][user]`
+- **Role**: Governance and proposal execution for project treasury decisions
+- **Responsibilities**:
 
-- Authority:
-  - Acts as protocol fee controller for relevant pools, or is configured as the collector via governance.
-  - Is a designated minter/burner of each `wrapper` token.
+  - Handle proposal submissions (transfer requests, staking boosts)
+  - Enforce submission limits, deadlines, and tier constraints
+  - Execute approved proposals on the treasury
 
-### ERC20 Issuance Token (Wrapper)
+- **Key Storage**:
+  - Active proposals with metadata (type, amounts, deadlines, tiers)
+  - Rolling counters for submission rate limiting
+  - Proposal execution state and voting records
 
-- Standard OpenZeppelin ERC20 with AccessControl.
+#### LevrERC20 (Per-Project Wrapper)
 
-  - `DEFAULT_ADMIN_ROLE`: deployer of the wrapper (project owner)
-  - `MINTER_ROLE`: granted to `MasterLevr_v1` and also to the deployer
-  - Optional `PAUSER_ROLE` if we include pausability
+- **Role**: 1:1 wrapper token for the underlying Clanker token with fee mechanics
+- **Responsibilities**:
 
-- Behavior:
+  - Mint wrapper tokens upon deposit of underlying (minus fees)
+  - Redeem underlying tokens upon burn of wrapper (minus fees)
+  - Maintain 1:1 peg with underlying decimals and supply semantics
 
-  - `mint(address to, uint256 amount)`: restricted to `MINTER_ROLE`
-  - `burn(address from, uint256 amount)`: restricted to `MINTER_ROLE` (for redemptions via MasterLevr), or `burn(uint256)` for self-burn if enabled
-  - Decimals should mirror the underlying token’s decimals
-  - Name/Symbol: may encode the underlying identity, e.g., `<SYMBOL>W` or `w<SYMBOL>`
-
-- Ownership and Roles:
-  - The wrapper deployer retains admin rights and has `MINTER_ROLE` so they can mint at their discretion
-  - `MasterLevr_v1` also has `MINTER_ROLE` to handle user mint/redeem and staking flows
-
-## Setup and Registration (Only MasterLevr Address Known)
-
-1. Token deployer creates the Clanker token using the Clanker SDK, ensuring `MasterLevr_v1` will be the protocol fee controller or collector for the pool (via factory/hook configuration where applicable).
-
-2. Anyone can call `registerPool` on `MasterLevr_v1` with:
-
-   - `underlying` address
-   - `poolManager` address (v4 core)
-   - `poolKeyEncoded` (ABI-encoded `PoolKey`) or enough parameters to build it
-   - Optionally, wrapper metadata (name, symbol, decimals) if not inferred
-
-3. `MasterLevr_v1` computes `PoolId`, stores config, and deploys or wires the ERC20 wrapper token for this `underlying`:
-   - Grants `MINTER_ROLE` to `MasterLevr_v1` and to the deployer/admin
-   - Persists `levrIdByUnderlying` and `levr[levrId]`
-
-From this point forward, all flows are available with only the `MasterLevr_v1` address known to participants.
-
-## Mint / Redeem and Escrow Solvency (FCFS)
-
-- Underlying escrow is maintained entirely inside `MasterLevr_v1`.
-
-  - User mint: user transfers `amount` of underlying to `MasterLevr_v1`; `MasterLevr_v1` mints `amount` of wrapper to the recipient and increments `underlyingEscrowed`.
-  - User redeem: user submits `amount` of wrapper to `MasterLevr_v1`; `MasterLevr_v1` burns the wrapper and transfers up to `amount` of underlying out of escrow.
-
-- Deployer mint freedom:
-
-  - Because the deployer has `MINTER_ROLE`, they can mint wrapper beyond current escrow levels.
-  - The protocol adopts First-Come-First-Served (FCFS) solvency for redemptions:
-    - Redemptions are fulfilled strictly from `underlyingEscrowed`
-    - If `underlyingEscrowed < redeemAmount`, the transaction reverts (or partially fulfills if explicitly supported) — there is no debt queuing.
-    - Users who redeem earlier are prioritized; once escrow is depleted, later redeemers must wait for additional deposits/harvests.
-
-- Invariants and tracking:
-
-  - `pegRatioBps = underlyingEscrowed * 1e4 / wrapper.totalSupply()`
-  - Frontends should surface solvency and peg ratio for transparency.
-
-- Events (recommended):
-  - `Minted(levrId, user, amountUnderlying, amountWrapper)`
-  - `Redeemed(levrId, user, amountWrapper, amountUnderlyingPaid)`
-  - `SolvencyChanged(levrId, underlyingEscrowed, wrapperSupply)`
-
-## Staking and Rewards (Fee Distribution)
-
-- Users can stake their wrapper tokens in `MasterLevr_v1` to earn fees harvested from the associated v4 pool.
-
-- Reward accounting uses a global index per pool:
-
-  - `rewardIndexX64` accumulates as `harvestAmount << 64 / stakedSupply`
-  - Each user tracks `userIndexX64` at stake/unstake/claim boundaries
-  - `claimable += (userStake * (rewardIndexX64 - userIndexX64)) >> 64`
-
-- Core methods:
-  - `stake(levrId, amount, to)`
-  - `unstake(levrId, amount, to)`
-  - `claim(levrId, to)` — pays out the fee currency accrued for that pool (typically the paired token or underlying per configuration)
-
-## Fee Harvesting from Clanker v4
-
-- `MasterLevr_v1` is configured as the protocol fee controller/collector for the pool.
-- Anyone may call `harvest(levrId)` to collect protocol fees using v4 unlock discipline:
-  - Calls `IPoolManager.unlock` with a callback that executes `collectProtocolFees(recipient=MasterLevr_v1, currency, amount)`
-  - Ensures settlement nets to zero prior to re-locking; otherwise reverts per v4 constraints
-  - On success, credits the harvested amounts into the pool’s reward accounting and updates `rewardIndexX64`
-
-### Fee Attribution and Shared Currency Buckets
-
-- Attribution model:
-
-  - Fees are not pushed to `MasterLevr_v1`; they are pulled per-pool via `harvest(levrId)`.
-  - Attribution is by call context: during `harvest(levrId)`, the contract collects only the currencies that belong to that pool’s `PoolKey` and immediately credits them to that `levrId`’s reward index.
-
-- Shared currency buckets on the same `IPoolManager`:
-
-  - Because `protocolFeesAccrued(currency)` is aggregated per currency (not per pool), avoid ambiguity by one of the following patterns:
-    1. Pool-extension metering (recommended): a Clanker pool extension invokes `MasterLevr_v1.reportProtocolFee(poolId, amount0, amount1)` on each swap to track per-pool entitlements. On `harvest(levrId)`, allocate from the global currency bucket up to the owed entitlement for that `poolId`.
-    2. Isolation: use a dedicated `IPoolManager` (or deployment) for registered pools so currency buckets are not shared with unrelated pools.
-    3. Exclusivity: enforce a registry invariant that no two registered pools share the same fee currency on the same manager (e.g., `currency -> levrId` map) to prevent ambiguous attribution.
-
-- If none of the above are enforced and multiple pools share a currency bucket, `harvest(levrId)` must conservatively cap collection to the pool’s tracked entitlement (if any); otherwise, harvesting could misattribute fees. Frontends should surface which strategy is active.
-
-## Peg and APY Observability
-
-- Expose read-only views per pool:
-
-  - `getPegBps(levrId) -> uint256`: `underlyingEscrowed * 1e4 / wrapper.totalSupply()` (returns 0 if supply is 0)
-  - `getRatePerSecondX64(levrId) -> uint256`: rolling rewards rate for frontends to annualize
-  - Optionally provide windowed averages over the last N seconds/harvests
-
-- APY is an off-chain presentation: `ratePerSecond * 31,536,000` as a baseline, with caveats on variable fees/TVL.
-
-## Security, Roles, and Constraints
-
-- Roles:
-
-  - Wrapper `DEFAULT_ADMIN_ROLE`: deployer
-  - Wrapper `MINTER_ROLE`: deployer and `MasterLevr_v1`
-  - Optionally gate `registerPool` behind governance or allow anyone with guardrails (immutability of keys once set)
-
-- Constraints:
-
-  - `MasterLevr_v1` must have permission to collect protocol fees for a pool; otherwise harvesting is impossible
-  - Address ordering and `PoolKey` correctness are enforced by v4 (`currency0 < currency1`, valid tick spacing)
-  - Dynamic fee/MEV caps are respected by the underlying hook; not modified by `MasterLevr_v1` unless explicitly supported
-  - FCFS solvency means no redemption guarantees if deployers over-mint — frontends and docs must warn users
-
-- Safety:
-  - Adhere to v4 unlock discipline; ensure currency settlement nets to zero before re-locking
-  - Track and emit events for registration, mint, redeem, stake, unstake, claim, harvest
-  - Consider reentrancy guards around state mutations and external transfers
-
-## Minimal External Interface (Indicative)
-
-```solidity
-// Registration
-function registerPool(
-    address underlying,
-    address poolManager,
-    bytes calldata poolKeyEncoded,
-    string calldata name,
-    string calldata symbol
-) external returns (uint256 levrId, address wrapper);
-
-// Mint/Redeem (user flows)
-function mint(uint256 levrId, uint256 amountUnderlying, address to) external;
-function redeem(uint256 levrId, uint256 amountWrapper, address to) external;
-
-// Staking
-function stake(uint256 levrId, uint256 amount, address to) external;
-function unstake(uint256 levrId, uint256 amount, address to) external;
-function claim(uint256 levrId, address to) external;
-
-// Fees
-function harvest(uint256 levrId) external;
-
-// Views
-function getPegBps(uint256 levrId) external view returns (uint256);
-function getRatePerSecondX64(uint256 levrId) external view returns (uint256);
-```
-
-## Implementation Notes
-
-- Wrapper deployment can be minimal proxies (clones) pointing to a single ERC20 implementation to keep gas low while maintaining per-pool metadata and role configuration.
-- Wrapper decimals should mirror the underlying token to preserve 1:1 unit expectations.
-- Peg ratio and solvency should be surfaced in UIs prominently, with FCFS caveats.
-- If partial redemption is supported, define and emit `Redeemed` with the actual fulfilled amount; otherwise revert on insufficient escrow.
-
-## Clanker v4 Integration Reminders
-
-- `MasterLevr_v1` should be set as protocol fee controller (or have the appropriate permissions) during Clanker SDK deployment.
-- Use `IPoolManager.collectProtocolFees` inside an `unlock` flow to harvest and credit rewards.
-- Optional reads for UI/analytics:
-  - `IClankerHookDynamicFee.poolConfigVars(poolId)` / `poolFeeVars(poolId)`
-  - `IClankerHookV2.mevModuleOperational(poolId)` / `mevModuleEnabled(poolId)`
-  - `IPoolManager.protocolFeesAccrued(currency)` / `protocolFeeController()`
+- **Key Storage**:
+  - Mirrors underlying token decimals
+  - Total supply tracking for governance requirements
+  - Standard ERC20 balances and allowances
 
 ---
 
-This rule is normative. Contract implementations and SDK integrations should align with the above semantics. Any divergence should update this document first.
+### Contract Interactions and Flow
+
+#### Project Registration
+
+1. **External Call**: `LevrFactory_v1.register(clankerToken, params)`
+
+   - `params.treasury`: Optional existing treasury address
+   - Validates clankerToken exists and is properly configured
+
+2. **Contract Deployment**:
+
+   - If `params.treasury` provided: Use existing treasury, validate ownership
+   - Otherwise: Deploy new `LevrTreasury_v1` via clone/factory pattern
+   - Deploy `LevrGovernor_v1` with treasury as execution target
+   - Deploy `LevrERC20` wrapper with treasury as fee recipient
+
+3. **Initialization**:
+   - Treasury: Set governor, wrapper, underlying addresses
+   - Governor: Set treasury address and factory config reference
+   - Wrapper: Grant minter/burner roles to treasury
+
+#### Wrap/Unwrap Operations
+
+**Mint (Wrap)**:
+
+```
+User → Underlying.transfer(treasury, amount)
+Treasury → calculateFees(amount) → deduct fees
+Treasury → Wrapper.mint(user, amount - fees)
+```
+
+**Redeem (Unwrap)**:
+
+```
+User → Wrapper.burn(treasury, amount)
+Treasury → calculateFees(amount) → deduct fees
+Treasury → Underlying.transfer(user, amount - fees)
+```
+
+Fee Split: Protocol treasury gets `protocolFeeBps` share, project treasury gets remaining fee portion.
+
+#### Governance Proposals
+
+**Proposal Creation**:
+
+- Validate `msg.sender` holds ≥ `minWTokenToSubmit` wrapper tokens
+- Check rolling submission limits per type (7-day windows)
+- Validate amount constraints against selected tier
+- Store proposal with deadline (`block.timestamp + submissionDeadlineSeconds`)
+
+**Proposal Execution**:
+
+- Verify proposal deadline not exceeded
+- Execute treasury action based on proposal type
+- Update rolling counters and emit events
+
+---
+
+### Fee Model and Accounting
+
+#### Mint/Redeem Fees
+
+- **Protocol Fee**: `protocolFeeBps / 10000` of operation amount
+- **Project Fee**: `projectFeeBpsOfProtocolFee / 10000` of protocol fee
+- **Fee Split**:
+  - Protocol treasury: `protocolFee - projectFee`
+  - Project treasury: `projectFee`
+
+#### Rounding and Precision
+
+- Use conservative rounding favoring reserves safety
+- Track fee accumulations in project treasury for governance distribution
+- Emit fee collection events for transparency
+
+#### Invariants
+
+- Wrapper total supply ≤ underlying balance in treasury (accounting for collected fees)
+- Fee collections properly split between protocol and project treasuries
+- Governance proposals execute atomically with proper access controls
+
+---
+
+### Governance: Submission Limits and Tiers
+
+#### Global Configuration (Factory Level)
+
+- `submissionDeadlineSeconds: uint32` — Common deadline for all proposal types (default: 604,800 = 7 days)
+- `maxSubmissionPerType: uint16` — Max proposals per type per rolling 7-day window
+- `minWTokenToSubmit: uint256` — Minimum wrapper balance required to submit proposals
+
+#### Tier Definitions
+
+**Transfer Tiers** (absolute amounts in underlying units):
+
+- `low`, `mid`, `high`: Maximum transfer amounts per proposal
+
+**Staking Boost Tiers** (fraction of treasury or emissions):
+
+- `low`, `mid`, `high`: Boost percentages (e.g., 0.03, 0.6, 0.9)
+
+#### Rolling Window Enforcement
+
+- Track submissions per `(projectId, proposalType, weekStart)` mapping
+- Use `block.timestamp / 604800` for week calculation
+- Revert if `currentCount >= maxSubmissionPerType`
+
+---
+
+### Security Considerations
+
+#### Access Control
+
+- **Factory**: Only owner can update global configuration
+- **Treasury**: Only governor can execute transfers and boosts
+- **Governor**: Only wrapper holders meeting minimum balance can propose
+- **Wrapper**: Treasury has exclusive mint/burn rights
+
+#### Reentrancy Protection
+
+- Non-reentrant guards on all external treasury functions
+- Wrap/unwrap operations use checks-effects-interactions pattern
+- Fee calculations completed before token transfers
+
+#### Input Validation
+
+- All addresses validated as non-zero
+- Amounts checked against tier limits and balance availability
+- Deadline calculations prevent overflow/underflow
+
+#### Emergency Controls
+
+- Factory owner can pause registrations if needed
+- Treasury includes emergency withdrawal mechanisms (governance-controlled)
+- Wrapper includes optional pauser role for extreme circumstances
+
+---
+
+### Contract Interfaces (Implementation Requirements)
+
+#### LevrFactory_v1
+
+```solidity
+interface ILevrFactory_v1 {
+    function register(
+        address clankerToken,
+        RegisterParams calldata params
+    ) external returns (address governor, address wrapper);
+
+    function updateConfig(FactoryConfig calldata cfg) external;
+
+    function getProjectContracts(address clankerToken)
+        external view returns (address treasury, address governor, address wrapper);
+}
+
+struct RegisterParams {
+    address treasury; // optional: reuse existing treasury
+    bytes extraConfig; // future extension data
+}
+
+struct FactoryConfig {
+    uint16 protocolFeeBps;
+    uint16 projectFeeBpsOfProtocolFee;
+    uint32 submissionDeadlineSeconds;
+    uint16 maxSubmissionPerType;
+    TierConfig[] transferTiers;
+    TierConfig[] stakingBoostTiers;
+    uint256 minWTokenToSubmit;
+    address protocolTreasury;
+}
+```
+
+#### LevrTreasury_v1
+
+```solidity
+interface ILevrTreasury_v1 {
+    function wrap(uint256 amount, address to) external returns (uint256 minted);
+    function unwrap(uint256 amount, address to) external returns (uint256 returned);
+
+    function transfer(address to, uint256 amount) external;
+    function applyBoost(uint256 amount) external;
+
+    function collectFees() external; // from Clanker emissions
+
+    function getUnderlyingBalance() external view returns (uint256);
+    function getCollectedFees() external view returns (uint256);
+}
+```
+
+#### LevrGovernor_v1
+
+```solidity
+interface ILevrGovernor_v1 {
+    function proposeTransfer(
+        address receiver,
+        uint256 amount,
+        string calldata reason,
+        uint8 tier
+    ) external returns (uint256 proposalId);
+
+    function proposeBoost(
+        uint256 amount,
+        uint8 tier
+    ) external returns (uint256 proposalId);
+
+    function execute(uint256 proposalId) external;
+
+    function getProposal(uint256 proposalId)
+        external view returns (Proposal memory);
+
+    function canSubmit(address proposer) external view returns (bool);
+}
+
+struct Proposal {
+    address proposer;
+    ProposalType proposalType;
+    address receiver;
+    uint256 amount;
+    string reason;
+    uint8 tier;
+    uint32 deadline;
+    bool executed;
+}
+```
+
+#### LevrERC20
+
+```solidity
+interface ILevrERC20 is IERC20 {
+    function mint(address to, uint256 amount) external;
+    function burn(address from, uint256 amount) external;
+
+    function decimals() external view returns (uint8);
+    function underlying() external view returns (address);
+}
+```
+
+---
+
+### Implementation Patterns and Best Practices
+
+#### Contract Deployment
+
+- Use minimal proxy (ERC-1167) clones for gas-efficient deployment
+- Initialize contracts with immutable references to avoid storage costs
+- Validate all constructor parameters and relationships
+
+#### Storage Optimization
+
+- Pack related variables into single slots where possible
+- Use mappings for per-user/project data to avoid iteration
+- Cache frequently accessed factory config in governor contracts
+
+#### Event Emission
+
+- Emit comprehensive events for all state changes
+- Include indexed parameters for efficient off-chain querying
+- Follow ERC-20/ERC-721 event standards where applicable
+
+#### Error Handling
+
+- Use custom errors instead of string reverts for gas efficiency
+- Provide descriptive error messages for debugging
+- Validate inputs at function boundaries
+
+---
+
+### Testing Guidance (Contract-Focused)
+
+#### Unit Tests
+
+- Test all fee calculations and edge cases (rounding, overflow)
+- Validate tier enforcement and submission limits
+- Test proposal lifecycle (create → execute → cleanup)
+- Verify access controls and permission boundaries
+
+#### Integration Tests
+
+- End-to-end wrap/unwrap flows with fee collection
+- Governance proposal creation and execution
+- Multi-project registration and isolation
+- Emergency controls and pause functionality
+
+#### Invariant Tests
+
+- Wrapper supply never exceeds treasury underlying balance
+- Fee collections properly accounted and split
+- Governance proposals execute atomically
+- Rolling counters accurately track submission limits
+
+#### Fuzz Tests
+
+- Random fee configurations and tier selections
+- Arbitrary proposal amounts and deadlines
+- Concurrent operations and reentrancy attempts
+- Edge case amounts (0, max uint256, etc.)
+
+---
+
+### Migration and Deployment Notes
+
+- **From v1**: No automatic migration path; v1 requires fresh deployment
+- **Contract Verification**: All contracts should be verified on deployment networks
+- **Proxy Patterns**: Consider upgradeable proxies for critical infrastructure contracts
+- **Initialization**: Ensure proper initialization order and validation
+
+---
+
+This rule is normative for contract implementations. All contract code should align with the above specifications. Any architectural changes should update this document first.

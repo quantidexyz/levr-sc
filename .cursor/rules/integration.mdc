@@ -1,6 +1,10 @@
-## Integration Rule — Clanker x Levr (Base Sepolia Fork + Code/Test wiring)
+---
+alwaysApply: true
+---
 
-This document standardizes how we integrate the monolithic `MasterLevr_v1` with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
+## Integration Rule v1 — Clanker x Levr Protocol v1 (Base Sepolia Fork + Code/Test wiring)
+
+This document standardizes how we integrate the modular `LevrFactory_v1`, `LevrTreasury_v1`, `LevrGovernor_v1`, and `LevrERC20` contracts with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
 
 ## Network Fork
 
@@ -11,11 +15,11 @@ This document standardizes how we integrate the monolithic `MasterLevr_v1` with 
 
 | Contract                      | Address                                      |
 | ----------------------------- | -------------------------------------------- |
-| ClankerHookDynamicFeeV2       | `0xBF4983dC0f2F8FE78C5cf8Fc621f294A993728Cc` |
-| ClankerHookStaticFeeV2        | `0x11b51DBC2f7F683b81CeDa83DC0078D57bA328cc` |
-| ClankerSniperAuctionV2        | `0x8CBD6694A9DFc0eF4D1cd333e013B88E7003E10A` |
-| ClankerSniperUtilV2           | `0x4DC6348D38E3e199D7Ea032c8cfE4EbDe94b442A` |
-| ClankerAirdropV2              | `0x5c68F1560a5913c176Fc5238038098970B567B19` |
+| ClankerHookDynamicFeeV1       | `0xBF4983dC0f2F8FE78C5cf8Fc621f294A993728Cc` |
+| ClankerHookStaticFeeV1        | `0x11b51DBC2f7F683b81CeDa83DC0078D57bA328cc` |
+| ClankerSniperAuctionV1        | `0x8CBD6694A9DFc0eF4D1cd333e013B88E7003E10A` |
+| ClankerSniperUtilV1           | `0x4DC6348D38E3e199D7Ea032c8cfE4EbDe94b442A` |
+| ClankerAirdropV1              | `0x5c68F1560a5913c176Fc5238038098970B567B19` |
 | ClankerPoolExtensionAllowlist | `0x532d79D18F0F1782884662fCC1e74581A3289680` |
 
 Notes:
@@ -27,34 +31,46 @@ Notes:
 ```
 /Users/anon/Desktop/mguleryuz/levr/
 ├── .cursor/rules/
-│   ├── integration.mdc     # This file
-│   ├── protocol.mdc        # Levr protocol rules
-│   ├── clanker_sc.mdc      # Clanker Smart Contract overview
-│   └── clanker_sdk.mdc     # Clanker SDK usage
+│   ├── integration_v1.md    # This file
+│   ├── protocol_v1.md       # Levr v1 protocol rules
+│   ├── clanker_sc.mdc       # Clanker Smart Contract overview
+│   └── clanker_sdk.mdc      # Clanker SDK usage
 ├── lib/
-│   ├── forge-std/          # Foundry testing utilities
+│   ├── forge-std/           # Foundry testing utilities
 │   ├── openzeppelin-contracts/  # OZ contracts
-│   └── v4-core/            # Uniswap v4 core contracts
+│   └── v4-core/             # Uniswap v4 core contracts
 ├── src/
 │   ├── interfaces/
-│   │   ├── IMasterLevr_v1.sol              # Levr protocol interface
-│   │   └── external/                     # External dependencies
-│   │       ├── IPoolManager.sol          # Uniswap v4 PoolManager (minimal)
-│   │       ├── IProtocolFees.sol         # Protocol fee management
-│   │       ├── IClankerHookDynamicFee.sol    # Dynamic fee queries
-│   │       ├── IClankerHookV2.sol            # Main Clanker hook
-│   │       ├── IClankerHook.sol              # Base Clanker hook
-│   │       ├── IClankerHookV2PoolExtension.sol   # Pool extensions
+│   │   ├── ILevrFactory_v1.sol          # Factory interface
+│   │   ├── ILevrTreasury_v1.sol         # Treasury interface
+│   │   ├── ILevrGovernor_v1.sol         # Governor interface
+│   │   ├── ILevrERC20.sol               # Wrapper token interface
+│   │   └── external/                    # External dependencies
+│   │       ├── IPoolManager.sol         # Uniswap v4 PoolManager (minimal)
+│   │       ├── IProtocolFees.sol        # Protocol fee management
+│   │       ├── IClankerHookDynamicFee.sol   # Dynamic fee queries
+│   │       ├── IClankerHookV1.sol           # Main Clanker hook
+│   │       ├── IClankerHook.sol             # Base Clanker hook
+│   │       ├── IClankerHookV1PoolExtension.sol  # Pool extensions
 │   │       ├── IClankerPoolExtensionAllowlist.sol # Extension governance
-│   │       └── IOwnerAdmins.sol            # Admin management
-│   └── *.sol                    # Contract implementations (TBD)
+│   │       └── IOwnerAdmins.sol           # Admin management
+│   ├── LevrFactory_v1.sol       # Factory contract
+│   ├── LevrTreasury_v1.sol      # Treasury contract (cloneable)
+│   ├── LevrGovernor_v1.sol      # Governor contract (cloneable)
+│   ├── LevrERC20.sol            # Wrapper ERC20 (cloneable)
+│   └── implementations/         # Base implementations for cloning
 ├── test/
-│   └── *.t.sol                 # Foundry tests (TBD)
+│   ├── LevrFactoryV1.t.sol      # Factory tests
+│   ├── LevrTreasuryV1.t.sol     # Treasury tests
+│   ├── LevrGovernorV1.t.sol     # Governor tests
+│   ├── LevrERC20.t.sol          # Wrapper tests
+│   └── integration/             # Cross-contract integration tests
 ├── script/
-│   └── ExampleDeploy.s.sol     # Deployment scripts
-├── foundry.toml                # Foundry configuration
-├── remappings.txt              # Import remappings
-└── Makefile                    # Build automation
+│   ├── DeployLevrV1.s.sol       # Deployment script
+│   └── ExampleDeploy.s.sol      # Example deployments
+├── foundry.toml                 # Foundry configuration
+├── remappings.txt               # Import remappings
+└── Makefile                     # Build automation
 ```
 
 ## Dependencies & Remappings
@@ -64,114 +80,452 @@ Notes:
   - `@uniswap/v4-core` - Uniswap v4 core contracts
   - `forge-std` - Foundry testing utilities
   - `openzeppelin-contracts` - OpenZeppelin contracts
+  - `clones-with-immutable-args` - ERC-1167 clones with immutable args
 
 - **Remappings** (`remappings.txt`):
   ```
   @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
   @uniswap/v4-core/=lib/v4-core/src/
   forge-std/=lib/forge-std/src/
+  clones-with-immutable-args/=lib/clones-with-immutable-args/src/
   ```
 
 ## Contract Integration (src/_.sol, src/interfaces/I_.sol)
 
-- **Core contracts** (to be implemented)
+### Core Contracts (to be implemented)
 
-  - `src/MasterLevr_v1.sol`
-    - Stores per-pool config keyed by `levrId` (see protocol rule).
-    - `registerPool(underlying, poolManager, poolKeyEncoded, name, symbol)` creates or wires an ERC20 wrapper (OpenZeppelin based) and persists the `levrId` mapping.
-    - Mint/redeem escrow with FCFS solvency; staking with global `rewardIndexX64`; `harvest(levrId)` with v4 unlock discipline collecting protocol fees.
-  - `src/IssuanceToken.sol`
-    - OpenZeppelin ERC20 + AccessControl.
-    - Roles: `DEFAULT_ADMIN_ROLE` = deployer; `MINTER_ROLE` = deployer and `MasterLevr_v1`.
-    - Decimals should mirror underlying.
+#### LevrFactory_v1.sol
 
-- **Interfaces** (implemented)
+- **Role**: Global factory and configuration manager
+- **Key Functions**:
+  - `register(clankerToken, params)`: Deploy or reuse treasury, deploy governor and wrapper
+  - `updateConfig(cfg)`: Update protocol-wide configuration
+  - `getProjectContracts(clankerToken)`: Query deployed contract addresses
+- **Storage**:
+  - Protocol configuration (fees, limits, tiers)
+  - Project registry mappings
+  - Implementation contract addresses for cloning
+- **Dependencies**: Uses ERC-1167 clones for gas-efficient deployment
 
-  - `src/interfaces/IMasterLevr_v1.sol`: complete external surface for registration, mint/redeem, stake/unstake/claim, harvest, and views.
-  - `src/interfaces/external/IPoolManager.sol`: minimal subset for `unlock`, `collectProtocolFees`, `protocolFeesAccrued`.
-  - `src/interfaces/external/IProtocolFees.sol`: protocol fee controller interface.
-  - `src/interfaces/external/IClankerHookDynamicFee.sol`: read-only vars for fee state and dynamic fee queries.
-  - `src/interfaces/external/IClankerHookV2.sol`: main Clanker hook interface with MEV module functions.
-  - `src/interfaces/external/IClankerHook.sol`: base Clanker hook interface.
-  - `src/interfaces/external/IClankerHookV2PoolExtension.sol`: pool extension callbacks.
-  - `src/interfaces/external/IClankerPoolExtensionAllowlist.sol`: extension governance.
-  - `src/interfaces/external/IOwnerAdmins.sol`: admin management interface.
-  - Prefer `bytes poolKeyEncoded` over importing full Uniswap v4 types; compute `PoolId` from ABI-encoded `PoolKey` inside the contract.
+#### LevrTreasury_v1.sol (Cloneable)
 
-- **Wiring and safety**
-  - MasterLevr must be set (or allowed) as protocol fee controller for pools you intend to harvest; otherwise fees remain unclaimed until attribution is enabled (see Fee Permissions in protocol rule).
-  - Enforce no duplicate registration for the same `underlying`.
-  - Optional: enforce currency exclusivity per `IPoolManager` to avoid ambiguous fee buckets; otherwise use extension metering.
-  - Emit events for registration, mint, redeem, stake, unstake, claim, harvest.
+- **Role**: Per-project asset custody and execution
+- **Key Functions**:
+  - `wrap(amount, to)`: Accept underlying, mint wrapper tokens (minus fees)
+  - `unwrap(amount, to)`: Burn wrapper, return underlying (minus fees)
+  - `transfer(to, amount)`: Execute governance-approved transfers
+  - `applyBoost(amount)`: Apply staking boost
+  - `collectFees()`: Collect Clanker emissions
+- **Storage**:
+  - Underlying token address
+  - Governor and wrapper contract addresses
+  - Fee collection accounting
+- **Security**: Non-reentrant guards, access control validation
+
+#### LevrGovernor_v1.sol (Cloneable)
+
+- **Role**: Per-project governance and proposal management
+- **Key Functions**:
+  - `proposeTransfer(receiver, amount, reason, tier)`: Create transfer proposal
+  - `proposeBoost(amount, tier)`: Create boost proposal
+  - `execute(proposalId)`: Execute approved proposal
+- **Storage**:
+  - Active proposals with metadata
+  - Rolling submission counters (7-day windows)
+  - Proposal execution state
+- **Validation**: Balance checks, tier limits, deadline enforcement
+
+#### LevrERC20.sol (Cloneable)
+
+- **Role**: Fee-enabled wrapper token
+- **Key Functions**:
+  - `mint(to, amount)`: Mint wrapper tokens (treasury-only)
+  - `burn(from, amount)`: Burn wrapper tokens (treasury-only)
+- **Storage**:
+  - Mirrors underlying token decimals
+  - Standard ERC20 balances and allowances
+- **Access**: Treasury has exclusive mint/burn rights
+
+### Interfaces (Implemented)
+
+- `src/interfaces/ILevrFactory_v1.sol`: Complete factory interface
+- `src/interfaces/ILevrTreasury_v1.sol`: Treasury interface with wrap/unwrap and execution
+- `src/interfaces/ILevrGovernor_v1.sol`: Governor interface with proposal management
+- `src/interfaces/ILevrERC20.sol`: Wrapper token interface extending ERC20
+- External interfaces same as v1 for Clanker integration
+
+### Wiring and Safety
+
+- **Fee Integration**: Treasury must be configured as Clanker fee receiver
+- **Access Control**: Governor-only treasury execution, balance-gated proposals
+- **Reentrancy**: Guards on all external treasury functions
+- **Validation**: Input validation at all boundaries
+- **Events**: Comprehensive event emission for all state changes
 
 ## Tests Integration (test/\*.t.sol)
 
-- **Fork configuration**
+### Fork Configuration
 
-  - Set env variable `BASE_SEPOLIA_RPC_URL`.
-  - Foundry CLI:
-    ```bash
-    forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532
-    ```
-  - In tests, select fork:
-    ```solidity
-    vm.createSelectFork(vm.envString("BASE_SEPOLIA_RPC_URL"));
-    ```
+- Set env variable `BASE_SEPOLIA_RPC_URL`
+- Foundry CLI:
+  ```bash
+  forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532
+  ```
+- In tests, select fork:
+  ```solidity
+  vm.createSelectFork(vm.envString("BASE_SEPOLIA_RPC_URL"));
+  ```
 
-- **Recommended test files**
+### Recommended Test Files
 
-  - `test/MasterLevr.Register.t.sol`:
-    - Deploy `MasterLevr_v1`.
-    - Provide live `poolManager` and `poolKeyEncoded` (or mock if needed) and call `registerPool`.
-    - Assert wrapper roles: deployer and MasterLevr have `MINTER_ROLE`.
-  - `test/MasterLevr.MintRedeemFCFS.t.sol`:
-    - Transfer underlying to `MasterLevr_v1` and mint wrapper to user; track `underlyingEscrowed` and `wrapper.totalSupply()`.
-    - Over-mint via deployer and assert FCFS redemption behavior.
-  - `test/MasterLevr.StakeRewards.t.sol`:
-    - Stake wrapper; simulate or collect fees; assert `rewardIndexX64` accrual and `claim` payout.
-  - `test/MasterLevr.Harvest.t.sol`:
-    - With controller permissions set, call `harvest(levrId)`; verify unlock/collect path and per-pool crediting.
-    - If buckets are shared, assert metering caps application.
+#### Factory Tests
 
-- **Utilities and mocks**
-  - If a real pool is not available on the fork, add minimal mocks for `IPoolManager` and call paths that return zero but exercise the unlock discipline without reverting.
-  - Provide helpers to encode `PoolKey` into `bytes` for `registerPool`.
+- `test/LevrFactoryV1.t.sol`:
+  - Deploy factory with initial config
+  - Register projects with and without existing treasury
+  - Validate deployed contract relationships
+  - Test configuration updates (owner-only)
+
+#### Treasury Tests
+
+- `test/LevrTreasuryV1.WrapUnwrap.t.sol`:
+  - End-to-end wrap/unwrap with fee calculation
+  - Fee split between protocol and project treasury
+  - Balance invariants and accounting
+- `test/LevrTreasuryV1.Execution.t.sol`:
+  - Governor-authorized transfers and boosts
+  - Access control validation
+  - Reentrancy protection
+
+#### Governor Tests
+
+- `test/LevrGovernorV1.Proposals.t.sol`:
+  - Proposal creation with balance requirements
+  - Tier validation and submission limits
+  - Rolling window enforcement
+- `test/LevrGovernorV1.Execution.t.sol`:
+  - Deadline enforcement
+  - Atomic execution with treasury calls
+  - Event emission and state cleanup
+
+#### Integration Tests
+
+- `test/integration/LevrV1.EndToEnd.t.sol`:
+  - Complete user flow: deploy → register → wrap → propose → execute
+  - Multi-project isolation
+  - Fee collection from Clanker emissions
+
+### Utilities and Mocks
+
+- Mock Clanker tokens for testing without live pools
+- Helper functions for tier configuration setup
+- Event assertion utilities
+- Time manipulation for deadline testing
 
 ## Foundry Configuration
 
-- **`foundry.toml`**:
+### foundry.toml
 
-  ```toml
-  [profile.default]
-  src = "src"
-  out = "out"
-  libs = ["lib"]
-  evm_version = "cancun"
-  optimizer = true
-  optimizer_runs = 1_000_000
+```toml
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1_000_000
 
-  [rpc_endpoints]
-  base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
-  ```
+[rpc_endpoints]
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+```
 
-- **`remappings.txt`** (automatically loaded):
+### remappings.txt (automatically loaded)
 
+```
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@uniswap/v4-core/=lib/v4-core/src/
+forge-std/=lib/forge-std/src/
+clones-with-immutable-args/=lib/clones-with-immutable-args/src/
+```
+
+### Build Commands
+
+```bash
+forge build          # Build contracts
+forge build --silent # Build without verbose output
+forge test           # Run tests
+forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532  # Fork tests
+```
+
+### Deployment Scripts
+
+- `script/DeployLevrV1.s.sol`: Deploy factory and set initial configuration
+- Use `StdCheats` and `vm` cheatcodes for testing utilities
+
+---
+
+This rule is normative for v1 integration and testing. Keep contract behavior aligned with the Protocol v1 Rule (`contracts/.cursor/rules/protocol_v1.md`) and Clanker integration expectations.
+
+## Integration Rule v1 — Clanker x Levr Protocol v1 (Base Sepolia Fork + Code/Test wiring)
+
+This document standardizes how we integrate the modular `LevrFactory_v1`, `LevrTreasury_v1`, `LevrGovernor_v1`, and `LevrERC20` contracts with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
+
+## Network Fork
+
+- **Chain**: Base Sepolia
+- **Chain ID**: 84532
+
+### Clanker Contracts (Base Sepolia)
+
+| Contract                      | Address                                      |
+| ----------------------------- | -------------------------------------------- |
+| ClankerHookDynamicFeeV1       | `0xBF4983dC0f2F8FE78C5cf8Fc621f294A993728Cc` |
+| ClankerHookStaticFeeV1        | `0x11b51DBC2f7F683b81CeDa83DC0078D57bA328cc` |
+| ClankerSniperAuctionV1        | `0x8CBD6694A9DFc0eF4D1cd333e013B88E7003E10A` |
+| ClankerSniperUtilV1           | `0x4DC6348D38E3e199D7Ea032c8cfE4EbDe94b442A` |
+| ClankerAirdropV1              | `0x5c68F1560a5913c176Fc5238038098970B567B19` |
+| ClankerPoolExtensionAllowlist | `0x532d79D18F0F1782884662fCC1e74581A3289680` |
+
+Notes:
+
+- These are read-only anchors for integration and testing. Actual pool deployments (PoolKey/PoolId) are per-token and not global.
+
+## Project Structure
+
+```
+/Users/anon/Desktop/mguleryuz/levr/
+├── .cursor/rules/
+│   ├── integration_v1.md    # This file
+│   ├── protocol_v1.md       # Levr v1 protocol rules
+│   ├── clanker_sc.mdc       # Clanker Smart Contract overview
+│   └── clanker_sdk.mdc      # Clanker SDK usage
+├── lib/
+│   ├── forge-std/           # Foundry testing utilities
+│   ├── openzeppelin-contracts/  # OZ contracts
+│   └── v4-core/             # Uniswap v4 core contracts
+├── src/
+│   ├── interfaces/
+│   │   ├── ILevrFactory_v1.sol          # Factory interface
+│   │   ├── ILevrTreasury_v1.sol         # Treasury interface
+│   │   ├── ILevrGovernor_v1.sol         # Governor interface
+│   │   ├── ILevrERC20.sol               # Wrapper token interface
+│   │   └── external/                    # External dependencies
+│   │       ├── IPoolManager.sol         # Uniswap v4 PoolManager (minimal)
+│   │       ├── IProtocolFees.sol        # Protocol fee management
+│   │       ├── IClankerHookDynamicFee.sol   # Dynamic fee queries
+│   │       ├── IClankerHookV1.sol           # Main Clanker hook
+│   │       ├── IClankerHook.sol             # Base Clanker hook
+│   │       ├── IClankerHookV1PoolExtension.sol  # Pool extensions
+│   │       ├── IClankerPoolExtensionAllowlist.sol # Extension governance
+│   │       └── IOwnerAdmins.sol           # Admin management
+│   ├── LevrFactory_v1.sol       # Factory contract
+│   ├── LevrTreasury_v1.sol      # Treasury contract (cloneable)
+│   ├── LevrGovernor_v1.sol      # Governor contract (cloneable)
+│   ├── LevrERC20.sol            # Wrapper ERC20 (cloneable)
+│   └── implementations/         # Base implementations for cloning
+├── test/
+│   ├── LevrFactoryV1.t.sol      # Factory tests
+│   ├── LevrTreasuryV1.t.sol     # Treasury tests
+│   ├── LevrGovernorV1.t.sol     # Governor tests
+│   ├── LevrERC20.t.sol          # Wrapper tests
+│   └── integration/             # Cross-contract integration tests
+├── script/
+│   ├── DeployLevrV1.s.sol       # Deployment script
+│   └── ExampleDeploy.s.sol      # Example deployments
+├── foundry.toml                 # Foundry configuration
+├── remappings.txt               # Import remappings
+└── Makefile                     # Build automation
+```
+
+## Dependencies & Remappings
+
+- **Installed via forge:**
+
+  - `@uniswap/v4-core` - Uniswap v4 core contracts
+  - `forge-std` - Foundry testing utilities
+  - `openzeppelin-contracts` - OpenZeppelin contracts
+  - `clones-with-immutable-args` - ERC-1167 clones with immutable args
+
+- **Remappings** (`remappings.txt`):
   ```
   @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
   @uniswap/v4-core/=lib/v4-core/src/
   forge-std/=lib/forge-std/src/
+  clones-with-immutable-args/=lib/clones-with-immutable-args/src/
   ```
 
-- **Build commands:**
+## Contract Integration (src/_.sol, src/interfaces/I_.sol)
 
+### Core Contracts (to be implemented)
+
+#### LevrFactory_v1.sol
+
+- **Role**: Global factory and configuration manager
+- **Key Functions**:
+  - `register(clankerToken, params)`: Deploy or reuse treasury, deploy governor and wrapper
+  - `updateConfig(cfg)`: Update protocol-wide configuration
+  - `getProjectContracts(clankerToken)`: Query deployed contract addresses
+- **Storage**:
+  - Protocol configuration (fees, limits, tiers)
+  - Project registry mappings
+  - Implementation contract addresses for cloning
+- **Dependencies**: Uses ERC-1167 clones for gas-efficient deployment
+
+#### LevrTreasury_v1.sol (Cloneable)
+
+- **Role**: Per-project asset custody and execution
+- **Key Functions**:
+  - `wrap(amount, to)`: Accept underlying, mint wrapper tokens (minus fees)
+  - `unwrap(amount, to)`: Burn wrapper, return underlying (minus fees)
+  - `transfer(to, amount)`: Execute governance-approved transfers
+  - `applyBoost(amount)`: Apply staking boost
+  - `collectFees()`: Collect Clanker emissions
+- **Storage**:
+  - Underlying token address
+  - Governor and wrapper contract addresses
+  - Fee collection accounting
+- **Security**: Non-reentrant guards, access control validation
+
+#### LevrGovernor_v1.sol (Cloneable)
+
+- **Role**: Per-project governance and proposal management
+- **Key Functions**:
+  - `proposeTransfer(receiver, amount, reason, tier)`: Create transfer proposal
+  - `proposeBoost(amount, tier)`: Create boost proposal
+  - `execute(proposalId)`: Execute approved proposal
+- **Storage**:
+  - Active proposals with metadata
+  - Rolling submission counters (7-day windows)
+  - Proposal execution state
+- **Validation**: Balance checks, tier limits, deadline enforcement
+
+#### LevrERC20.sol (Cloneable)
+
+- **Role**: Fee-enabled wrapper token
+- **Key Functions**:
+  - `mint(to, amount)`: Mint wrapper tokens (treasury-only)
+  - `burn(from, amount)`: Burn wrapper tokens (treasury-only)
+- **Storage**:
+  - Mirrors underlying token decimals
+  - Standard ERC20 balances and allowances
+- **Access**: Treasury has exclusive mint/burn rights
+
+### Interfaces (Implemented)
+
+- `src/interfaces/ILevrFactory_v1.sol`: Complete factory interface
+- `src/interfaces/ILevrTreasury_v1.sol`: Treasury interface with wrap/unwrap and execution
+- `src/interfaces/ILevrGovernor_v1.sol`: Governor interface with proposal management
+- `src/interfaces/ILevrERC20.sol`: Wrapper token interface extending ERC20
+- External interfaces same as v1 for Clanker integration
+
+### Wiring and Safety
+
+- **Fee Integration**: Treasury must be configured as Clanker fee receiver
+- **Access Control**: Governor-only treasury execution, balance-gated proposals
+- **Reentrancy**: Guards on all external treasury functions
+- **Validation**: Input validation at all boundaries
+- **Events**: Comprehensive event emission for all state changes
+
+## Tests Integration (test/\*.t.sol)
+
+### Fork Configuration
+
+- Set env variable `BASE_SEPOLIA_RPC_URL`
+- Foundry CLI:
   ```bash
-  forge build          # Build contracts
-  forge build --silent # Build without verbose output
-  forge test           # Run tests
+  forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532
+  ```
+- In tests, select fork:
+  ```solidity
+  vm.createSelectFork(vm.envString("BASE_SEPOLIA_RPC_URL"));
   ```
 
-- Use `StdCheats` and `vm` cheatcodes for fork selection and env access.
+### Recommended Test Files
+
+#### Factory Tests
+
+- `test/LevrFactoryV1.t.sol`:
+  - Deploy factory with initial config
+  - Register projects with and without existing treasury
+  - Validate deployed contract relationships
+  - Test configuration updates (owner-only)
+
+#### Treasury Tests
+
+- `test/LevrTreasuryV1.WrapUnwrap.t.sol`:
+  - End-to-end wrap/unwrap with fee calculation
+  - Fee split between protocol and project treasury
+  - Balance invariants and accounting
+- `test/LevrTreasuryV1.Execution.t.sol`:
+  - Governor-authorized transfers and boosts
+  - Access control validation
+  - Reentrancy protection
+
+#### Governor Tests
+
+- `test/LevrGovernorV1.Proposals.t.sol`:
+  - Proposal creation with balance requirements
+  - Tier validation and submission limits
+  - Rolling window enforcement
+- `test/LevrGovernorV1.Execution.t.sol`:
+  - Deadline enforcement
+  - Atomic execution with treasury calls
+  - Event emission and state cleanup
+
+#### Integration Tests
+
+- `test/integration/LevrV1.EndToEnd.t.sol`:
+  - Complete user flow: deploy → register → wrap → propose → execute
+  - Multi-project isolation
+  - Fee collection from Clanker emissions
+
+### Utilities and Mocks
+
+- Mock Clanker tokens for testing without live pools
+- Helper functions for tier configuration setup
+- Event assertion utilities
+- Time manipulation for deadline testing
+
+## Foundry Configuration
+
+### foundry.toml
+
+```toml
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1_000_000
+
+[rpc_endpoints]
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+```
+
+### remappings.txt (automatically loaded)
+
+```
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@uniswap/v4-core/=lib/v4-core/src/
+forge-std/=lib/forge-std/src/
+clones-with-immutable-args/=lib/clones-with-immutable-args/src/
+```
+
+### Build Commands
+
+```bash
+forge build          # Build contracts
+forge build --silent # Build without verbose output
+forge test           # Run tests
+forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532  # Fork tests
+```
+
+### Deployment Scripts
+
+- `script/DeployLevrV1.s.sol`: Deploy factory and set initial configuration
+- Use `StdCheats` and `vm` cheatcodes for testing utilities
 
 ---
 
-This rule is normative for integration and testing. Keep contract behavior aligned with the Protocol Rule (`.cursor/rules/protocol.mdc`) and Clanker integration expectations.
+This rule is normative for v1 integration and testing. Keep contract behavior aligned with the Protocol v1 Rule (`contracts/.cursor/rules/protocol_v1.md`) and Clanker integration expectations.
