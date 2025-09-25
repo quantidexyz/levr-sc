@@ -59,13 +59,19 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Token address used as project key
     /// @return treasury Project treasury address
     /// @return governor Project governor address
-    /// @return wrapper Project wrapper token address
+    /// @return staking Project staking module address
+    /// @return stakedToken ERC20 representing staked balances
     function getProjectContracts(
         address clankerToken
     )
         external
         view
-        returns (address treasury, address governor, address wrapper);
+        returns (
+            address treasury,
+            address governor,
+            address staking,
+            address stakedToken
+        );
 
     // Config getters for periphery contracts
     /// @notice Protocol fee in basis points applied to wrap/unwrap.

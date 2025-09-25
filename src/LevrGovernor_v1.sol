@@ -4,26 +4,26 @@ pragma solidity ^0.8.30;
 import {ILevrGovernor_v1} from "./interfaces/ILevrGovernor_v1.sol";
 import {ILevrFactory_v1} from "./interfaces/ILevrFactory_v1.sol";
 import {ILevrTreasury_v1} from "./interfaces/ILevrTreasury_v1.sol";
-import {ILevrERC20} from "./interfaces/ILevrERC20.sol";
+import {ILevrStakedToken_v1} from "./interfaces/ILevrStakedToken_v1.sol";
 
 contract LevrGovernor_v1 is ILevrGovernor_v1 {
     address public immutable factory;
     address public immutable treasury;
-    address public immutable wrapper;
+    address public immutable stakedToken;
 
     uint256 public nextProposalId = 1;
     mapping(uint256 => Proposal) private _proposals;
 
-    constructor(address factory_, address treasury_, address wrapper_) {
+    constructor(address factory_, address treasury_, address stakedToken_) {
         require(
             factory_ != address(0) &&
                 treasury_ != address(0) &&
-                wrapper_ != address(0),
+                stakedToken_ != address(0),
             "ZERO"
         );
         factory = factory_;
         treasury = treasury_;
-        wrapper = wrapper_;
+        stakedToken = stakedToken_;
     }
 
     /// @inheritdoc ILevrGovernor_v1
@@ -73,7 +73,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
         if (p.proposalType == ProposalType.Transfer) {
             ILevrTreasury_v1(treasury).transfer(p.receiver, p.amount);
         } else {
-            ILevrTreasury_v1(treasury).applyBoost(p.amount);
+            // Boosts are handled by staking module now; no-op here.
         }
         emit ProposalExecuted(proposalId);
     }
@@ -122,7 +122,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
 
     function _hasMinBalance(address proposer) internal view returns (bool) {
         uint256 minBal = ILevrFactory_v1(factory).minWTokenToSubmit();
-        return ILevrERC20(wrapper).balanceOf(proposer) >= minBal;
+        return ILevrStakedToken_v1(stakedToken).balanceOf(proposer) >= minBal;
     }
 
     function _validateTierAmount(

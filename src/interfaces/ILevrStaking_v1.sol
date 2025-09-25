@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+/// @title Levr Staking v1 Interface
+/// @notice Stakes underlying directly; mints staked ERC20; accrues multi-token rewards.
+interface ILevrStaking_v1 {
+    error ZeroAddress();
+    error InvalidAmount();
+    error InsufficientStake();
+
+    /// @notice Emitted when a user stakes underlying.
+    event Staked(address indexed staker, uint256 amount);
+    /// @notice Emitted when a user unstakes underlying.
+    event Unstaked(address indexed staker, address indexed to, uint256 amount);
+    /// @notice Emitted when rewards accrue for a token.
+    event RewardsAccrued(
+        address indexed token,
+        uint256 amount,
+        uint256 newAccPerShare
+    );
+    /// @notice Emitted when rewards claimed.
+    event RewardsClaimed(
+        address indexed account,
+        address indexed to,
+        address indexed token,
+        uint256 amount
+    );
+
+    /// @notice Initialize staking module.
+    function initialize(
+        address underlying,
+        address stakedToken,
+        address treasury
+    ) external;
+
+    /// @notice Stake underlying; mints staked token to msg.sender.
+    function stake(uint256 amount) external;
+
+    /// @notice Unstake; burns staked token and returns underlying to `to`.
+    function unstake(uint256 amount, address to) external;
+
+    /// @notice Claim rewards for tokens to `to`.
+    function claimRewards(address[] calldata tokens, address to) external;
+
+    /// @notice Accrue rewards for token.
+    function accrueRewards(address token, uint256 amount) external;
+
+    /// @notice View functions.
+    function stakedBalanceOf(address account) external view returns (uint256);
+    function totalStaked() external view returns (uint256);
+}
