@@ -14,6 +14,12 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
     uint256 public nextProposalId = 1;
     mapping(uint256 => Proposal) private _proposals;
 
+    // rolling submission counters per type per 7-day window (week index)
+    // proposalType: 0 => Transfer, 1 => Boost (matches enum ordering)
+    mapping(uint8 => mapping(uint64 => uint16)) private _submissionsPerWeek;
+
+    error RateLimitExceeded();
+
     constructor(address factory_, address treasury_, address stakedToken_) {
         require(
             factory_ != address(0) &&
@@ -35,6 +41,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
     ) external returns (uint256 proposalId) {
         _requireCanSubmit(msg.sender);
         _validateTierAmount(true, tier, amount);
+        _enforceAndBumpRateLimit(uint8(ProposalType.Transfer));
         proposalId = _createProposal(
             msg.sender,
             ProposalType.Transfer,
@@ -52,6 +59,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
     ) external returns (uint256 proposalId) {
         _requireCanSubmit(msg.sender);
         _validateTierAmount(false, tier, amount);
+        _enforceAndBumpRateLimit(uint8(ProposalType.Boost));
         proposalId = _createProposal(
             msg.sender,
             ProposalType.Boost,
@@ -139,5 +147,19 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
             ? ILevrFactory_v1(factory).getTransferTier(tier)
             : ILevrFactory_v1(factory).getStakingBoostTier(tier);
         if (amount > limit) revert InvalidAmount();
+    }
+
+    function _enforceAndBumpRateLimit(uint8 pType) internal {
+        uint16 maxSubmissions = ILevrFactory_v1(factory).maxSubmissionPerType();
+        if (maxSubmissions == 0) return; // unlimited
+        uint64 week = _currentWeekIndex();
+        uint16 used = _submissionsPerWeek[pType][week];
+        if (used >= maxSubmissions) revert RateLimitExceeded();
+        _submissionsPerWeek[pType][week] = used + 1;
+    }
+
+    function _currentWeekIndex() internal view returns (uint64) {
+        // 7-day rolling windows
+        return uint64(block.timestamp / 604800);
     }
 }

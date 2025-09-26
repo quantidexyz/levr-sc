@@ -30,6 +30,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
     mapping(address => uint64) private _streamStartByToken;
     mapping(address => uint64) private _streamEndByToken;
     mapping(address => uint256) private _streamTotalByToken;
+    // Track last settlement timestamp per reward token to vest linearly
+    mapping(address => uint64) private _lastUpdateByToken;
 
     uint256 private _totalStaked;
     mapping(address => uint256) private _staked;
@@ -71,6 +73,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
     /// @inheritdoc ILevrStaking_v1
     function stake(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
+        // Settle streaming for all reward tokens before balance changes
+        _settleStreamingAll();
         IERC20(underlying).safeTransferFrom(msg.sender, address(this), amount);
         _escrowBalance[underlying] += amount;
         _increaseDebtForAll(msg.sender, amount);
@@ -86,6 +90,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         if (to == address(0)) revert ZeroAddress();
         uint256 bal = _staked[msg.sender];
         if (bal < amount) revert InsufficientStake();
+        // Settle streaming before changing balances
+        _settleStreamingAll();
         _settleAll(msg.sender, to, bal);
         _staked[msg.sender] = bal - amount;
         _updateDebtAll(msg.sender, _staked[msg.sender]);
@@ -106,6 +112,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         if (to == address(0)) revert ZeroAddress();
         uint256 bal = _staked[msg.sender];
         for (uint256 i = 0; i < tokens.length; i++) {
+            _settleStreamingForToken(tokens[i]);
             _settle(tokens[i], msg.sender, to, bal);
             uint256 acc = _rewardInfo[tokens[i]].accPerShare;
             _rewardDebt[msg.sender][tokens[i]] = int256(
@@ -242,11 +249,37 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
 
     function _creditRewards(address token, uint256 amount) internal {
         ILevrStaking_v1.RewardInfo storage info = _ensureRewardToken(token);
-        _resetStreamForToken(token, amount);
-        _rewardReserve[token] += amount;
-        if (_totalStaked > 0) {
-            info.accPerShare += (amount * ACC_SCALE) / _totalStaked;
+        // Settle current stream up to now before resetting
+        _settleStreamingForToken(token);
+        // Carry forward any unvested remainder from previous stream
+        uint64 start = _streamStartByToken[token];
+        uint64 end = _streamEndByToken[token];
+        uint64 last = _lastUpdateByToken[token];
+        uint256 prevTotal = _streamTotalByToken[token];
+        uint256 remaining = 0;
+        if (end != 0 && start != 0 && prevTotal > 0) {
+            uint64 cappedLast = last > end ? end : last;
+            if (cappedLast > start) {
+                uint256 duration = end - start;
+                uint256 vested = (prevTotal * (cappedLast - start)) / duration;
+                if (prevTotal > vested) remaining = prevTotal - vested;
+            } else {
+                remaining = prevTotal;
+            }
         }
+        // Reset stream window with remaining + new amount
+        uint32 window = _streamWindowSeconds;
+        if (window == 0) window = 3 days;
+        _streamWindowSeconds = window;
+        _streamStart = uint64(block.timestamp);
+        _streamEnd = uint64(block.timestamp + window);
+        emit StreamReset(window, _streamStart, _streamEnd);
+        _streamStartByToken[token] = uint64(block.timestamp);
+        _streamEndByToken[token] = uint64(block.timestamp + window);
+        _streamTotalByToken[token] = remaining + amount;
+        _lastUpdateByToken[token] = uint64(block.timestamp);
+        // Increase reserve by newly provided amount only
+        _rewardReserve[token] += amount;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
 
@@ -306,6 +339,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         address to,
         uint256 bal
     ) internal {
+        _settleStreamingForToken(token);
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
         if (!info.exists) return;
         uint256 accumulated = (bal * info.accPerShare) / ACC_SCALE;
@@ -327,5 +361,36 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         for (uint256 i = 0; i < len; i++) {
             _settle(_rewardTokens[i], account, to, bal);
         }
+    }
+
+    function _settleStreamingAll() internal {
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            _settleStreamingForToken(_rewardTokens[i]);
+        }
+    }
+
+    function _settleStreamingForToken(address token) internal {
+        uint64 start = _streamStartByToken[token];
+        uint64 end = _streamEndByToken[token];
+        if (end == 0 || start == 0) return;
+        uint64 last = _lastUpdateByToken[token];
+        uint64 from = last < start ? start : last;
+        uint64 to = uint64(block.timestamp);
+        if (to > end) to = end;
+        if (to <= from) return;
+        uint256 duration = end - start;
+        uint256 total = _streamTotalByToken[token];
+        if (duration == 0 || total == 0) {
+            _lastUpdateByToken[token] = to;
+            return;
+        }
+        uint256 vestAmount = (total * (to - from)) / duration;
+        if (_totalStaked > 0 && vestAmount > 0) {
+            ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+            info.accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
+        }
+        // Advance last update regardless; if no stakers, the stream time is consumed
+        _lastUpdateByToken[token] = to;
     }
 }

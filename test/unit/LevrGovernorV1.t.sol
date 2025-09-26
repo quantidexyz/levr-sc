@@ -104,4 +104,62 @@ contract LevrGovernorV1_UnitTest is Test {
         vm.expectRevert(ILevrGovernor_v1.DeadlinePassed.selector);
         governor.execute(pid2);
     }
+
+    function test_rate_limit_per_week_enforced() public {
+        // Create a new factory with maxSubmissionPerType = 1
+        ILevrFactory_v1.TierConfig[]
+            memory ttiers = new ILevrFactory_v1.TierConfig[](1);
+        ttiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
+        ILevrFactory_v1.TierConfig[]
+            memory btiers = new ILevrFactory_v1.TierConfig[](1);
+        btiers[0] = ILevrFactory_v1.TierConfig({value: 5_000 ether});
+        ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1
+            .FactoryConfig({
+                protocolFeeBps: 0,
+                submissionDeadlineSeconds: 3 days,
+                maxSubmissionPerType: 1,
+                streamWindowSeconds: 3 days,
+                transferTiers: ttiers,
+                stakingBoostTiers: btiers,
+                minWTokenToSubmit: 1,
+                protocolTreasury: protocolTreasury
+            });
+        LevrFactory_v1 fac = new LevrFactory_v1(cfg, address(this));
+        (address govAddr, ) = fac.register(
+            address(underlying),
+            ILevrFactory_v1.RegisterParams({
+                treasury: address(0),
+                extraConfig: bytes("")
+            })
+        );
+        (address t, , address st, ) = fac.getProjectContracts(
+            address(underlying)
+        );
+        LevrGovernor_v1 g = LevrGovernor_v1(govAddr);
+
+        // fund user tokens and stake 1 wei to satisfy minWTokenToSubmit
+        address u = address(0x1111);
+        underlying.mint(u, 10 ether);
+        vm.startPrank(u);
+        underlying.approve(st, type(uint256).max);
+        LevrStaking_v1(st).stake(1);
+        vm.stopPrank();
+
+        // fund treasury for transfers
+        underlying.mint(t, 10_000 ether);
+
+        // First transfer proposal succeeds
+        vm.prank(u);
+        g.proposeTransfer(address(0xB0B), 1 ether, "ops", 0);
+
+        // Second transfer proposal in same week should revert
+        vm.prank(u);
+        vm.expectRevert(LevrGovernor_v1.RateLimitExceeded.selector);
+        g.proposeTransfer(address(0xB0B), 1 ether, "ops2", 0);
+
+        // Move to next week and it should succeed again
+        vm.warp(block.timestamp + 8 days);
+        vm.prank(u);
+        g.proposeTransfer(address(0xB0B), 1 ether, "ops3", 0);
+    }
 }

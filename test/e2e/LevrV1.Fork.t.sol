@@ -103,18 +103,20 @@ contract LevrV1_ForkE2E is BaseForkTest {
             ILevrStaking_v1(staking).stake(bal);
         }
 
-        // Transfer some underlying tokens to treasury (simulating airdrop/fees)
+        // Fund treasury from user holdings; if insufficient, try to acquire from locker to user then forward
         uint256 boostAmount = 1000 ether;
-        address locker = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496; // Clanker locker
-        uint256 lockerBalance = IERC20(clankerToken).balanceOf(locker);
-        if (lockerBalance > boostAmount) {
-            vm.prank(locker);
-            IERC20(clankerToken).transfer(treasury, boostAmount);
-        } else {
-            // Use whatever the locker has
-            boostAmount = lockerBalance;
-            vm.prank(locker);
-            IERC20(clankerToken).transfer(treasury, boostAmount);
+        uint256 userBal = IERC20(clankerToken).balanceOf(address(this));
+        if (userBal < boostAmount) {
+            uint256 acquired = _acquireFromLocker(
+                address(this),
+                boostAmount - userBal
+            );
+            userBal += acquired;
+        }
+        if (userBal > 0) {
+            uint256 sendAmt = userBal < boostAmount ? userBal : boostAmount;
+            IERC20(clankerToken).transfer(treasury, sendAmt);
+            boostAmount = sendAmt;
         }
 
         // Governor can create a boost proposal and execute it immediately
@@ -200,14 +202,15 @@ contract LevrV1_ForkE2E is BaseForkTest {
         uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt, 0);
         ILevrGovernor_v1(governor).execute(pid);
 
-        // Let some time pass and claim
+        // Let some time pass and claim; with streaming, claim ~ boostAmt * elapsed/window
         vm.warp(block.timestamp + 1 hours);
         address[] memory toks = new address[](1);
         toks[0] = clankerToken;
         uint256 balBefore = IERC20(clankerToken).balanceOf(address(this));
         ILevrStaking_v1(staking).claimRewards(toks, address(this));
         uint256 balAfter = IERC20(clankerToken).balanceOf(address(this));
-        assertTrue(balAfter > balBefore, "claimed > 0");
+        uint256 claimed = balAfter - balBefore;
+        assertApproxEqRel(claimed, (boostAmt * 1 hours) / (3 days), 3e16);
 
         // Unstake
         uint256 stakeBal = ILevrStaking_v1(staking).stakedBalanceOf(
