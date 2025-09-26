@@ -7,6 +7,16 @@ interface ILevrStaking_v1 {
     error ZeroAddress();
     error InvalidAmount();
     error InsufficientStake();
+    error InsufficientRewardLiquidity();
+    error InsufficientEscrow();
+
+    /// @notice Reward token accumulator info.
+    /// @param accPerShare Accumulated rewards per staked token, scaled by 1e18
+    /// @param exists Whether this reward token is registered
+    struct RewardInfo {
+        uint256 accPerShare;
+        bool exists;
+    }
 
     /// @notice Emitted when a user stakes underlying.
     event Staked(address indexed staker, uint256 amount);
@@ -58,4 +68,7 @@ interface ILevrStaking_v1 {
     /// @notice View functions.
     function stakedBalanceOf(address account) external view returns (uint256);
     function totalStaked() external view returns (uint256);
+
+    /// @notice Escrow balance per token (non-reward reserves held for users).
+    function escrowBalance(address token) external view returns (uint256);
 }

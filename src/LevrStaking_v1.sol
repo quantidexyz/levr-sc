@@ -18,14 +18,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
     uint256 private _totalStaked;
     mapping(address => uint256) private _staked;
 
-    struct RewardInfo {
-        uint256 accPerShare;
-        bool exists;
-    }
+    // use ILevrStaking_v1.RewardInfo
     address[] private _rewardTokens;
-    mapping(address => RewardInfo) private _rewardInfo;
+    mapping(address => ILevrStaking_v1.RewardInfo) private _rewardInfo;
     mapping(address => mapping(address => int256)) private _rewardDebt;
     uint256 private constant ACC_SCALE = 1e18;
+
+    // Track escrowed principal per token to separate it from reward liquidity
+    mapping(address => uint256) private _escrowBalance;
 
     function initialize(
         address underlying_,
@@ -41,7 +41,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
         underlying = underlying_;
         stakedToken = stakedToken_;
         treasury = treasury_;
-        _rewardInfo[underlying_] = RewardInfo({accPerShare: 0, exists: true});
+        _rewardInfo[underlying_] = ILevrStaking_v1.RewardInfo({
+            accPerShare: 0,
+            exists: true
+        });
         _rewardTokens.push(underlying_);
     }
 
@@ -49,6 +52,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
     function stake(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         IERC20(underlying).safeTransferFrom(msg.sender, address(this), amount);
+        _escrowBalance[underlying] += amount;
         _increaseDebtForAll(msg.sender, amount);
         _staked[msg.sender] += amount;
         _totalStaked += amount;
@@ -67,6 +71,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
         _updateDebtAll(msg.sender, _staked[msg.sender]);
         _totalStaked -= amount;
         ILevrStakedToken_v1(stakedToken).burn(msg.sender, amount);
+        uint256 esc = _escrowBalance[underlying];
+        if (esc < amount) revert InsufficientEscrow();
+        _escrowBalance[underlying] = esc - amount;
         IERC20(underlying).safeTransfer(to, amount);
         emit Unstaked(msg.sender, to, amount);
     }
@@ -93,10 +100,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
         uint256 staked = _totalStaked;
         require(staked > 0, "NO_STAKE");
         if (!_rewardInfo[token].exists) {
-            _rewardInfo[token] = RewardInfo({accPerShare: 0, exists: true});
+            _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
+                accPerShare: 0,
+                exists: true
+            });
             _rewardTokens.push(token);
         }
-        RewardInfo storage info = _rewardInfo[token];
+        ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
         info.accPerShare += (amount * ACC_SCALE) / staked;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
@@ -115,10 +125,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
         uint256 staked = _totalStaked;
         require(staked > 0, "NO_STAKE");
         if (!_rewardInfo[token].exists) {
-            _rewardInfo[token] = RewardInfo({accPerShare: 0, exists: true});
+            _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
+                accPerShare: 0,
+                exists: true
+            });
             _rewardTokens.push(token);
         }
-        RewardInfo storage info = _rewardInfo[token];
+        ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
         info.accPerShare += (amount * ACC_SCALE) / staked;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
@@ -131,6 +144,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
     /// @inheritdoc ILevrStaking_v1
     function totalStaked() external view returns (uint256) {
         return _totalStaked;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function escrowBalance(address token) external view returns (uint256) {
+        return _escrowBalance[token];
     }
 
     function _increaseDebtForAll(address account, uint256 amount) internal {
@@ -159,7 +177,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
         address to,
         uint256 bal
     ) internal {
-        RewardInfo storage info = _rewardInfo[token];
+        ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
         if (!info.exists) return;
         uint256 accumulated = (bal * info.accPerShare) / ACC_SCALE;
         int256 debt = _rewardDebt[account][token];
