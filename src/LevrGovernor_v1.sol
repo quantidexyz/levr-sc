@@ -73,7 +73,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
         if (p.proposalType == ProposalType.Transfer) {
             ILevrTreasury_v1(treasury).transfer(p.receiver, p.amount);
         } else {
-            // Boosts are handled by staking module now; no-op here.
+            ILevrTreasury_v1(treasury).applyBoost(p.amount);
         }
         emit ProposalExecuted(proposalId);
     }

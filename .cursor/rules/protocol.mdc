@@ -4,12 +4,12 @@ alwaysApply: true
 
 ## Levr Protocol v1 — Contracts Architecture
 
-This document defines the contract architecture and implementation details for Levr Protocol v1, focusing on the modular contract system with factory, treasury, governor, and wrapper components. It is the source-of-truth for contract implementations and integration decisions.
+This document defines the contract architecture and implementation details for Levr Protocol v1, focusing on the modular contract system with factory, treasury, governor, staking module, and staked token components. It is the source-of-truth for contract implementations and integration decisions.
 
 ### Scope and Compatibility
 
 - **Protocol version**: v1
-- **Architecture**: Modular system with `LevrFactory_v1` as the entry point, deploying per-project `LevrTreasury_v1`, `LevrGovernor_v1`, and `LevrERC20` wrapper contracts.
+- **Architecture**: Modular system with `LevrFactory_v1` as the entry point, deploying per-project `LevrTreasury_v1`, `LevrGovernor_v1`, `LevrStaking_v1`, and `LevrStakedToken_v1`.
 
 ---
 
@@ -29,7 +29,7 @@ This document defines the contract architecture and implementation details for L
   - `submissionDeadlineSeconds`: Proposal deadline (default 7 days)
   - `maxSubmissionPerType`: Max proposals per type per 7-day window
   - `stakingBoostTiers`, `transferTiers`: Governance tier configurations
-  - `minWTokenToSubmit`: Minimum wrapper balance to submit proposals
+- `minWTokenToSubmit`: Minimum staked token balance to submit proposals
   - `protocolTreasury`: Protocol fee recipient address
   - Contract implementation addresses for cloning
 
@@ -38,16 +38,14 @@ This document defines the contract architecture and implementation details for L
 - **Role**: Custody and execution contract for project assets and governance decisions
 - **Responsibilities**:
 
-  - Hold underlying reserve tokens and fee receipts
-  - Execute transfers and boost applications authorized by governor
-  - Handle wrap/unwrap operations with fee collection
-  - Receive and manage Clanker fee emissions
+  - Hold underlying reserve tokens and receive Clanker airdrops/fees
+  - Execute transfers authorized by governor
+  - Apply boosts by moving tokens to staking and accruing rewards
 
 - **Key Storage**:
   - `underlying`: Address of the Clanker token
   - `governor`: Address of the project's governor contract
-  - `wrapper`: Address of the project's wrapper token
-  - Staking reward accounting (per-token accumulators)
+  - (no wrapper)
 
 #### LevrGovernor_v1 (Per-Project)
 
@@ -63,19 +61,17 @@ This document defines the contract architecture and implementation details for L
   - Rolling counters for submission rate limiting
   - Proposal execution state and voting records
 
-#### LevrERC20 (Per-Project Wrapper)
+#### LevrStaking_v1 (Per-Project)
 
-- **Role**: 1:1 wrapper token for the underlying Clanker token with fee mechanics
+- **Role**: Escrows underlying stakes and manages multi-token reward accrual and claims
 - **Responsibilities**:
+  - Stake/unstake underlying; mint/burn `LevrStakedToken_v1` 1:1
+  - Accrue rewards per token via `accrueRewards` or `accrueFromTreasury`
+  - Claim rewards per token to a recipient
 
-  - Mint wrapper tokens upon deposit of underlying (minus fees)
-  - Redeem underlying tokens upon burn of wrapper (minus fees)
-  - Maintain 1:1 peg with underlying decimals and supply semantics
+#### LevrStakedToken_v1 (Per-Project)
 
-- **Key Storage**:
-  - Mirrors underlying token decimals
-  - Total supply tracking for governance requirements
-  - Standard ERC20 balances and allowances
+- **Role**: 1:1 staked token representing staked balances; governance weight source
 
 ---
 
@@ -100,25 +96,26 @@ This document defines the contract architecture and implementation details for L
    - Governor: Set treasury address and factory config reference
    - Wrapper: Grant minter/burner roles to treasury
 
-#### Wrap/Unwrap Operations
+#### Staking and Boost Flows
 
-**Mint (Wrap)**:
-
-```
-User → Underlying.transfer(treasury, amount)
-Treasury → calculateProtocolFee(amount) → deduct protocol fee
-Treasury → Wrapper.mint(user, amount - fees)
-```
-
-**Redeem (Unwrap)**:
+**Stake/Unstake**:
 
 ```
-User → Wrapper.burn(treasury, amount)
-Treasury → calculateProtocolFee(amount) → deduct protocol fee
-Treasury → Underlying.transfer(user, amount - fees)
+User → Underlying.transferFrom(user, staking, amount)
+Staking → mint sToken 1:1 to user
+
+User → burn sToken
+Staking → transfer underlying back to user
 ```
 
-Fee Flow: Protocol treasury receives `protocolFeeBps` of operation amount. No project fee.
+**Airdrop/Boost**:
+
+```
+Clanker → Treasury (fees/airdrops)
+Governor → Treasury.applyBoost(amount)
+Treasury → Staking.accrueFromTreasury(underlying, amount, pull=true)
+Staking → accPerShare[underlying] += amount / totalStaked
+```
 
 #### Governance Proposals
 
@@ -139,9 +136,9 @@ Fee Flow: Protocol treasury receives `protocolFeeBps` of operation amount. No pr
 
 ### Fee Model and Accounting
 
-#### Mint/Redeem Fees
+#### Fees
 
-- **Protocol Fee**: `protocolFeeBps / 10000` of operation amount (forwarded to protocol treasury)
+- **Protocol Fee**: `protocolFeeBps / 10000` of operation amount on applicable actions (forwarded to protocol treasury)
 
 #### Rounding and Precision
 

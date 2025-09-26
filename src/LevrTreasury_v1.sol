@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 import {ILevrTreasury_v1} from "./interfaces/ILevrTreasury_v1.sol";
 import {ILevrFactory_v1} from "./interfaces/ILevrFactory_v1.sol";
+import {ILevrStaking_v1} from "./interfaces/ILevrStaking_v1.sol";
 
 contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -49,7 +50,17 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
         IERC20(underlying).safeTransfer(to, amount);
     }
 
-    // boosts moved to staking module
+    /// @inheritdoc ILevrTreasury_v1
+    function applyBoost(uint256 amount) external onlyGovernor {
+        if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
+        // move underlying from treasury to staking and accrue
+        (, , address staking, ) = ILevrFactory_v1(factory).getProjectContracts(
+            underlying
+        );
+        // approve and pull via accrueFromTreasury for atomicity
+        IERC20(underlying).approve(staking, amount);
+        ILevrStaking_v1(staking).accrueFromTreasury(underlying, amount, true);
+    }
 
     function getUnderlyingBalance() external view returns (uint256) {
         return IERC20(underlying).balanceOf(address(this));

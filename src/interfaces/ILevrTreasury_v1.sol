@@ -42,6 +42,10 @@ interface ILevrTreasury_v1 {
     /// @param amount Amount to transfer
     function transfer(address to, uint256 amount) external;
 
+    /// @notice Apply a staking boost by moving tokens to staking and accruing rewards.
+    /// @param amount Amount of underlying to allocate to stakers
+    function applyBoost(uint256 amount) external;
+
     // boosts/rewards accrue via staking module, not treasury
 
     // rewards accrual moved to staking module

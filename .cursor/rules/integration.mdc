@@ -4,7 +4,7 @@ alwaysApply: true
 
 ## Integration Rule v1 — Clanker x Levr Protocol v1 (Base Sepolia Fork + Code/Test wiring)
 
-This document standardizes how we integrate the modular `LevrFactory_v1`, `LevrTreasury_v1`, `LevrGovernor_v1`, and `LevrERC20` contracts with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
+This document standardizes how we integrate the modular `LevrFactory_v1`, `LevrTreasury_v1`, `LevrGovernor_v1`, `LevrStaking_v1`, and `LevrStakedToken_v1` contracts with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
 
 ## Network Fork
 
@@ -44,7 +44,8 @@ Notes:
 │   │   ├── ILevrFactory_v1.sol          # Factory interface
 │   │   ├── ILevrTreasury_v1.sol         # Treasury interface
 │   │   ├── ILevrGovernor_v1.sol         # Governor interface
-│   │   ├── ILevrERC20.sol               # Wrapper token interface
+│   │   ├── ILevrStaking_v1.sol          # Staking module interface
+│   │   ├── ILevrStakedToken_v1.sol      # Staked token interface
 │   │   └── external/                    # External dependencies
 │   │       ├── IPoolManager.sol         # Uniswap v4 PoolManager (minimal)
 │   │       ├── IProtocolFees.sol        # Protocol fee management
@@ -57,7 +58,8 @@ Notes:
 │   ├── LevrFactory_v1.sol       # Factory contract
 │   ├── LevrTreasury_v1.sol      # Treasury contract (cloneable)
 │   ├── LevrGovernor_v1.sol      # Governor contract (cloneable)
-│   ├── LevrERC20.sol            # Wrapper ERC20 (cloneable)
+│   ├── LevrStaking_v1.sol       # Staking contract (per-project)
+│   ├── LevrStakedToken_v1.sol   # Staked ERC20 (per-project)
 │   └── implementations/         # Base implementations for cloning
 ├── test/
 │   ├── LevrFactoryV1.t.sol      # Factory tests
@@ -100,7 +102,7 @@ Notes:
 - **Key Functions**:
   - `register(clankerToken, params)`: Deploy or reuse treasury, deploy governor and wrapper
   - `updateConfig(cfg)`: Update protocol-wide configuration
-  - `getProjectContracts(clankerToken)`: Query deployed contract addresses
+- `getProjectContracts(clankerToken)`: Query deployed addresses (treasury, governor, staking, stakedToken)
 - **Storage**:
   - Protocol configuration (fees, limits, tiers)
   - Project registry mappings
@@ -109,54 +111,53 @@ Notes:
 
 #### LevrTreasury_v1.sol (Cloneable)
 
-- **Role**: Per-project asset custody and execution
+- **Role**: Per-project asset custody and execution (no wrapping)
 - **Key Functions**:
-  - `wrap(amount, to)`: Accept underlying, mint wrapper tokens (minus fees)
-  - `unwrap(amount, to)`: Burn wrapper, return underlying (minus fees)
   - `transfer(to, amount)`: Execute governance-approved transfers
-  - `applyBoost(amount)`: Apply staking boost
-  - Staking rewards accrual and claims for underlying and paired tokens
+  - `applyBoost(amount)`: Move tokens to staking and accrue rewards
 - **Storage**:
   - Underlying token address
-  - Governor and wrapper contract addresses
-  - Fee collection accounting
+  - Governor address
 - **Security**: Non-reentrant guards, access control validation
 
 #### LevrGovernor_v1.sol (Cloneable)
 
 - **Role**: Per-project governance and proposal management
 - **Key Functions**:
-  - `proposeTransfer(receiver, amount, reason, tier)`: Create transfer proposal
-  - `proposeBoost(amount, tier)`: Create boost proposal
-  - `execute(proposalId)`: Execute approved proposal
+  - `proposeTransfer(receiver, amount, reason, tier)`
+  - `proposeBoost(amount, tier)` (executes treasury.applyBoost)
+  - `execute(proposalId)`
 - **Storage**:
   - Active proposals with metadata
   - Rolling submission counters (7-day windows)
   - Proposal execution state
 - **Validation**: Balance checks, tier limits, deadline enforcement
 
-#### LevrERC20.sol (Cloneable)
+#### LevrStaking_v1.sol (Per-Project)
 
-- **Role**: Fee-enabled wrapper token
+- **Role**: Escrow underlying stakes; mint/burn staked token; accrue/claim multi-token rewards
 - **Key Functions**:
-  - `mint(to, amount)`: Mint wrapper tokens (treasury-only)
-  - `burn(from, amount)`: Burn wrapper tokens (treasury-only)
+  - `stake(amount)`, `unstake(amount, to)`, `claimRewards(tokens, to)`
+  - `accrueRewards(token, amount)`, `accrueFromTreasury(token, amount, pull)`
 - **Storage**:
-  - Mirrors underlying token decimals
-  - Standard ERC20 balances and allowances
-- **Access**: Treasury has exclusive mint/burn rights
+  - Underlying, stakedToken, per-token reward accumulators
+
+#### LevrStakedToken_v1.sol (Per-Project)
+
+- **Role**: ERC20 representing staked balances (mint/burn controlled by staking)
 
 ### Interfaces (Implemented)
 
 - `src/interfaces/ILevrFactory_v1.sol`: Complete factory interface
 - `src/interfaces/ILevrTreasury_v1.sol`: Treasury interface with wrap/unwrap and execution
 - `src/interfaces/ILevrGovernor_v1.sol`: Governor interface with proposal management
-- `src/interfaces/ILevrERC20.sol`: Wrapper token interface extending ERC20
+- `src/interfaces/ILevrStaking_v1.sol`: Staking module interface
+- `src/interfaces/ILevrStakedToken_v1.sol`: Staked token interface
 - External interfaces same as v1 for Clanker integration
 
 ### Wiring and Safety
 
-- **Fee Integration**: Treasury must be configured as Clanker fee receiver
+- **Fee Integration**: Treasury must be configured as Clanker fee/airdrop receiver; boosts transfer from treasury to staking
 - **Access Control**: Governor-only treasury execution, balance-gated proposals
 - **Reentrancy**: Guards on all external treasury functions
 - **Validation**: Input validation at all boundaries
@@ -186,15 +187,14 @@ Notes:
   - Validate deployed contract relationships
   - Test configuration updates (owner-only)
 
-#### Treasury Tests
+#### Staking & Treasury Tests
 
-- `test/LevrTreasuryV1.WrapUnwrap.t.sol`:
-  - End-to-end wrap/unwrap with protocol fee calculation
-  - Balance invariants and accounting (no project fee path)
+- `test/LevrStakingV1.t.sol`:
+  - Stake/unstake flow and staked token mint/burn
+  - Rewards accrual (accrueRewards, accrueFromTreasury) and claims
 - `test/LevrTreasuryV1.Execution.t.sol`:
-  - Governor-authorized transfers and boosts
+  - Governor-authorized transfers and boosts (applyBoost → staking)
   - Access control validation
-  - Reentrancy protection
 
 #### Governor Tests
 
@@ -210,7 +210,7 @@ Notes:
 #### Integration Tests
 
 - `test/integration/LevrV1.EndToEnd.t.sol`:
-  - Complete user flow: deploy → register → wrap → propose → execute
+  - Flow: deploy → register → stake → airdrop to treasury → boost → claim
   - Multi-project isolation
   - Protocol fee forwarding; staking rewards accrual for both pool tokens
 

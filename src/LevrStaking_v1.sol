@@ -102,6 +102,28 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
     }
 
     /// @inheritdoc ILevrStaking_v1
+    function accrueFromTreasury(
+        address token,
+        uint256 amount,
+        bool pullFromTreasury
+    ) external {
+        if (amount == 0) revert InvalidAmount();
+        if (pullFromTreasury) {
+            IERC20(token).safeTransferFrom(treasury, address(this), amount);
+        }
+        // inline accrue to avoid visibility issues
+        uint256 staked = _totalStaked;
+        require(staked > 0, "NO_STAKE");
+        if (!_rewardInfo[token].exists) {
+            _rewardInfo[token] = RewardInfo({accPerShare: 0, exists: true});
+            _rewardTokens.push(token);
+        }
+        RewardInfo storage info = _rewardInfo[token];
+        info.accPerShare += (amount * ACC_SCALE) / staked;
+        emit RewardsAccrued(token, amount, info.accPerShare);
+    }
+
+    /// @inheritdoc ILevrStaking_v1
     function stakedBalanceOf(address account) external view returns (uint256) {
         return _staked[account];
     }

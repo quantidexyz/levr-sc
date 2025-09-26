@@ -45,6 +45,16 @@ interface ILevrStaking_v1 {
     /// @notice Accrue rewards for token.
     function accrueRewards(address token, uint256 amount) external;
 
+    /// @notice Accrue rewards from treasury, optionally pulling tokens from treasury first.
+    /// @param token Reward token
+    /// @param amount Amount to accrue
+    /// @param pullFromTreasury If true, transfer `amount` from treasury before accrual
+    function accrueFromTreasury(
+        address token,
+        uint256 amount,
+        bool pullFromTreasury
+    ) external;
+
     /// @notice View functions.
     function stakedBalanceOf(address account) external view returns (uint256);
     function totalStaked() external view returns (uint256);
