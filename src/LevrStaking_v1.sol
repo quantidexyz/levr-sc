@@ -8,7 +8,16 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {ILevrStaking_v1} from "./interfaces/ILevrStaking_v1.sol";
 import {ILevrStakedToken_v1} from "./interfaces/ILevrStakedToken_v1.sol";
 
-contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
+interface IERC1363Receiver {
+    function onTransferReceived(
+        address operator,
+        address from,
+        uint256 value,
+        bytes calldata data
+    ) external returns (bytes4);
+}
+
+contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     address public underlying;
@@ -113,28 +122,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
             });
             _rewardTokens.push(token);
         }
+        _resetStreamForToken(token);
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-        // reset streaming window (global and per-token)
-        uint32 window = _streamWindowSeconds;
-        if (window == 0) {
-            window = 3 days;
-        }
-        _streamWindowSeconds = window;
-        _streamStart = uint64(block.timestamp);
-        _streamEnd = uint64(block.timestamp + window);
-        emit StreamReset(window, _streamStart, _streamEnd);
-        // compute per-token budget from current balances (exclude escrow for underlying)
-        uint256 bal = IERC20(token).balanceOf(address(this));
-        if (token == underlying) {
-            if (bal > _escrowBalance[underlying]) {
-                bal = bal - _escrowBalance[underlying];
-            } else {
-                bal = 0;
-            }
-        }
-        _streamStartByToken[token] = uint64(block.timestamp);
-        _streamEndByToken[token] = uint64(block.timestamp + window);
-        _streamTotalByToken[token] = bal;
         info.accPerShare += (amount * ACC_SCALE) / staked;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
@@ -159,29 +148,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
             });
             _rewardTokens.push(token);
         }
+        _resetStreamForToken(token);
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-        uint32 window = _streamWindowSeconds;
-        if (window == 0) {
-            window = 3 days;
-        }
-        _streamWindowSeconds = window;
-        _streamStart = uint64(block.timestamp);
-        _streamEnd = uint64(block.timestamp + window);
-        emit StreamReset(window, _streamStart, _streamEnd);
-        uint256 bal = IERC20(token).balanceOf(address(this));
-        if (token == underlying) {
-            if (bal > _escrowBalance[underlying]) {
-                bal = bal - _escrowBalance[underlying];
-            } else {
-                bal = 0;
-            }
-        }
-        _streamStartByToken[token] = uint64(block.timestamp);
-        _streamEndByToken[token] = uint64(block.timestamp + window);
-        _streamTotalByToken[token] = bal;
         info.accPerShare += (amount * ACC_SCALE) / staked;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
+
+    // manual sync removed; rely on ERC-1363 onTransferReceived for auto-sync
 
     /// @inheritdoc ILevrStaking_v1
     function stakedBalanceOf(address account) external view returns (uint256) {
@@ -242,6 +215,53 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
         uint256 annual = rate * 365 days;
         // APR bps = annual / totalStaked * 10_000
         return (annual * 10_000) / _totalStaked;
+    }
+
+    function _resetStreamForToken(address token) internal {
+        uint32 window = _streamWindowSeconds;
+        if (window == 0) {
+            window = 3 days;
+        }
+        _streamWindowSeconds = window;
+        _streamStart = uint64(block.timestamp);
+        _streamEnd = uint64(block.timestamp + window);
+        emit StreamReset(window, _streamStart, _streamEnd);
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        if (token == underlying) {
+            if (bal > _escrowBalance[underlying]) {
+                bal -= _escrowBalance[underlying];
+            } else {
+                bal = 0;
+            }
+        }
+        _streamStartByToken[token] = uint64(block.timestamp);
+        _streamEndByToken[token] = uint64(block.timestamp + window);
+        _streamTotalByToken[token] = bal;
+    }
+
+    // ERC-1363 auto-sync on transfer
+    function onTransferReceived(
+        address /*operator*/,
+        address /*from*/,
+        uint256 value,
+        bytes calldata /*data*/
+    ) external returns (bytes4) {
+        address token = msg.sender;
+        uint256 staked = _totalStaked;
+        if (staked > 0) {
+            if (!_rewardInfo[token].exists) {
+                _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
+                    accPerShare: 0,
+                    exists: true
+                });
+                _rewardTokens.push(token);
+            }
+            _resetStreamForToken(token);
+            ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+            info.accPerShare += (value * ACC_SCALE) / staked;
+            emit RewardsAccrued(token, value, info.accPerShare);
+        }
+        return IERC1363Receiver.onTransferReceived.selector;
     }
 
     function _increaseDebtForAll(address account, uint256 amount) internal {

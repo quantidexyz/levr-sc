@@ -103,6 +103,7 @@ Notes:
   - `register(clankerToken, params)`: Deploy or reuse treasury, deploy governor and wrapper
   - `updateConfig(cfg)`: Update protocol-wide configuration
 - `getProjectContracts(clankerToken)`: Query deployed addresses (treasury, governor, staking, stakedToken)
+- `streamWindowSeconds()`: Global streaming window (seconds) for staking accruals
 - **Storage**:
   - Protocol configuration (fees, limits, tiers)
   - Project registry mappings
@@ -114,7 +115,7 @@ Notes:
 - **Role**: Per-project asset custody and execution (no wrapping)
 - **Key Functions**:
   - `transfer(to, amount)`: Execute governance-approved transfers
-  - `applyBoost(amount)`: Move tokens to staking and accrue rewards
+  - `applyBoost(amount)`: Move tokens to staking and accrue rewards via `staking.accrueFromTreasury`
 - **Storage**:
   - Underlying token address
   - Governor address
@@ -157,7 +158,10 @@ Notes:
 
 ### Wiring and Safety
 
-- **Fee Integration**: Treasury must be configured as Clanker fee/airdrop receiver; boosts transfer from treasury to staking
+- **Fee Integration**:
+  - LP fees/airdrop recipient SHOULD be set to the staking contract when possible.
+  - Staking auto-syncs on ERC-1363 `onTransferReceived` and resets the 3-day stream window.
+  - Governor-triggered boosts transfer from treasury to staking via `applyBoost`.
 - **Access Control**: Governor-only treasury execution, balance-gated proposals
 - **Reentrancy**: Guards on all external treasury functions
 - **Validation**: Input validation at all boundaries
@@ -191,7 +195,7 @@ Notes:
 
 - `test/LevrStakingV1.t.sol`:
   - Stake/unstake flow and staked token mint/burn
-  - Rewards accrual (accrueRewards, accrueFromTreasury) and claims
+  - Rewards accrual (accrueRewards, accrueFromTreasury, ERC-1363 auto-sync) and claims
 - `test/LevrTreasuryV1.Execution.t.sol`:
   - Governor-authorized transfers and boosts (applyBoost → staking)
   - Access control validation
@@ -209,10 +213,11 @@ Notes:
 
 #### Integration Tests
 
-- `test/integration/LevrV1.EndToEnd.t.sol`:
-  - Flow: deploy → register → stake → airdrop to treasury → boost → claim
-  - Multi-project isolation
-  - Protocol fee forwarding; staking rewards accrual for both pool tokens
+-- `test/integration/LevrV1.EndToEnd.t.sol`:
+
+- Flow: deploy → register → stake → LP fees drop to staking (ERC-1363) → auto stream reset → governor boost → claim
+- Multi-project isolation
+- Protocol fee forwarding; staking rewards accrual for both pool tokens
 
 ### Utilities and Mocks
 
