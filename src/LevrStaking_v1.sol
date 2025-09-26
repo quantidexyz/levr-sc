@@ -14,6 +14,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
     address public underlying;
     address public stakedToken;
     address public treasury; // for future integrations
+    uint32 private _streamWindowSeconds;
+    uint64 private _streamStart;
+    uint64 private _streamEnd;
+    // Per-token streaming state for UI/APR
+    mapping(address => uint64) private _streamStartByToken;
+    mapping(address => uint64) private _streamEndByToken;
+    mapping(address => uint256) private _streamTotalByToken;
 
     uint256 private _totalStaked;
     mapping(address => uint256) private _staked;
@@ -107,6 +114,27 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
             _rewardTokens.push(token);
         }
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+        // reset streaming window (global and per-token)
+        uint32 window = _streamWindowSeconds;
+        if (window == 0) {
+            window = 3 days;
+        }
+        _streamWindowSeconds = window;
+        _streamStart = uint64(block.timestamp);
+        _streamEnd = uint64(block.timestamp + window);
+        emit StreamReset(window, _streamStart, _streamEnd);
+        // compute per-token budget from current balances (exclude escrow for underlying)
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        if (token == underlying) {
+            if (bal > _escrowBalance[underlying]) {
+                bal = bal - _escrowBalance[underlying];
+            } else {
+                bal = 0;
+            }
+        }
+        _streamStartByToken[token] = uint64(block.timestamp);
+        _streamEndByToken[token] = uint64(block.timestamp + window);
+        _streamTotalByToken[token] = bal;
         info.accPerShare += (amount * ACC_SCALE) / staked;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
@@ -132,6 +160,25 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
             _rewardTokens.push(token);
         }
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+        uint32 window = _streamWindowSeconds;
+        if (window == 0) {
+            window = 3 days;
+        }
+        _streamWindowSeconds = window;
+        _streamStart = uint64(block.timestamp);
+        _streamEnd = uint64(block.timestamp + window);
+        emit StreamReset(window, _streamStart, _streamEnd);
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        if (token == underlying) {
+            if (bal > _escrowBalance[underlying]) {
+                bal = bal - _escrowBalance[underlying];
+            } else {
+                bal = 0;
+            }
+        }
+        _streamStartByToken[token] = uint64(block.timestamp);
+        _streamEndByToken[token] = uint64(block.timestamp + window);
+        _streamTotalByToken[token] = bal;
         info.accPerShare += (amount * ACC_SCALE) / staked;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
@@ -149,6 +196,52 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard {
     /// @inheritdoc ILevrStaking_v1
     function escrowBalance(address token) external view returns (uint256) {
         return _escrowBalance[token];
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function streamWindowSeconds() external view returns (uint32) {
+        return _streamWindowSeconds;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function streamStart() external view returns (uint64) {
+        return _streamStart;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function streamEnd() external view returns (uint64) {
+        return _streamEnd;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function rewardRatePerSecond(
+        address token
+    ) external view returns (uint256) {
+        uint64 start = _streamStartByToken[token];
+        uint64 end = _streamEndByToken[token];
+        if (end == 0 || end <= start) return 0;
+        if (block.timestamp >= end) return 0;
+        uint256 window = end - start;
+        uint256 total = _streamTotalByToken[token];
+        return total / window;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function aprBps(address /* account */) external view returns (uint256) {
+        if (_totalStaked == 0) return 0;
+        // Use underlying stream for APR in native units
+        uint64 start = _streamStartByToken[underlying];
+        uint64 end = _streamEndByToken[underlying];
+        if (end == 0 || end <= start) return 0;
+        if (block.timestamp >= end) return 0;
+        uint256 window = end - start;
+        uint256 total = _streamTotalByToken[underlying];
+        if (total == 0) return 0;
+        // rate per second in underlying units
+        uint256 rate = total / window;
+        uint256 annual = rate * 365 days;
+        // APR bps = annual / totalStaked * 10_000
+        return (annual * 10_000) / _totalStaked;
     }
 
     function _increaseDebtForAll(address account, uint256 amount) internal {

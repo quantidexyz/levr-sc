@@ -15,6 +15,7 @@ import {LevrStakedToken_v1} from "./LevrStakedToken_v1.sol";
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     uint16 public override protocolFeeBps;
     uint32 public override submissionDeadlineSeconds;
+    uint32 public override streamWindowSeconds;
     uint16 public override maxSubmissionPerType; // reserved for future rate limits
     uint256 public override minWTokenToSubmit;
     address public override protocolTreasury;
@@ -137,6 +138,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     function _applyConfig(FactoryConfig memory cfg) internal {
         protocolFeeBps = cfg.protocolFeeBps;
         submissionDeadlineSeconds = cfg.submissionDeadlineSeconds;
+        streamWindowSeconds = cfg.streamWindowSeconds;
         maxSubmissionPerType = cfg.maxSubmissionPerType;
         minWTokenToSubmit = cfg.minWTokenToSubmit;
         protocolTreasury = cfg.protocolTreasury;

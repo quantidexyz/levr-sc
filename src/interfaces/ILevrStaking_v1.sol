@@ -28,6 +28,12 @@ interface ILevrStaking_v1 {
         uint256 amount,
         uint256 newAccPerShare
     );
+    /// @notice Emitted when streaming window resets due to new accruals.
+    event StreamReset(
+        uint32 windowSeconds,
+        uint64 streamStart,
+        uint64 streamEnd
+    );
     /// @notice Emitted when rewards claimed.
     event RewardsClaimed(
         address indexed account,
@@ -64,6 +70,18 @@ interface ILevrStaking_v1 {
         uint256 amount,
         bool pullFromTreasury
     ) external;
+
+    /// @notice View streaming parameters.
+    function streamWindowSeconds() external view returns (uint32);
+    function streamStart() external view returns (uint64);
+    function streamEnd() external view returns (uint64);
+
+    /// @notice Current reward emission rate per second for a token, based on remaining stream.
+    function rewardRatePerSecond(address token) external view returns (uint256);
+
+    /// @notice Pool APR in basis points for the underlying token, annualized from current stream.
+    /// @dev This is pool-level APR; user-level APY equals APR if compounding off-chain.
+    function aprBps(address account) external view returns (uint256);
 
     /// @notice View functions.
     function stakedBalanceOf(address account) external view returns (uint256);
