@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {IClanker} from "./IClanker.sol";
+
 import {IPoolManager} from "@uniswap/v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
+
 import {BalanceDelta} from "@uniswap/v4-core/types/BalanceDelta.sol";
 
 interface IClankerHookV2PoolExtension {

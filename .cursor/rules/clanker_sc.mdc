@@ -15,12 +15,14 @@ This rule documents how Clanker pools/tokens are launched, how fees are produced
 
 ### Key components (by interface)
 
+- `IClanker`: main Clanker deployment surface (aka Factory). Deploys tokens and pools via `deployTokenZeroSupply(TokenConfig)` and `deployToken(DeploymentConfig)`; emits `TokenCreated` with `PoolId`, hook, locker, MEV module, and metadata. Also coordinates extensions.
 - `IPoolManager`: v4 core manager for pools, swaps, liquidity, donations, fee controls (`setProtocolFee`, `collectProtocolFees`), transient accounting via `unlock` flow.
 - `IHooks`: lifecycle callbacks around initialize/add/remove liquidity, swap, donate.
 - `IClankerHook`/`IClankerHookV2`: Clanker pool factory/manager hook. Handles pool initialization, optional MEV module enablement, per-pool extensions, and exposes fee/operability controls (`mevModuleSetFee`, `mevModuleOperational`, caps via `MAX_LP_FEE`/`MAX_MEV_LP_FEE`). Emits pool creation events.
 - `IClankerHookDynamicFee`: per-pool dynamic fee variables and config (base fee, max LP fee, decay, reference tick periods, etc.).
 - `IClankerHookV2PoolExtension`: per-pool extension interface invoked by the hook to run custom logic on initialization phases and on each swap (`afterSwap`).
 - `IClankerPoolExtensionAllowlist`: gate which extensions can be attached for factory-created pools.
+- `IClankerExtension`/`IClankerAirdrop`: extension base and airdrop extension surface to receive and distribute extension allocations on deploy.
 - `IPositionManager`: convenience batching for modifying liquidity positions; not required for swap-only flows.
 - `IProtocolFees`: protocol fee controller surface and accounting on `IPoolManager`.
 - Supporting types: `PoolKey`, `PoolId`, `BalanceDelta`, `Currency`, and `Actions` constants for higher-level routers.
@@ -58,7 +60,8 @@ flowchart TD
 ### How a Clanker token/pool is launched
 
 - Paths:
-  - Factory path: `IClankerHook.initializePool(clanker, pairedToken, tickIfToken0IsClanker, tickSpacing, locker, mevModule, poolData)`
+  - Factory deploy path: `IClanker.deployToken(DeploymentConfig)` orchestrates token creation and pool initialization using the configured hook, paired token, tick math, locker, MEV module, and extensions. Emits `TokenCreated` with `PoolId` and configuration addresses.
+  - Hook initialize path (internal to factory or open): `IClankerHook.initializePool(clanker, pairedToken, tickIfToken0IsClanker, tickSpacing, locker, mevModule, poolData)`
     - Emits `PoolCreatedFactory` with `locker` and `mevModule` addresses.
     - Allows later `initializeMevModule(...)` to turn on MEV logic; pool extensions can be restricted to factory pools.
   - Open path: `IClankerHook.initializePoolOpen(...)`
@@ -153,13 +156,13 @@ flowchart TD
 - Buyback executor with safety rails (rate limits, slippage limits, pausable)
 - Monitoring of dynamic fee state and MEV module operability
 
-### Token metadata (Clanker factory)
+### Token metadata (IClanker)
 
-- Clanker factory exposes on-chain token metadata via `TokenConfig` during deploy:
+- IClanker exposes on-chain token metadata via `TokenConfig` during deploy:
   - `tokenAdmin`, `name`, `symbol`, `salt`, `image` (string/URI), `metadata` (string/URI/JSON), `context` (string), `originatingChainId`.
 - Deploy paths:
   - `deployTokenZeroSupply(TokenConfig)`
-  - `deployToken(DeploymentConfig)` where `DeploymentConfig.tokenConfig` := `TokenConfig`.
+  - `deployToken(DeploymentConfig)` where `DeploymentConfig.tokenConfig` := `TokenConfig` (payable; may allocate per-extension via `ExtensionConfig.msgValue`).
 - Events:
   - `TokenCreated` includes: `tokenAddress`, `tokenAdmin`, `tokenImage`, `tokenName`, `tokenSymbol`, `tokenMetadata`, `tokenContext`, `poolHook`, `PoolId`, `pairedToken`, `locker`, `mevModule`, `extensions`.
 - UI/indexers:
