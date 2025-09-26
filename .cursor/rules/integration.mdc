@@ -467,12 +467,18 @@ Notes:
   - Atomic execution with treasury calls
   - Event emission and state cleanup
 
-#### Integration Tests
+#### Integration Tests (E2E)
 
-- `test/integration/LevrV1.EndToEnd.t.sol`:
-  - Complete user flow: deploy → register → wrap → propose → execute
-  - Multi-project isolation
-  - Fee collection from Clanker emissions
+- `test/e2e/LevrV1.Registration.t.sol`: end-to-end registration and basic boost
+- `test/e2e/LevrV1.Governance.t.sol`: proposal gating, tiers, deadlines
+- `test/e2e/LevrV1.Treasury.t.sol`: treasury flows including Clanker airdrop claim → boost → streaming claims
+
+Clanker airdrop specifics for E2E:
+
+- Extension data: `(admin, merkleRoot, lockupDuration, vestingDuration)` with lockup ≥ 1 day
+- Leaf format: `keccak256(bytes.concat(keccak256(abi.encode(recipient, amount))))`
+- Helper: `test/utils/MerkleAirdropHelper.sol` builds a single-leaf root for treasury-only claims
+- Claim: `IClankerAirdrop.claim(token, treasury, amount, proof)`; proof empty for single-leaf
 
 ### Utilities and Mocks
 

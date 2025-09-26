@@ -122,6 +122,14 @@ Staking → measures actual received delta and immediately credits rewards; no e
 Staking → accPerShare[underlying] += delta / totalStaked; stream window resets using delta
 ```
 
+Notes on Clanker airdrops (as used in E2E tests):
+
+- ClankerAirdrop leaf format (deployed extension): `keccak256(bytes.concat(keccak256(abi.encode(recipient, amount))))`.
+- Our tests construct a single-leaf Merkle root for the treasury as the sole recipient and pass the root via the extension data.
+- Extension data encoding used: `(admin, merkleRoot, lockupDuration, vestingDuration)`; lockup must be ≥ 1 day.
+- Claims are triggered via `IClankerAirdrop.claim(token, recipient, allocatedAmount, proof)`; for single-leaf trees the proof is empty.
+- Helper: `test/utils/MerkleAirdropHelper.sol` exposes `singleLeafRoot(recipient, amount)` that builds the double-hash leaf root.
+
 #### Governance Proposals
 
 **Proposal Creation**:
