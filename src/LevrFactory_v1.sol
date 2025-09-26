@@ -46,9 +46,12 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
 
         address treasury = params.treasury;
         if (treasury == address(0)) {
-            treasury = address(
-                new LevrTreasury_v1(clankerToken, address(this))
-            );
+            // prefer previously pre-deployed headless treasury if exists
+            if (p.treasury != address(0)) {
+                treasury = p.treasury;
+            } else {
+                treasury = address(new LevrTreasury_v1(address(this)));
+            }
         }
 
         uint8 uDec = IERC20Metadata(clankerToken).decimals();
@@ -70,7 +73,8 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
             new LevrGovernor_v1(address(this), treasury, stakedToken)
         );
 
-        LevrTreasury_v1(treasury).initialize(governor, address(0));
+        // Initialize treasury now that governor and underlying are known
+        LevrTreasury_v1(treasury).initialize(governor, clankerToken);
 
         p.treasury = treasury;
         p.governor = governor;
@@ -133,6 +137,12 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
         uint256 index
     ) external view override returns (uint256) {
         return _stakingBoostTiers[index];
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function deployTreasury() external override returns (address treasury) {
+        // Headless treasury; underlying set later during register
+        treasury = address(new LevrTreasury_v1(address(this)));
     }
 
     function _applyConfig(FactoryConfig memory cfg) internal {

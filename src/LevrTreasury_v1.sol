@@ -12,25 +12,27 @@ import {ILevrStaking_v1} from "./interfaces/ILevrStaking_v1.sol";
 contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    address public immutable underlying;
+    address public underlying;
     address public immutable factory;
     address public governor;
 
     // no project fees; only protocol fees apply
     // no staking/reward state in treasury in the new model
 
-    constructor(address underlying_, address factory_) {
-        if (underlying_ == address(0) || factory_ == address(0))
-            revert ILevrTreasury_v1.ZeroAddress();
-        underlying = underlying_;
+    constructor(address factory_) {
+        if (factory_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         factory = factory_;
     }
 
-    function initialize(address governor_, address /* unused */) external {
+    function initialize(address governor_, address underlying_) external {
         // one-time init by factory
         if (governor != address(0)) revert();
         if (msg.sender != factory) revert();
         if (governor_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
+        if (underlying == address(0)) {
+            if (underlying_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
+            underlying = underlying_;
+        }
         governor = governor_;
         emit Initialized(underlying, governor_, address(0));
     }

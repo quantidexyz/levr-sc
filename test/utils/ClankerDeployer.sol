@@ -16,6 +16,17 @@ contract ClankerDeployer {
     address internal constant WETH = 0x4200000000000000000000000000000000000006;
     address internal constant LOCKER =
         0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496;
+    // Optional airdrop extension (Base Mainnet anchor for fork)
+    address internal constant AIRDROP_EXTENSION_DEFAULT =
+        0xf652B3610D75D81871bf96DB50825d9af28391E0;
+
+    // ABI for extensionData encoding: (admin, merkleRoot, lockupDuration, vestingDuration)
+    struct AirdropOpts {
+        address admin;
+        bytes32 merkleRoot;
+        uint256 lockupDuration;
+        uint256 vestingDuration;
+    }
 
     // Locker instantiation data structure (matches SDK ABI)
     struct ClankerLpLockerInstantiation {
@@ -40,6 +51,37 @@ contract ClankerDeployer {
         uint24 clankerFeeBps,
         uint24 pairedFeeBps
     ) external returns (address token) {
+        token = deployFactoryStaticFullWithOptions(
+            clankerFactory,
+            tokenAdmin,
+            name,
+            symbol,
+            clankerFeeBps,
+            pairedFeeBps,
+            false,
+            address(0),
+            0,
+            bytes("")
+        );
+    }
+
+    /// @notice Deploy with optional airdrop extension that allocates a percentage of supply to an extension
+    /// @param enableAirdrop If true, attach an airdrop extension
+    /// @param airdropAdmin Admin/recipient address passed to extension data encoding
+    /// @param airdropBps Portion (in bps) allocated to the airdrop extension (0-10000)
+    /// @param airdropData Raw extension data payload; if empty, defaults may apply
+    function deployFactoryStaticFullWithOptions(
+        address clankerFactory,
+        address tokenAdmin,
+        string memory name,
+        string memory symbol,
+        uint24 clankerFeeBps,
+        uint24 pairedFeeBps,
+        bool enableAirdrop,
+        address airdropAdmin,
+        uint16 airdropBps,
+        bytes memory airdropData
+    ) public returns (address token) {
         require(clankerFactory != address(0), "INVALID_FACTORY");
         if (tokenAdmin == address(0)) tokenAdmin = msg.sender;
 
@@ -125,9 +167,36 @@ contract ClankerDeployer {
             mevModuleData: mevModuleData
         });
 
-        IClanker.ExtensionConfig[] memory ecfg = new IClanker.ExtensionConfig[](
-            0
-        );
+        IClanker.ExtensionConfig[] memory ecfg;
+        if (enableAirdrop) {
+            bytes memory extData = airdropData;
+            if (extData.length == 0) {
+                // Default simple encoding compatible with Clanker Airdrop V2 style: (admin, merkleRoot, lockup, vesting)
+                AirdropOpts memory opts = AirdropOpts({
+                    admin: airdropAdmin == address(0)
+                        ? tokenAdmin
+                        : airdropAdmin,
+                    merkleRoot: bytes32(0),
+                    lockupDuration: 7 days,
+                    vestingDuration: 30 days
+                });
+                extData = abi.encode(
+                    opts.admin,
+                    opts.merkleRoot,
+                    opts.lockupDuration,
+                    opts.vestingDuration
+                );
+            }
+            ecfg = new IClanker.ExtensionConfig[](1);
+            ecfg[0] = IClanker.ExtensionConfig({
+                extension: AIRDROP_EXTENSION_DEFAULT,
+                msgValue: 0,
+                extensionBps: airdropBps,
+                extensionData: extData
+            });
+        } else {
+            ecfg = new IClanker.ExtensionConfig[](0);
+        }
 
         IClanker.DeploymentConfig memory dcfg = IClanker.DeploymentConfig({
             tokenConfig: tcfg,

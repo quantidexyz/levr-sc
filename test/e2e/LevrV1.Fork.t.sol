@@ -128,6 +128,69 @@ contract LevrV1_ForkE2E is BaseForkTest {
         tBal;
     }
 
+    function test_headless_treasury_airdrop_and_boost_flow() public {
+        // 1) Pre-deploy a headless treasury (no underlying yet)
+        address headlessTreasury = factory.deployTreasury();
+        assertTrue(headlessTreasury != address(0));
+
+        // 2) Deploy Clanker token with airdrop extension enabled and admin set to headless treasury
+        ClankerDeployer d = new ClankerDeployer();
+        clankerToken = d.deployFactoryStaticFullWithOptions({
+            clankerFactory: clankerFactory,
+            tokenAdmin: address(this),
+            name: "CLK Air",
+            symbol: "CLKA",
+            clankerFeeBps: 100,
+            pairedFeeBps: 100,
+            enableAirdrop: true,
+            airdropAdmin: headlessTreasury,
+            airdropBps: 1000, // 10% supply to airdrop extension
+            airdropData: bytes("")
+        });
+
+        // 3) Verify airdrop extension received allocation (on Base mainnet airdrop holds funds)
+        address airdropExt = 0xf652B3610D75D81871bf96DB50825d9af28391E0;
+        uint256 extBal = IERC20(clankerToken).balanceOf(airdropExt);
+        assertGt(extBal, 0, "no airdrop minted to extension");
+
+        // 4) Move some airdrop from extension to treasury (simulate extension forwarding)
+        uint256 boostAmt = extBal > 1_000 ether ? 1_000 ether : extBal;
+        vm.prank(airdropExt);
+        IERC20(clankerToken).transfer(headlessTreasury, boostAmt);
+
+        // 5) Register the project using the pre-deployed treasury
+        (address governor, ) = factory.register(
+            clankerToken,
+            ILevrFactory_v1.RegisterParams({
+                treasury: headlessTreasury,
+                extraConfig: bytes("")
+            })
+        );
+        (, , address staking, ) = factory.getProjectContracts(clankerToken);
+
+        // 6) Stake some user funds to be eligible for rewards
+        uint256 userGot = _acquireFromLocker(address(this), 1_000 ether);
+        if (userGot > 0) {
+            uint256 stakeAmt = userGot / 2;
+            IERC20(clankerToken).approve(staking, stakeAmt);
+            ILevrStaking_v1(staking).stake(stakeAmt);
+        }
+
+        // 7) Execute a boost using the airdrop forwarded to treasury
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt, 0);
+        ILevrGovernor_v1(governor).execute(pid);
+
+        // 8) Streaming and claim sanity check
+        vm.warp(block.timestamp + 1 hours);
+        address[] memory toks = new address[](1);
+        toks[0] = clankerToken;
+        uint256 balBefore = IERC20(clankerToken).balanceOf(address(this));
+        ILevrStaking_v1(staking).claimRewards(toks, address(this));
+        uint256 balAfter = IERC20(clankerToken).balanceOf(address(this));
+        uint256 claimed = balAfter - balBefore;
+        assertGt(claimed, 0, "nothing claimed after boost");
+    }
+
     function _deployRegisterAndGet(
         address fac
     )

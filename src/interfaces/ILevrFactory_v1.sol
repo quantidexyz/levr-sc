@@ -52,6 +52,12 @@ interface ILevrFactory_v1 {
         RegisterParams calldata params
     ) external returns (address governor, address wrapper);
 
+    /// @notice Deploy a standalone headless treasury.
+    /// @dev Useful for pre-provisioning a treasury address before token deployment.
+    ///      The treasury will be associated with a clanker token during register().
+    /// @return treasury The deployed treasury address
+    function deployTreasury() external returns (address treasury);
+
     /// @notice Update global protocol configuration.
     /// @param cfg New configuration
     function updateConfig(FactoryConfig calldata cfg) external;

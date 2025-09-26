@@ -8,19 +8,8 @@ This document standardizes how we integrate the modular `LevrFactory_v1`, `LevrT
 
 ## Network Fork
 
-- **Chain**: Base Sepolia
-- **Chain ID**: 84532
-
-### Clanker Contracts (Base Sepolia)
-
-| Contract                      | Address                                      |
-| ----------------------------- | -------------------------------------------- |
-| ClankerHookDynamicFeeV1       | `0xBF4983dC0f2F8FE78C5cf8Fc621f294A993728Cc` |
-| ClankerHookStaticFeeV1        | `0x11b51DBC2f7F683b81CeDa83DC0078D57bA328cc` |
-| ClankerSniperAuctionV1        | `0x8CBD6694A9DFc0eF4D1cd333e013B88E7003E10A` |
-| ClankerSniperUtilV1           | `0x4DC6348D38E3e199D7Ea032c8cfE4EbDe94b442A` |
-| ClankerAirdropV1              | `0x5c68F1560a5913c176Fc5238038098970B567B19` |
-| ClankerPoolExtensionAllowlist | `0x532d79D18F0F1782884662fCC1e74581A3289680` |
+- **Chain**: Base Mainnet
+- **Chain ID**: 8453
 
 Notes:
 
