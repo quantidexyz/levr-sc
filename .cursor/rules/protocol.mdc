@@ -20,7 +20,7 @@ This document defines the contract architecture and implementation details for L
 - **Role**: Global configuration owner and deployment/registry entrypoint for projects
 - **Responsibilities**:
 
-  - Deploy/clone per-project contracts (`LevrTreasury_v1`, `LevrGovernor_v1`, `LevrERC20`)
+  - Deploy/clone per-project contracts (`LevrTreasury_v1`, `LevrGovernor_v1`, `LevrStaking_v1`, `LevrStakedToken_v1`)
   - Manage protocol-wide configuration (fees, limits, tiers, deadlines)
   - Register projects with optional treasury reuse
 
@@ -89,12 +89,14 @@ This document defines the contract architecture and implementation details for L
    - If `params.treasury` provided: Use existing treasury, validate ownership
    - Otherwise: Deploy new `LevrTreasury_v1` via clone/factory pattern
    - Deploy `LevrGovernor_v1` with treasury as execution target
-   - Deploy `LevrERC20` wrapper with treasury as fee recipient
+
+- Deploy `LevrStaking_v1` and `LevrStakedToken_v1`
 
 3. **Initialization**:
-   - Treasury: Set governor, wrapper, underlying addresses
-   - Governor: Set treasury address and factory config reference
-   - Wrapper: Grant minter/burner roles to treasury
+
+- Treasury: Set governor and underlying addresses
+- Governor: Set treasury address and factory config reference
+- Staking: Initialize with underlying and staked token; staking controls staked token mint/burn
 
 #### Staking and Boost Flows
 
