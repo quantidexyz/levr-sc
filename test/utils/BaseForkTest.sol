@@ -7,12 +7,12 @@ contract BaseForkTest is Test {
     uint256 internal forkId;
 
     function setUp() public virtual {
-        forkId = _forkBaseSepolia();
-        assertEq(block.chainid, 84532, "Wrong fork chainId");
+        forkId = _forkBaseMainnet();
+        assertEq(block.chainid, 8453, "Wrong fork chainId");
     }
 
-    function _forkBaseSepolia() internal returns (uint256) {
-        string memory url = vm.rpcUrl("base-sepolia");
+    function _forkBaseMainnet() internal returns (uint256) {
+        string memory url = vm.rpcUrl("base-mainnet");
         uint256 id = vm.createSelectFork(url);
         return id;
     }

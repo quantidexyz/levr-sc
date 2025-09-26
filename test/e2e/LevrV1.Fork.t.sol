@@ -9,6 +9,7 @@ import {ILevrStaking_v1} from "../../src/interfaces/ILevrStaking_v1.sol";
 import {ILevrTreasury_v1} from "../../src/interfaces/ILevrTreasury_v1.sol";
 import {ClankerDeployer} from "../utils/ClankerDeployer.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 contract LevrV1_ForkE2E is BaseForkTest {
     LevrFactory_v1 internal factory;
@@ -50,14 +51,34 @@ contract LevrV1_ForkE2E is BaseForkTest {
     }
 
     function test_register_project_and_basic_flow() public {
-        // Always deploy a zero-supply Clanker token on fork for testing
+        // Full pooled deploy via factory using Base Sepolia related addresses (SDK-style)
         ClankerDeployer d = new ClankerDeployer();
-        clankerToken = d.deployZeroSupply(
-            clankerFactory,
-            address(this),
-            "CLK Test",
-            "CLK"
-        );
+
+        clankerToken = d.deployFactoryStaticFull({
+            clankerFactory: clankerFactory,
+            tokenAdmin: address(this),
+            name: "CLK Test",
+            symbol: "CLK",
+            clankerFeeBps: 100,
+            pairedFeeBps: 100
+        });
+
+        // Debug: check if token implements ERC20Metadata properly
+        try IERC20Metadata(clankerToken).decimals() returns (uint8 dec) {
+            dec; // silence warning
+        } catch {
+            revert("Token does not implement decimals()");
+        }
+        try IERC20Metadata(clankerToken).name() returns (string memory n) {
+            n; // silence warning
+        } catch {
+            revert("Token does not implement name()");
+        }
+        try IERC20Metadata(clankerToken).symbol() returns (string memory s) {
+            s; // silence warning
+        } catch {
+            revert("Token does not implement symbol()");
+        }
 
         (address governor, ) = factory.register(
             clankerToken,
