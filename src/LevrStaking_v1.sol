@@ -43,6 +43,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
     // Track escrowed principal per token to separate it from reward liquidity
     mapping(address => uint256) private _escrowBalance;
 
+    // Track rewards that have been accounted (credited) but not yet claimed
+    // for each reward token. Prevents double-accrual and enables liquidity checks.
+    mapping(address => uint256) private _rewardReserve;
+
     function initialize(
         address underlying_,
         address stakedToken_,
@@ -111,21 +115,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function accrueRewards(address token, uint256 amount) external {
+    function accrueRewards(
+        address token,
+        uint256 amount
+    ) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
-        uint256 staked = _totalStaked;
-        require(staked > 0, "NO_STAKE");
-        if (!_rewardInfo[token].exists) {
-            _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
-                accPerShare: 0,
-                exists: true
-            });
-            _rewardTokens.push(token);
-        }
-        _resetStreamForToken(token);
-        ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-        info.accPerShare += (amount * ACC_SCALE) / staked;
-        emit RewardsAccrued(token, amount, info.accPerShare);
+        uint256 available = _availableUnaccountedRewards(token);
+        require(available >= amount, "INSUFFICIENT_AVAILABLE");
+        _creditRewards(token, amount);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -133,28 +130,26 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         address token,
         uint256 amount,
         bool pullFromTreasury
-    ) external {
+    ) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (pullFromTreasury) {
+            // Only treasury is allowed to initiate a pull from treasury funds
+            if (msg.sender != treasury) revert ZeroAddress(); // reuse error for unauthorized to minimize changes
+            uint256 beforeAvail = _availableUnaccountedRewards(token);
             IERC20(token).safeTransferFrom(treasury, address(this), amount);
+            uint256 afterAvail = _availableUnaccountedRewards(token);
+            uint256 delta = afterAvail > beforeAvail
+                ? afterAvail - beforeAvail
+                : 0;
+            if (delta > 0) {
+                _creditRewards(token, delta);
+            }
+        } else {
+            uint256 available = _availableUnaccountedRewards(token);
+            require(available >= amount, "INSUFFICIENT_AVAILABLE");
+            _creditRewards(token, amount);
         }
-        // inline accrue to avoid visibility issues
-        uint256 staked = _totalStaked;
-        require(staked > 0, "NO_STAKE");
-        if (!_rewardInfo[token].exists) {
-            _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
-                accPerShare: 0,
-                exists: true
-            });
-            _rewardTokens.push(token);
-        }
-        _resetStreamForToken(token);
-        ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-        info.accPerShare += (amount * ACC_SCALE) / staked;
-        emit RewardsAccrued(token, amount, info.accPerShare);
     }
-
-    // manual sync removed; rely on ERC-1363 onTransferReceived for auto-sync
 
     /// @inheritdoc ILevrStaking_v1
     function stakedBalanceOf(address account) external view returns (uint256) {
@@ -217,7 +212,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         return (annual * 10_000) / _totalStaked;
     }
 
-    function _resetStreamForToken(address token) internal {
+    function _resetStreamForToken(address token, uint256 amount) internal {
         uint32 window = _streamWindowSeconds;
         if (window == 0) {
             window = 3 days;
@@ -226,20 +221,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         _streamStart = uint64(block.timestamp);
         _streamEnd = uint64(block.timestamp + window);
         emit StreamReset(window, _streamStart, _streamEnd);
-        uint256 bal = IERC20(token).balanceOf(address(this));
-        if (token == underlying) {
-            if (bal > _escrowBalance[underlying]) {
-                bal -= _escrowBalance[underlying];
-            } else {
-                bal = 0;
-            }
-        }
         _streamStartByToken[token] = uint64(block.timestamp);
         _streamEndByToken[token] = uint64(block.timestamp + window);
-        _streamTotalByToken[token] = bal;
+        _streamTotalByToken[token] = amount;
     }
 
-    // ERC-1363 auto-sync on transfer
+    // ERC-1363 auto-sync on transfer (optional if token supports ERC-1363)
     function onTransferReceived(
         address /*operator*/,
         address /*from*/,
@@ -247,21 +234,47 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         bytes calldata /*data*/
     ) external returns (bytes4) {
         address token = msg.sender;
-        uint256 staked = _totalStaked;
-        if (staked > 0) {
-            if (!_rewardInfo[token].exists) {
-                _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
-                    accPerShare: 0,
-                    exists: true
-                });
-                _rewardTokens.push(token);
-            }
-            _resetStreamForToken(token);
-            ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-            info.accPerShare += (value * ACC_SCALE) / staked;
-            emit RewardsAccrued(token, value, info.accPerShare);
+        if (value > 0) {
+            _creditRewards(token, value);
         }
         return IERC1363Receiver.onTransferReceived.selector;
+    }
+
+    function _creditRewards(address token, uint256 amount) internal {
+        if (!_rewardInfo[token].exists) {
+            _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
+                accPerShare: 0,
+                exists: true
+            });
+            _rewardTokens.push(token);
+        }
+        _resetStreamForToken(token, amount);
+        _rewardReserve[token] += amount;
+        if (_totalStaked > 0) {
+            ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+            info.accPerShare += (amount * ACC_SCALE) / _totalStaked;
+            emit RewardsAccrued(token, amount, info.accPerShare);
+        } else {
+            // still emit for observability when no stakers
+            ILevrStaking_v1.RewardInfo storage info2 = _rewardInfo[token];
+            emit RewardsAccrued(token, amount, info2.accPerShare);
+        }
+    }
+
+    function _availableUnaccountedRewards(
+        address token
+    ) internal view returns (uint256) {
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        if (token == underlying) {
+            // exclude escrowed principal when token is the underlying
+            if (bal > _escrowBalance[underlying]) {
+                bal -= _escrowBalance[underlying];
+            } else {
+                bal = 0;
+            }
+        }
+        uint256 accounted = _rewardReserve[token];
+        return bal > accounted ? bal - accounted : 0;
     }
 
     function _increaseDebtForAll(address account, uint256 amount) internal {
@@ -297,6 +310,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         if (accumulated > uint256(debt)) {
             uint256 pending = accumulated - uint256(debt);
             if (pending > 0) {
+                uint256 reserve = _rewardReserve[token];
+                if (reserve < pending) revert InsufficientRewardLiquidity();
+                _rewardReserve[token] = reserve - pending;
                 IERC20(token).safeTransfer(to, pending);
                 emit RewardsClaimed(account, to, token, pending);
             }

@@ -160,10 +160,11 @@ Notes:
 
 - **Fee Integration**:
   - LP fees/airdrop recipient SHOULD be set to the staking contract when possible.
-  - Staking auto-syncs on ERC-1363 `onTransferReceived` and resets the 3-day stream window.
-  - Governor-triggered boosts transfer from treasury to staking via `applyBoost`.
+  - If the reward token supports ERC-1363, staking auto-credits via `onTransferReceived` and resets the 3-day stream window using the delta.
+  - Governor-triggered boosts transfer from treasury to staking via `applyBoost`; staking measures received delta inside `accrueFromTreasury(..., true)` and credits immediately (no external sync function).
 - **Access Control**: Governor-only treasury execution, balance-gated proposals
 - **Reentrancy**: Guards on all external treasury functions
+  - Staking accrual paths (`accrueRewards`, `accrueFromTreasury`) are also non-reentrant
 - **Validation**: Input validation at all boundaries
 - **Events**: Comprehensive event emission for all state changes
 
@@ -195,7 +196,8 @@ Notes:
 
 - `test/LevrStakingV1.t.sol`:
   - Stake/unstake flow and staked token mint/burn
-  - Rewards accrual (accrueRewards, accrueFromTreasury, ERC-1363 auto-sync) and claims
+  - Rewards accrual (delta-based accrueRewards, accrueFromTreasury with treasury pull, ERC-1363 auto-credit) and claims
+  - Reward reserve tracking and liquidity-guarded claims
 - `test/LevrTreasuryV1.Execution.t.sol`:
   - Governor-authorized transfers and boosts (applyBoost → staking)
   - Access control validation

@@ -66,7 +66,9 @@ This document defines the contract architecture and implementation details for L
 - **Role**: Escrows underlying stakes and manages multi-token reward accrual and claims
 - **Responsibilities**:
   - Stake/unstake underlying; mint/burn `LevrStakedToken_v1` 1:1
-  - Accrue rewards per token via `accrueRewards` or `accrueFromTreasury`
+  - Accrue rewards per token via `accrueRewards` or `accrueFromTreasury` using delta-based accounting
+  - Maintain per-token reward reserves to prevent double counting; decrement reserves on claim
+  - Guard claims with liquidity checks to avoid overdrawing rewards
   - Claim rewards per token to a recipient
 
 #### LevrStakedToken_v1 (Per-Project)
@@ -116,7 +118,8 @@ Staking → transfer underlying back to user
 Clanker → Treasury (fees/airdrops)
 Governor → Treasury.applyBoost(amount)
 Treasury → Staking.accrueFromTreasury(underlying, amount, pull=true)
-Staking → accPerShare[underlying] += amount / totalStaked
+Staking → measures actual received delta and immediately credits rewards; no external sync required
+Staking → accPerShare[underlying] += delta / totalStaked; stream window resets using delta
 ```
 
 #### Governance Proposals
@@ -145,6 +148,7 @@ Staking → accPerShare[underlying] += amount / totalStaked
 #### Rounding and Precision
 
 - Use conservative rounding favoring reserves safety
+- Track reward reserves at staking per token to avoid double-accounting
 - Track fee accumulations in project treasury for governance distribution
 - Emit fee collection events for transparency
 
@@ -153,6 +157,7 @@ Staking → accPerShare[underlying] += amount / totalStaked
 - Wrapper total supply ≤ underlying balance in treasury (accounting for collected fees)
 - Protocol fees forwarded correctly to protocol treasury (no project fee path)
 - Governance proposals execute atomically with proper access controls
+- Reward claims cannot exceed tracked reserves (revert on insufficient liquidity)
 
 ---
 
@@ -193,7 +198,7 @@ Staking → accPerShare[underlying] += amount / totalStaked
 
 #### Reentrancy Protection
 
-- Non-reentrant guards on all external treasury functions
+- Non-reentrant guards on all external treasury functions and staking accrual paths
 - Wrap/unwrap operations use checks-effects-interactions pattern
 - Fee calculations completed before token transfers
 

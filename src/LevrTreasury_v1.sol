@@ -46,12 +46,15 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
 
     // no unwrap in the new model
 
-    function transfer(address to, uint256 amount) external onlyGovernor {
+    function transfer(
+        address to,
+        uint256 amount
+    ) external onlyGovernor nonReentrant {
         IERC20(underlying).safeTransfer(to, amount);
     }
 
     /// @inheritdoc ILevrTreasury_v1
-    function applyBoost(uint256 amount) external onlyGovernor {
+    function applyBoost(uint256 amount) external onlyGovernor nonReentrant {
         if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
         // move underlying from treasury to staking and accrue
         (, , address staking, ) = ILevrFactory_v1(factory).getProjectContracts(
@@ -65,21 +68,6 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     function getUnderlyingBalance() external view returns (uint256) {
         return IERC20(underlying).balanceOf(address(this));
     }
-
-    // project fee collection removed
-
-    // staking moved to staking module
-
-    // staking moved to staking module
-
-    // no staking views in treasury
-
-    // no staking views in treasury
-    // no staking views in treasury
-
-    // rewards moved to staking module
-
-    // no internal reward logic in treasury
 
     function _calculateProtocolFee(
         uint256 amount
