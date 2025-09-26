@@ -177,7 +177,7 @@ contract ClankerDeployer {
                         ? tokenAdmin
                         : airdropAdmin,
                     merkleRoot: bytes32(0),
-                    lockupDuration: 1 days,
+                    lockupDuration: 1 days, // Minimum lockup duration
                     vestingDuration: 0 days
                 });
                 extData = abi.encode(

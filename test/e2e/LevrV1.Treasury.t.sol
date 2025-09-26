@@ -9,6 +9,8 @@ import {ILevrStaking_v1} from "../../src/interfaces/ILevrStaking_v1.sol";
 import {ILevrTreasury_v1} from "../../src/interfaces/ILevrTreasury_v1.sol";
 import {ClankerDeployer} from "../utils/ClankerDeployer.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IClankerAirdrop} from "../../src/interfaces/external/IClankerAirdrop.sol";
+import {MerkleAirdropHelper} from "../utils/MerkleAirdropHelper.sol";
 
 contract LevrV1_TreasuryE2E is BaseForkTest {
     LevrFactory_v1 internal factory;
@@ -100,6 +102,22 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
 
         // 2) Deploy Clanker token with airdrop extension enabled and admin set to headless treasury
         ClankerDeployer d = new ClankerDeployer();
+        // Build a single-leaf merkle root for the treasury to be the sole recipient
+        uint256 allocation = 1_000 ether;
+        // Clanker airdrop uses double-hash leaf: keccak256(bytes.concat(keccak256(abi.encode(recipient, amount))))
+        bytes32 root = MerkleAirdropHelper.singleLeafRoot(
+            headlessTreasury,
+            allocation
+        );
+
+        // Encode airdrop data as (admin, merkleRoot, lockupDuration, vestingDuration)
+        bytes memory airdropData = abi.encode(
+            headlessTreasury,
+            root,
+            uint256(1 days),
+            uint256(0)
+        );
+
         clankerToken = d.deployFactoryStaticFullWithOptions({
             clankerFactory: clankerFactory,
             tokenAdmin: address(this),
@@ -110,7 +128,7 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
             enableAirdrop: true,
             airdropAdmin: headlessTreasury,
             airdropBps: 1000, // 10% supply to airdrop extension
-            airdropData: bytes("")
+            airdropData: airdropData
         });
 
         // 3) Verify airdrop extension received allocation (on Base mainnet airdrop holds funds)
@@ -118,10 +136,18 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
         uint256 extBal = IERC20(clankerToken).balanceOf(airdropExt);
         assertGt(extBal, 0, "no airdrop minted to extension");
 
-        // 4) Move some airdrop from extension to treasury (simulate extension forwarding)
-        uint256 boostAmt = extBal > 1_000 ether ? 1_000 ether : extBal;
-        vm.prank(airdropExt);
-        IERC20(clankerToken).transfer(headlessTreasury, boostAmt);
+        // 4) Treasury claims from the airdrop extension (admin set to treasury)
+        //    Warp past lockup and claim a portion to the treasury without forcing extension to transfer
+        // Claim exactly the allocation via merkle proof (single leaf => empty proof)
+        uint256 boostAmt = allocation <= extBal ? allocation : extBal;
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(headlessTreasury);
+        IClankerAirdrop(airdropExt).claim(
+            clankerToken,
+            headlessTreasury,
+            boostAmt,
+            new bytes32[](0)
+        );
 
         // 5) Register the project using the pre-deployed treasury
         (address governor, ) = factory.register(
