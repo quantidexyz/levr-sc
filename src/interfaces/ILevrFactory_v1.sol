@@ -4,6 +4,8 @@ pragma solidity ^0.8.30;
 /// @title Levr Factory v1 Interface
 /// @notice Global configuration and per-project contract deployment/registry.
 interface ILevrFactory_v1 {
+    // ============ Structs ============
+
     /// @notice Parameters controlling registration.
     struct RegisterParams {
         address treasury;
@@ -27,6 +29,21 @@ interface ILevrFactory_v1 {
         address protocolTreasury;
     }
 
+    /// @notice Project contract addresses.
+    struct Project {
+        address treasury;
+        address governor;
+        address staking;
+        address stakedToken;
+    }
+
+    // ============ Errors ============
+
+    /// @notice Revert if treasury owner is not the caller.
+    error UnauthorizedTreasuryRegistration();
+
+    // ============ Events ============
+
     /// @notice Emitted when a project is registered.
     /// @param clankerToken Underlying Clanker token address
     /// @param treasury Project treasury address
@@ -41,6 +58,8 @@ interface ILevrFactory_v1 {
 
     /// @notice Emitted when configuration is updated.
     event ConfigUpdated();
+
+    // ============ Functions ============
 
     /// @notice Register a project and deploy contracts if needed.
     /// @param clankerToken Underlying token to wrap

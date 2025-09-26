@@ -23,14 +23,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     uint256[] private _transferTiers;
     uint256[] private _stakingBoostTiers;
 
-    struct Project {
-        address treasury;
-        address governor;
-        address staking;
-        address stakedToken;
-    }
-
-    mapping(address => Project) private _projects; // clankerToken => Project
+    mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
 
     constructor(FactoryConfig memory cfg, address owner_) Ownable(owner_) {
         _applyConfig(cfg);
@@ -50,7 +43,14 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
             if (p.treasury != address(0)) {
                 treasury = p.treasury;
             } else {
-                treasury = address(new LevrTreasury_v1(address(this)));
+                treasury = address(
+                    new LevrTreasury_v1(address(this), msg.sender)
+                );
+            }
+        } else {
+            // If providing existing treasury, must be the owner
+            if (LevrTreasury_v1(treasury).owner() != msg.sender) {
+                revert UnauthorizedTreasuryRegistration();
             }
         }
 
@@ -142,7 +142,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     /// @inheritdoc ILevrFactory_v1
     function deployTreasury() external override returns (address treasury) {
         // Headless treasury; underlying set later during register
-        treasury = address(new LevrTreasury_v1(address(this)));
+        treasury = address(new LevrTreasury_v1(address(this), msg.sender));
     }
 
     function _applyConfig(FactoryConfig memory cfg) internal {

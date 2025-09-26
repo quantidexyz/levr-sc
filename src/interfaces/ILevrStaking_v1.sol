@@ -4,11 +4,7 @@ pragma solidity ^0.8.30;
 /// @title Levr Staking v1 Interface
 /// @notice Stakes underlying directly; mints staked ERC20; accrues multi-token rewards.
 interface ILevrStaking_v1 {
-    error ZeroAddress();
-    error InvalidAmount();
-    error InsufficientStake();
-    error InsufficientRewardLiquidity();
-    error InsufficientEscrow();
+    // ============ Structs ============
 
     /// @notice Reward token accumulator info.
     /// @param accPerShare Accumulated rewards per staked token, scaled by 1e18
@@ -18,22 +14,36 @@ interface ILevrStaking_v1 {
         bool exists;
     }
 
+    // ============ Errors ============
+
+    error ZeroAddress();
+    error InvalidAmount();
+    error InsufficientStake();
+    error InsufficientRewardLiquidity();
+    error InsufficientEscrow();
+
+    // ============ Events ============
+
     /// @notice Emitted when a user stakes underlying.
     event Staked(address indexed staker, uint256 amount);
+
     /// @notice Emitted when a user unstakes underlying.
     event Unstaked(address indexed staker, address indexed to, uint256 amount);
+
     /// @notice Emitted when rewards accrue for a token.
     event RewardsAccrued(
         address indexed token,
         uint256 amount,
         uint256 newAccPerShare
     );
+
     /// @notice Emitted when streaming window resets due to new accruals.
     event StreamReset(
         uint32 windowSeconds,
         uint64 streamStart,
         uint64 streamEnd
     );
+
     /// @notice Emitted when rewards claimed.
     event RewardsClaimed(
         address indexed account,
@@ -41,6 +51,8 @@ interface ILevrStaking_v1 {
         address indexed token,
         uint256 amount
     );
+
+    // ============ Functions ============
 
     /// @notice Initialize staking module.
     function initialize(

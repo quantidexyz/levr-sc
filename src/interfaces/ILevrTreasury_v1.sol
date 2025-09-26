@@ -4,6 +4,8 @@ pragma solidity ^0.8.30;
 /// @title Levr Treasury v1 Interface
 /// @notice Per-project treasury handling wrap/unwrap and governance execution.
 interface ILevrTreasury_v1 {
+    // ============ Errors ============
+
     /// @notice Revert if caller is not the project governor.
     error OnlyGovernor();
 
@@ -19,7 +21,7 @@ interface ILevrTreasury_v1 {
     /// @notice Revert if user attempts to unstake more than staked.
     error InsufficientStake();
 
-    // no staking state in treasury in the new model
+    // ============ Events ============
 
     /// @notice Emitted when the treasury is initialized by the factory.
     /// @param underlying Underlying token address
@@ -31,11 +33,7 @@ interface ILevrTreasury_v1 {
         address indexed wrapper
     );
 
-    // no wrap/unwrap in the new model
-
-    // rewards are handled by staking module
-
-    // no wrap/unwrap in the new model
+    // ============ Functions ============
 
     /// @notice Execute a governor-authorized transfer of underlying.
     /// @param to Recipient

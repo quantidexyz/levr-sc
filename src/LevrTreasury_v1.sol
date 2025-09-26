@@ -4,12 +4,13 @@ pragma solidity ^0.8.30;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {ILevrTreasury_v1} from "./interfaces/ILevrTreasury_v1.sol";
 import {ILevrFactory_v1} from "./interfaces/ILevrFactory_v1.sol";
 import {ILevrStaking_v1} from "./interfaces/ILevrStaking_v1.sol";
 
-contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
+contract LevrTreasury_v1 is ILevrTreasury_v1, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     address public underlying;
@@ -19,7 +20,7 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
     // no project fees; only protocol fees apply
     // no staking/reward state in treasury in the new model
 
-    constructor(address factory_) {
+    constructor(address factory_, address owner_) Ownable(owner_) {
         if (factory_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         factory = factory_;
     }
@@ -30,7 +31,8 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
         if (msg.sender != factory) revert();
         if (governor_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         if (underlying == address(0)) {
-            if (underlying_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
+            if (underlying_ == address(0))
+                revert ILevrTreasury_v1.ZeroAddress();
             underlying = underlying_;
         }
         governor = governor_;

@@ -4,26 +4,15 @@ pragma solidity ^0.8.30;
 /// @title Levr Governor v1 Interface
 /// @notice Per-project governance for transfers and boosts.
 interface ILevrGovernor_v1 {
-    /// @notice Revert if caller lacks permission or balance requirements.
-    error NotAuthorized();
-
-    /// @notice Revert if amount is zero or exceeds tier limit.
-    error InvalidAmount();
-
-    /// @notice Revert if proposal deadline has passed.
-    error DeadlinePassed();
-
-    /// @notice Revert if proposal already executed.
-    error AlreadyExecuted();
-
-    /// @notice Revert if tier index is out of bounds.
-    error TierOutOfBounds();
+    // ============ Enums ============
 
     /// @notice Proposal type discriminator.
     enum ProposalType {
         Transfer,
         Boost
     }
+
+    // ============ Structs ============
 
     /// @notice Proposal state.
     /// @param proposer Address who created the proposal
@@ -45,6 +34,28 @@ interface ILevrGovernor_v1 {
         bool executed;
     }
 
+    // ============ Errors ============
+
+    /// @notice Revert if caller lacks permission or balance requirements.
+    error NotAuthorized();
+
+    /// @notice Revert if amount is zero or exceeds tier limit.
+    error InvalidAmount();
+
+    /// @notice Revert if proposal deadline has passed.
+    error DeadlinePassed();
+
+    /// @notice Revert if proposal already executed.
+    error AlreadyExecuted();
+
+    /// @notice Revert if tier index is out of bounds.
+    error TierOutOfBounds();
+
+    /// @notice Revert if proposal rate limit exceeded.
+    error RateLimitExceeded();
+
+    // ============ Events ============
+
     /// @notice Emitted when a proposal is created.
     /// @param id Unique proposal id
     /// @param proposalType Proposal type
@@ -58,6 +69,8 @@ interface ILevrGovernor_v1 {
     /// @notice Emitted when a proposal is executed.
     /// @param id Proposal id
     event ProposalExecuted(uint256 indexed id);
+
+    // ============ Functions ============
 
     /// @notice Create a transfer proposal.
     /// @param receiver Recipient of funds

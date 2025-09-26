@@ -18,8 +18,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
     // proposalType: 0 => Transfer, 1 => Boost (matches enum ordering)
     mapping(uint8 => mapping(uint64 => uint16)) private _submissionsPerWeek;
 
-    error RateLimitExceeded();
-
     constructor(address factory_, address treasury_, address stakedToken_) {
         require(
             factory_ != address(0) &&

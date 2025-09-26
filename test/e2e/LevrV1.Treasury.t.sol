@@ -205,4 +205,54 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
         // Staked token total supply should drop to zero
         assertEq(IERC20(stakedToken).totalSupply(), 0);
     }
+
+    function test_treasury_registration_frontrun_protection() public {
+        // First deploy a Clanker token that both Alice and Bob will try to register with
+        ClankerDeployer d = new ClankerDeployer();
+        address sharedClankerToken = d.deployFactoryStaticFull({
+            clankerFactory: clankerFactory,
+            tokenAdmin: address(this),
+            name: "Shared Token",
+            symbol: "SHR",
+            clankerFeeBps: 100,
+            pairedFeeBps: 100
+        });
+
+        // Alice deploys a headless treasury
+        address alice = address(0x1111);
+        vm.prank(alice);
+        address aliceTreasury = factory.deployTreasury();
+
+        // Bob tries to frontrun Alice's registration by registering the shared token with Alice's treasury
+        address bob = address(0x2222);
+        vm.prank(bob);
+
+        // Bob tries to register the shared token with Alice's treasury - should fail
+        vm.expectRevert(
+            ILevrFactory_v1.UnauthorizedTreasuryRegistration.selector
+        );
+        factory.register(
+            sharedClankerToken,
+            ILevrFactory_v1.RegisterParams({
+                treasury: aliceTreasury,
+                extraConfig: bytes("")
+            })
+        );
+
+        // Alice can successfully register the shared token with her own treasury
+        vm.prank(alice);
+        (address governor, ) = factory.register(
+            sharedClankerToken,
+            ILevrFactory_v1.RegisterParams({
+                treasury: aliceTreasury,
+                extraConfig: bytes("")
+            })
+        );
+
+        // Verify Alice's treasury is registered with the shared token
+        (, address registeredGovernor, , ) = factory.getProjectContracts(
+            sharedClankerToken
+        );
+        assertEq(registeredGovernor, governor);
+    }
 }

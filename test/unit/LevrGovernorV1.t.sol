@@ -154,7 +154,7 @@ contract LevrGovernorV1_UnitTest is Test {
 
         // Second transfer proposal in same week should revert
         vm.prank(u);
-        vm.expectRevert(LevrGovernor_v1.RateLimitExceeded.selector);
+        vm.expectRevert(ILevrGovernor_v1.RateLimitExceeded.selector);
         g.proposeTransfer(address(0xB0B), 1 ether, "ops2", 0);
 
         // Move to next week and it should succeed again
