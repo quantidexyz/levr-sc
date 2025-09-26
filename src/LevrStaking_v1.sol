@@ -231,6 +231,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         _streamStartByToken[token] = uint64(block.timestamp);
         _streamEndByToken[token] = uint64(block.timestamp + window);
         _streamTotalByToken[token] = amount;
+        _lastUpdateByToken[token] = uint64(block.timestamp);
     }
 
     // ERC-1363 auto-sync on transfer (optional if token supports ERC-1363)
@@ -251,33 +252,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         ILevrStaking_v1.RewardInfo storage info = _ensureRewardToken(token);
         // Settle current stream up to now before resetting
         _settleStreamingForToken(token);
-        // Carry forward any unvested remainder from previous stream
-        uint64 start = _streamStartByToken[token];
-        uint64 end = _streamEndByToken[token];
-        uint64 last = _lastUpdateByToken[token];
-        uint256 prevTotal = _streamTotalByToken[token];
-        uint256 remaining = 0;
-        if (end != 0 && start != 0 && prevTotal > 0) {
-            uint64 cappedLast = last > end ? end : last;
-            if (cappedLast > start) {
-                uint256 duration = end - start;
-                uint256 vested = (prevTotal * (cappedLast - start)) / duration;
-                if (prevTotal > vested) remaining = prevTotal - vested;
-            } else {
-                remaining = prevTotal;
-            }
-        }
-        // Reset stream window with remaining + new amount
-        uint32 window = _streamWindowSeconds;
-        if (window == 0) window = 3 days;
-        _streamWindowSeconds = window;
-        _streamStart = uint64(block.timestamp);
-        _streamEnd = uint64(block.timestamp + window);
-        emit StreamReset(window, _streamStart, _streamEnd);
-        _streamStartByToken[token] = uint64(block.timestamp);
-        _streamEndByToken[token] = uint64(block.timestamp + window);
-        _streamTotalByToken[token] = remaining + amount;
-        _lastUpdateByToken[token] = uint64(block.timestamp);
+        // Reset stream window with new amount only (no remaining carry-over)
+        _resetStreamForToken(token, amount);
         // Increase reserve by newly provided amount only
         _rewardReserve[token] += amount;
         emit RewardsAccrued(token, amount, info.accPerShare);
