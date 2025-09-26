@@ -103,8 +103,22 @@ contract LevrV1_ForkE2E is BaseForkTest {
             ILevrStaking_v1(staking).stake(bal);
         }
 
-        // Governor can create a dummy boost proposal and execute it immediately
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(1, 0);
+        // Transfer some underlying tokens to treasury (simulating airdrop/fees)
+        uint256 boostAmount = 1000 ether;
+        address locker = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496; // Clanker locker
+        uint256 lockerBalance = IERC20(clankerToken).balanceOf(locker);
+        if (lockerBalance > boostAmount) {
+            vm.prank(locker);
+            IERC20(clankerToken).transfer(treasury, boostAmount);
+        } else {
+            // Use whatever the locker has
+            boostAmount = lockerBalance;
+            vm.prank(locker);
+            IERC20(clankerToken).transfer(treasury, boostAmount);
+        }
+
+        // Governor can create a boost proposal and execute it immediately
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmount, 0);
         ILevrGovernor_v1(governor).execute(pid);
 
         // Treasury balance read works on live token
