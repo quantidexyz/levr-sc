@@ -134,7 +134,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
         if (amount == 0) revert InvalidAmount();
         if (pullFromTreasury) {
             // Only treasury is allowed to initiate a pull from treasury funds
-            if (msg.sender != treasury) revert ZeroAddress(); // reuse error for unauthorized to minimize changes
+            require(msg.sender == treasury, "ONLY_TREASURY");
             uint256 beforeAvail = _availableUnaccountedRewards(token);
             IERC20(token).safeTransferFrom(treasury, address(this), amount);
             uint256 afterAvail = _availableUnaccountedRewards(token);
@@ -241,23 +241,26 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard {
     }
 
     function _creditRewards(address token, uint256 amount) internal {
-        if (!_rewardInfo[token].exists) {
+        ILevrStaking_v1.RewardInfo storage info = _ensureRewardToken(token);
+        _resetStreamForToken(token, amount);
+        _rewardReserve[token] += amount;
+        if (_totalStaked > 0) {
+            info.accPerShare += (amount * ACC_SCALE) / _totalStaked;
+        }
+        emit RewardsAccrued(token, amount, info.accPerShare);
+    }
+
+    function _ensureRewardToken(
+        address token
+    ) internal returns (ILevrStaking_v1.RewardInfo storage info) {
+        info = _rewardInfo[token];
+        if (!info.exists) {
             _rewardInfo[token] = ILevrStaking_v1.RewardInfo({
                 accPerShare: 0,
                 exists: true
             });
             _rewardTokens.push(token);
-        }
-        _resetStreamForToken(token, amount);
-        _rewardReserve[token] += amount;
-        if (_totalStaked > 0) {
-            ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-            info.accPerShare += (amount * ACC_SCALE) / _totalStaked;
-            emit RewardsAccrued(token, amount, info.accPerShare);
-        } else {
-            // still emit for observability when no stakers
-            ILevrStaking_v1.RewardInfo storage info2 = _rewardInfo[token];
-            emit RewardsAccrued(token, amount, info2.accPerShare);
+            info = _rewardInfo[token];
         }
     }
 
