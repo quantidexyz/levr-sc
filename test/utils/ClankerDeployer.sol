@@ -127,7 +127,7 @@ contract ClankerDeployer {
 
         // Simplified locker config with single recipient (tokenAdmin)
         uint8[] memory feePreferences = new uint8[](1);
-        feePreferences[0] = 0; // FeeIn.Both
+        feePreferences[0] = 2; // FeeIn.Both (per locker enum)
         bytes memory lockerData = abi.encode(
             ClankerLpLockerInstantiation({feePreference: feePreferences})
         );
