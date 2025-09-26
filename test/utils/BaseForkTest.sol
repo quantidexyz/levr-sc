@@ -12,10 +12,7 @@ contract BaseForkTest is Test {
     }
 
     function _forkBaseSepolia() internal returns (uint256) {
-        string memory url = vm.envOr(
-            "BASE_SEPOLIA_RPC_URL",
-            vm.rpcUrl("base-sepolia")
-        );
+        string memory url = vm.rpcUrl("base-sepolia");
         uint256 id = vm.createSelectFork(url);
         return id;
     }
