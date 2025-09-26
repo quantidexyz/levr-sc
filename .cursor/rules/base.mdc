@@ -7,3 +7,5 @@ alwaysApply: true
 - **Always** run tests in -vvv verbose mode.
 - **Always** tests handle fork internally.
 - **Never** pass fork url in test command.
+- **Always** run relevent test cases/files/folders.
+- **Intelligently** determine if a test is written just to make the test pass, even when the source code is actually incorrect.
