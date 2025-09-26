@@ -255,4 +255,111 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
         );
         assertEq(registeredGovernor, governor);
     }
+
+    function test_apy_views_work_correctly() public {
+        // Deploy and register project
+        (
+            address governor,
+            address treasury,
+            address staking,
+            address stakedToken
+        ) = _deployRegisterAndGet(address(factory));
+
+        // Get tokens for staking and boosting
+        uint256 userGot = _acquireFromLocker(address(this), 10_000 ether);
+        assertTrue(userGot > 0, "need tokens from locker");
+
+        // Stake 50% of tokens
+        uint256 stakeAmt = userGot / 2;
+        IERC20(clankerToken).approve(staking, stakeAmt);
+        ILevrStaking_v1(staking).stake(stakeAmt);
+
+        // Verify initial state: no rewards accrued yet
+        uint256 initialApr = ILevrStaking_v1(staking).aprBps(address(this));
+        uint256 initialRate = ILevrStaking_v1(staking).rewardRatePerSecond(
+            clankerToken
+        );
+        assertEq(initialApr, 0, "initial APR should be 0");
+        assertEq(initialRate, 0, "initial reward rate should be 0");
+
+        // Fund treasury and execute boost
+        uint256 boostAmt = userGot - stakeAmt;
+        IERC20(clankerToken).transfer(treasury, boostAmt);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt, 0);
+        ILevrGovernor_v1(governor).execute(pid);
+
+        // Now check APR and reward rate calculations
+        uint256 aprAfterBoost = ILevrStaking_v1(staking).aprBps(address(this));
+        uint256 rateAfterBoost = ILevrStaking_v1(staking).rewardRatePerSecond(
+            clankerToken
+        );
+
+        // APR calculation: (boostAmt * 365 days / 3 days) * 10000 / stakeAmt
+        // rate = boostAmt / 3 days
+        uint256 expectedRate = boostAmt / 3 days;
+        uint256 expectedAnnual = expectedRate * 365 days;
+        uint256 expectedAprBps = (expectedAnnual * 10_000) / stakeAmt;
+
+        assertApproxEqRel(
+            aprAfterBoost,
+            expectedAprBps,
+            1e16,
+            "APR should match calculation"
+        ); // 1% tolerance
+        assertApproxEqRel(
+            rateAfterBoost,
+            expectedRate,
+            1e16,
+            "reward rate should match calculation"
+        );
+
+        // Let some time pass and check rate doesn't change (linear emission)
+        vm.warp(block.timestamp + 1 hours);
+        uint256 rateAfterTime = ILevrStaking_v1(staking).rewardRatePerSecond(
+            clankerToken
+        );
+        assertEq(
+            rateAfterTime,
+            rateAfterBoost,
+            "rate should not change during stream"
+        );
+
+        // APR should remain the same (annualized)
+        uint256 aprAfterTime = ILevrStaking_v1(staking).aprBps(address(this));
+        assertEq(
+            aprAfterTime,
+            aprAfterBoost,
+            "APR should not change during stream"
+        );
+
+        // Claim some rewards and verify APR still works
+        vm.warp(block.timestamp + 1 days);
+        address[] memory toks = new address[](1);
+        toks[0] = clankerToken;
+        ILevrStaking_v1(staking).claimRewards(toks, address(this));
+
+        uint256 aprAfterClaim = ILevrStaking_v1(staking).aprBps(address(this));
+        assertEq(
+            aprAfterClaim,
+            aprAfterBoost,
+            "APR should remain same after claim"
+        );
+
+        // Test edge case: unstake all, APR should become 0
+        ILevrStaking_v1(staking).unstake(stakeAmt, address(this));
+        uint256 aprAfterUnstake = ILevrStaking_v1(staking).aprBps(
+            address(this)
+        );
+        assertEq(aprAfterUnstake, 0, "APR should be 0 when no tokens staked");
+
+        // Rate should still exist (stream continues)
+        uint256 rateAfterUnstake = ILevrStaking_v1(staking).rewardRatePerSecond(
+            clankerToken
+        );
+        assertEq(
+            rateAfterUnstake,
+            expectedRate,
+            "rate should continue after unstake"
+        );
+    }
 }
