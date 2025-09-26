@@ -3,8 +3,8 @@ pragma solidity ^0.8.28;
 
 import {IClanker} from "./IClanker.sol";
 
-import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {PoolId} from "@uniswap/v4-core/types/PoolId.sol";
+import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
 
 interface IClankerHook {
     error ETHPoolNotAllowed();
