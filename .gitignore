@@ -14,5 +14,6 @@ docs/
 .env
 broadcast/
 ref
+.DS_Store
 
 *log*
