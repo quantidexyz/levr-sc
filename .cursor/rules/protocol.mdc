@@ -97,7 +97,7 @@ This document defines the contract architecture and implementation details for L
 4. **Treasury Address Prediction** (via `registerDryRun`):
    - **Deterministic**: Treasury address is fully deterministic based on `clankerToken` address
    - **Time-Independent**: Addresses can be predicted at any time before registration
-   - **Method**: Call `factory.registerDryRun(clankerToken, 0)` to get all four addresses
+   - **Method**: Call `factory.registerDryRun(clankerToken)` to get all four addresses
    - **Use Case**: Allows setting treasury as Clanker fee/airdrop recipient before registration
    - **CREATE2 Salt**: Uses `bytes32(uint256(uint160(clankerToken)))` as base salt
    - **Stability**: Same token always produces same addresses regardless of factory state
@@ -239,8 +239,7 @@ interface ILevrFactory_v1 {
     ) external returns (address treasury, address governor, address staking, address stakedToken);
 
     function registerDryRun(
-        address clankerToken,
-        uint256 startNonce
+        address clankerToken
     ) external view returns (address treasury, address governor, address staking, address stakedToken);
 
     function updateConfig(FactoryConfig calldata cfg) external;
@@ -273,7 +272,6 @@ struct FactoryConfig {
 - **`registerDryRun`**: Predicts deployment addresses without authorization checks
   - View function, safe to call at any time
   - Uses CREATE2 address computation with token metadata
-  - `startNonce` parameter is deprecated (kept for backwards compatibility)
   - Queries token metadata (name, symbol, decimals, admin) for accurate predictions
   - Same token always returns same addresses
 

@@ -48,11 +48,8 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
 
   /// @inheritdoc ILevrFactory_v1
   function registerDryRun(
-    address clankerToken,
-    uint256 startNonce
+    address clankerToken
   ) external view override returns (address treasury, address governor, address staking, address stakedToken) {
-    startNonce; // silence unused warning - kept for backwards compatibility
-
     // Query token metadata for accurate address prediction
     uint8 uDec = IERC20Metadata(clankerToken).decimals();
     string memory tokenName = IERC20Metadata(clankerToken).name();

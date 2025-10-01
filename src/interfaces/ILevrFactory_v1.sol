@@ -66,14 +66,12 @@ interface ILevrFactory_v1 {
   ///      Uses CREATE2 with token address as salt for deterministic address prediction.
   ///      Addresses are stable and can be predicted at any time regardless of factory state.
   /// @param clankerToken Underlying Clanker token used as basis for CREATE2 salt
-  /// @param startNonce Deprecated parameter kept for backwards compatibility, not used
   /// @return treasury Predicted treasury address
   /// @return governor Predicted governor address
   /// @return staking Predicted staking module address
   /// @return stakedToken Predicted staked token address
   function registerDryRun(
-    address clankerToken,
-    uint256 startNonce
+    address clankerToken
   ) external view returns (address treasury, address governor, address staking, address stakedToken);
 
   /// @notice Update global protocol configuration.

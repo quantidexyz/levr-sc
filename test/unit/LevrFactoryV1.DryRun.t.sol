@@ -43,7 +43,7 @@ contract LevrFactoryV1_DryRunTest is Test {
       address predictedGovernor,
       address predictedStaking,
       address predictedStakedToken
-    ) = factory.registerDryRun(address(token), 0);
+    ) = factory.registerDryRun(address(token));
 
     // Now actually register
     (address actualTreasury, address actualGovernor, address actualStaking, address actualStakedToken) = factory
@@ -57,9 +57,9 @@ contract LevrFactoryV1_DryRunTest is Test {
   }
 
   function test_registerDryRun_is_deterministic_over_time() public {
-    // Call registerDryRun multiple times with different nonces
+    // Call registerDryRun at different times
     (address pred1Treasury, address pred1Governor, address pred1Staking, address pred1StakedToken) = factory
-      .registerDryRun(address(token), 0);
+      .registerDryRun(address(token));
 
     // Do some other transactions to change factory nonce
     MockERC20 dummy1 = new MockERC20('Dummy1', 'DUM1');
@@ -67,9 +67,9 @@ contract LevrFactoryV1_DryRunTest is Test {
     dummy1; // silence warning
     dummy2; // silence warning
 
-    // Call registerDryRun again with different nonce - should get SAME addresses
+    // Call registerDryRun again - should get SAME addresses
     (address pred2Treasury, address pred2Governor, address pred2Staking, address pred2StakedToken) = factory
-      .registerDryRun(address(token), 999);
+      .registerDryRun(address(token));
 
     // Predictions should be identical regardless of when called or nonce passed
     assertEq(pred1Treasury, pred2Treasury, 'Treasury predictions differ over time');
@@ -82,10 +82,10 @@ contract LevrFactoryV1_DryRunTest is Test {
     MockERC20 token2 = new MockERC20('Test Token 2', 'TEST2');
 
     (address pred1Treasury, address pred1Governor, address pred1Staking, address pred1StakedToken) = factory
-      .registerDryRun(address(token), 0);
+      .registerDryRun(address(token));
 
     (address pred2Treasury, address pred2Governor, address pred2Staking, address pred2StakedToken) = factory
-      .registerDryRun(address(token2), 0);
+      .registerDryRun(address(token2));
 
     // Different tokens should get different addresses
     assertTrue(pred1Treasury != pred2Treasury, 'Same treasury for different tokens');
