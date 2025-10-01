@@ -4,129 +4,112 @@ pragma solidity ^0.8.30;
 /// @title Levr Factory v1 Interface
 /// @notice Global configuration and per-project contract deployment/registry.
 interface ILevrFactory_v1 {
-    // ============ Structs ============
+  // ============ Structs ============
 
-    /// @notice Parameters controlling registration.
-    struct RegisterParams {
-        address treasury;
-        bytes extraConfig;
-    }
+  /// @notice Parameters controlling registration.
+  struct RegisterParams {
+    bytes extraConfig;
+  }
 
-    /// @notice Single numeric tier value.
-    struct TierConfig {
-        uint256 value;
-    }
+  /// @notice Single numeric tier value.
+  struct TierConfig {
+    uint256 value;
+  }
 
-    /// @notice Global protocol configuration stored in the factory.
-    struct FactoryConfig {
-        uint16 protocolFeeBps;
-        uint32 submissionDeadlineSeconds;
-        uint16 maxSubmissionPerType;
-        uint32 streamWindowSeconds;
-        TierConfig[] transferTiers;
-        TierConfig[] stakingBoostTiers;
-        uint256 minWTokenToSubmit;
-        address protocolTreasury;
-    }
+  /// @notice Global protocol configuration stored in the factory.
+  struct FactoryConfig {
+    uint16 protocolFeeBps;
+    uint32 submissionDeadlineSeconds;
+    uint16 maxSubmissionPerType;
+    uint32 streamWindowSeconds;
+    TierConfig[] transferTiers;
+    TierConfig[] stakingBoostTiers;
+    uint256 minWTokenToSubmit;
+    address protocolTreasury;
+  }
 
-    /// @notice Project contract addresses.
-    struct Project {
-        address treasury;
-        address governor;
-        address staking;
-        address stakedToken;
-    }
+  /// @notice Project contract addresses.
+  struct Project {
+    address treasury;
+    address governor;
+    address staking;
+    address stakedToken;
+  }
 
-    // ============ Errors ============
+  // ============ Errors ============
 
-    /// @notice Revert if treasury owner is not the caller.
-    error UnauthorizedTreasuryRegistration();
+  /// @notice Revert if caller is not the token admin.
+  error UnauthorizedCaller();
 
-    // ============ Events ============
+  // ============ Events ============
 
-    /// @notice Emitted when a project is registered.
-    /// @param clankerToken Underlying Clanker token address
-    /// @param treasury Project treasury address
-    /// @param governor Project governor address
-    /// @param wrapper Project wrapper token address
-    event Registered(
-        address indexed clankerToken,
-        address indexed treasury,
-        address governor,
-        address wrapper
-    );
+  /// @notice Emitted when a project is registered.
+  /// @param clankerToken Underlying Clanker token address
+  /// @param treasury Project treasury address
+  /// @param governor Project governor address
+  /// @param stakedToken Project staked token address
+  event Registered(address indexed clankerToken, address indexed treasury, address governor, address stakedToken);
 
-    /// @notice Emitted when configuration is updated.
-    event ConfigUpdated();
+  /// @notice Emitted when configuration is updated.
+  event ConfigUpdated();
 
-    // ============ Functions ============
+  // ============ Functions ============
 
-    /// @notice Register a project and deploy contracts if needed.
-    /// @param clankerToken Underlying token to wrap
-    /// @param params Optional registration params
-    /// @return governor Deployed or discovered governor
-    /// @return wrapper Deployed wrapper token
-    function register(
-        address clankerToken,
-        RegisterParams calldata params
-    ) external returns (address governor, address wrapper);
+  /// @notice Register a project and deploy contracts.
+  /// @dev Only callable by the Clanker token admin. Always deploys fresh treasury.
+  /// @param clankerToken Underlying Clanker token
+  /// @param params Optional registration params
+  /// @return treasury Deployed treasury address
+  /// @return governor Deployed governor address
+  /// @return staking Deployed staking module address
+  /// @return stakedToken Deployed staked token address
+  function register(
+    address clankerToken,
+    RegisterParams calldata params
+  ) external returns (address treasury, address governor, address staking, address stakedToken);
 
-    /// @notice Deploy a standalone headless treasury.
-    /// @dev Useful for pre-provisioning a treasury address before token deployment.
-    ///      The treasury will be associated with a clanker token during register().
-    /// @return treasury The deployed treasury address
-    function deployTreasury() external returns (address treasury);
+  /// @notice Update global protocol configuration.
+  /// @param cfg New configuration
+  function updateConfig(FactoryConfig calldata cfg) external;
 
-    /// @notice Update global protocol configuration.
-    /// @param cfg New configuration
-    function updateConfig(FactoryConfig calldata cfg) external;
+  /// @notice Get the deployed contracts for a given project.
+  /// @param clankerToken Token address used as project key
+  /// @return treasury Project treasury address
+  /// @return governor Project governor address
+  /// @return staking Project staking module address
+  /// @return stakedToken ERC20 representing staked balances
+  function getProjectContracts(
+    address clankerToken
+  ) external view returns (address treasury, address governor, address staking, address stakedToken);
 
-    /// @notice Get the deployed contracts for a given project.
-    /// @param clankerToken Token address used as project key
-    /// @return treasury Project treasury address
-    /// @return governor Project governor address
-    /// @return staking Project staking module address
-    /// @return stakedToken ERC20 representing staked balances
-    function getProjectContracts(
-        address clankerToken
-    )
-        external
-        view
-        returns (
-            address treasury,
-            address governor,
-            address staking,
-            address stakedToken
-        );
+  // Config getters for periphery contracts
+  /// @notice Protocol fee in basis points applied to wrap/unwrap.
+  function protocolFeeBps() external view returns (uint16);
 
-    // Config getters for periphery contracts
-    /// @notice Protocol fee in basis points applied to wrap/unwrap.
-    function protocolFeeBps() external view returns (uint16);
+  /// @notice Proposal execution deadline (seconds).
+  function submissionDeadlineSeconds() external view returns (uint32);
 
-    /// @notice Proposal execution deadline (seconds).
-    function submissionDeadlineSeconds() external view returns (uint32);
+  /// @notice Maximum proposals per type per window (reserved).
+  function maxSubmissionPerType() external view returns (uint16);
 
-    /// @notice Maximum proposals per type per window (reserved).
-    function maxSubmissionPerType() external view returns (uint16);
+  /// @notice Minimum wrapper balance required to submit proposals.
+  function minWTokenToSubmit() external view returns (uint256);
 
-    /// @notice Minimum wrapper balance required to submit proposals.
-    function minWTokenToSubmit() external view returns (uint256);
+  /// @notice Protocol treasury address for fee receipts.
+  function protocolTreasury() external view returns (address);
 
-    /// @notice Protocol treasury address for fee receipts.
-    function protocolTreasury() external view returns (address);
+  /// @notice Reward streaming window for staking accruals (in seconds).
+  function streamWindowSeconds() external view returns (uint32);
 
-    /// @notice Reward streaming window for staking accruals (in seconds).
-    function streamWindowSeconds() external view returns (uint32);
+  /// @notice Number of transfer tiers.
+  function getTransferTierCount() external view returns (uint256);
 
-    /// @notice Number of transfer tiers.
-    function getTransferTierCount() external view returns (uint256);
+  /// @notice Transfer tier value by index.
+  function getTransferTier(uint256 index) external view returns (uint256);
 
-    /// @notice Transfer tier value by index.
-    function getTransferTier(uint256 index) external view returns (uint256);
+  /// @notice Number of staking boost tiers.
+  function getStakingBoostTierCount() external view returns (uint256);
 
-    /// @notice Number of staking boost tiers.
-    function getStakingBoostTierCount() external view returns (uint256);
-
-    /// @notice Staking boost tier value by index.
-    function getStakingBoostTier(uint256 index) external view returns (uint256);
+  /// @notice Staking boost tier value by index.
+  function getStakingBoostTier(uint256 index) external view returns (uint256);
 }

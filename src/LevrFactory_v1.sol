@@ -1,166 +1,121 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 
-import {ILevrFactory_v1} from "./interfaces/ILevrFactory_v1.sol";
-import {ILevrTreasury_v1} from "./interfaces/ILevrTreasury_v1.sol";
+import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
+import {ILevrTreasury_v1} from './interfaces/ILevrTreasury_v1.sol';
+import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 
-import {LevrTreasury_v1} from "./LevrTreasury_v1.sol";
-import {LevrGovernor_v1} from "./LevrGovernor_v1.sol";
-import {LevrStaking_v1} from "./LevrStaking_v1.sol";
-import {LevrStakedToken_v1} from "./LevrStakedToken_v1.sol";
+import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
+import {LevrGovernor_v1} from './LevrGovernor_v1.sol';
+import {LevrStaking_v1} from './LevrStaking_v1.sol';
+import {LevrStakedToken_v1} from './LevrStakedToken_v1.sol';
 
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
-    uint16 public override protocolFeeBps;
-    uint32 public override submissionDeadlineSeconds;
-    uint32 public override streamWindowSeconds;
-    uint16 public override maxSubmissionPerType; // reserved for future rate limits
-    uint256 public override minWTokenToSubmit;
-    address public override protocolTreasury;
+  uint16 public override protocolFeeBps;
+  uint32 public override submissionDeadlineSeconds;
+  uint32 public override streamWindowSeconds;
+  uint16 public override maxSubmissionPerType; // reserved for future rate limits
+  uint256 public override minWTokenToSubmit;
+  address public override protocolTreasury;
 
-    uint256[] private _transferTiers;
-    uint256[] private _stakingBoostTiers;
+  uint256[] private _transferTiers;
+  uint256[] private _stakingBoostTiers;
 
-    mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
+  mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
 
-    constructor(FactoryConfig memory cfg, address owner_) Ownable(owner_) {
-        _applyConfig(cfg);
+  constructor(FactoryConfig memory cfg, address owner_) Ownable(owner_) {
+    _applyConfig(cfg);
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function register(
+    address clankerToken,
+    RegisterParams calldata params
+  ) external override returns (address treasury, address governor, address staking, address stakedToken) {
+    Project storage p = _projects[clankerToken];
+    require(p.staking == address(0), 'ALREADY_REGISTERED');
+
+    // Only token admin can register
+    address tokenAdmin = IClankerToken(clankerToken).admin();
+    if (msg.sender != tokenAdmin) {
+      revert UnauthorizedCaller();
     }
 
-    /// @inheritdoc ILevrFactory_v1
-    function register(
-        address clankerToken,
-        RegisterParams calldata params
-    ) external override returns (address governor, address stakedToken) {
-        Project storage p = _projects[clankerToken];
-        require(p.staking == address(0), "ALREADY_REGISTERED");
+    // Always deploy fresh treasury
+    treasury = address(new LevrTreasury_v1(address(this), msg.sender));
 
-        address treasury = params.treasury;
-        if (treasury == address(0)) {
-            // prefer previously pre-deployed headless treasury if exists
-            if (p.treasury != address(0)) {
-                treasury = p.treasury;
-            } else {
-                treasury = address(
-                    new LevrTreasury_v1(address(this), msg.sender)
-                );
-            }
-        } else {
-            // If providing existing treasury, must be the owner
-            if (LevrTreasury_v1(treasury).owner() != msg.sender) {
-                revert UnauthorizedTreasuryRegistration();
-            }
-        }
+    uint8 uDec = IERC20Metadata(clankerToken).decimals();
+    string memory name_ = string(abi.encodePacked('Levr Staked ', IERC20Metadata(clankerToken).name()));
+    string memory symbol_ = string(abi.encodePacked('s', IERC20Metadata(clankerToken).symbol()));
+    staking = address(new LevrStaking_v1());
+    stakedToken = address(new LevrStakedToken_v1(name_, symbol_, uDec, clankerToken, staking));
+    LevrStaking_v1(staking).initialize(clankerToken, stakedToken, treasury);
+    governor = address(new LevrGovernor_v1(address(this), treasury, stakedToken));
 
-        uint8 uDec = IERC20Metadata(clankerToken).decimals();
-        string memory name_ = string(
-            abi.encodePacked(
-                "Levr Staked ",
-                IERC20Metadata(clankerToken).name()
-            )
-        );
-        string memory symbol_ = string(
-            abi.encodePacked("s", IERC20Metadata(clankerToken).symbol())
-        );
-        address staking = address(new LevrStaking_v1());
-        stakedToken = address(
-            new LevrStakedToken_v1(name_, symbol_, uDec, clankerToken, staking)
-        );
-        LevrStaking_v1(staking).initialize(clankerToken, stakedToken, treasury);
-        governor = address(
-            new LevrGovernor_v1(address(this), treasury, stakedToken)
-        );
+    // Initialize treasury now that governor and underlying are known
+    LevrTreasury_v1(treasury).initialize(governor, clankerToken);
 
-        // Initialize treasury now that governor and underlying are known
-        LevrTreasury_v1(treasury).initialize(governor, clankerToken);
+    p.treasury = treasury;
+    p.governor = governor;
+    p.staking = staking;
+    p.stakedToken = stakedToken;
 
-        p.treasury = treasury;
-        p.governor = governor;
-        p.staking = staking;
-        p.stakedToken = stakedToken;
+    emit Registered(clankerToken, treasury, governor, stakedToken);
+  }
 
-        emit Registered(clankerToken, treasury, governor, stakedToken);
+  /// @inheritdoc ILevrFactory_v1
+  function updateConfig(FactoryConfig calldata cfg) external override onlyOwner {
+    _applyConfig(cfg);
+    emit ConfigUpdated();
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function getProjectContracts(
+    address clankerToken
+  ) external view override returns (address treasury, address governor, address staking, address stakedToken) {
+    Project storage p = _projects[clankerToken];
+    return (p.treasury, p.governor, p.staking, p.stakedToken);
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function getTransferTierCount() external view override returns (uint256) {
+    return _transferTiers.length;
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function getTransferTier(uint256 index) external view override returns (uint256) {
+    return _transferTiers[index];
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function getStakingBoostTierCount() external view override returns (uint256) {
+    return _stakingBoostTiers.length;
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function getStakingBoostTier(uint256 index) external view override returns (uint256) {
+    return _stakingBoostTiers[index];
+  }
+
+  function _applyConfig(FactoryConfig memory cfg) internal {
+    protocolFeeBps = cfg.protocolFeeBps;
+    submissionDeadlineSeconds = cfg.submissionDeadlineSeconds;
+    streamWindowSeconds = cfg.streamWindowSeconds;
+    maxSubmissionPerType = cfg.maxSubmissionPerType;
+    minWTokenToSubmit = cfg.minWTokenToSubmit;
+    protocolTreasury = cfg.protocolTreasury;
+
+    delete _transferTiers;
+    delete _stakingBoostTiers;
+    uint256 i;
+    for (i = 0; i < cfg.transferTiers.length; i++) {
+      _transferTiers.push(cfg.transferTiers[i].value);
     }
-
-    /// @inheritdoc ILevrFactory_v1
-    function updateConfig(
-        FactoryConfig calldata cfg
-    ) external override onlyOwner {
-        _applyConfig(cfg);
-        emit ConfigUpdated();
+    for (i = 0; i < cfg.stakingBoostTiers.length; i++) {
+      _stakingBoostTiers.push(cfg.stakingBoostTiers[i].value);
     }
-
-    /// @inheritdoc ILevrFactory_v1
-    function getProjectContracts(
-        address clankerToken
-    )
-        external
-        view
-        override
-        returns (
-            address treasury,
-            address governor,
-            address staking,
-            address stakedToken
-        )
-    {
-        Project storage p = _projects[clankerToken];
-        return (p.treasury, p.governor, p.staking, p.stakedToken);
-    }
-
-    /// @inheritdoc ILevrFactory_v1
-    function getTransferTierCount() external view override returns (uint256) {
-        return _transferTiers.length;
-    }
-
-    /// @inheritdoc ILevrFactory_v1
-    function getTransferTier(
-        uint256 index
-    ) external view override returns (uint256) {
-        return _transferTiers[index];
-    }
-
-    /// @inheritdoc ILevrFactory_v1
-    function getStakingBoostTierCount()
-        external
-        view
-        override
-        returns (uint256)
-    {
-        return _stakingBoostTiers.length;
-    }
-
-    /// @inheritdoc ILevrFactory_v1
-    function getStakingBoostTier(
-        uint256 index
-    ) external view override returns (uint256) {
-        return _stakingBoostTiers[index];
-    }
-
-    /// @inheritdoc ILevrFactory_v1
-    function deployTreasury() external override returns (address treasury) {
-        // Headless treasury; underlying set later during register
-        treasury = address(new LevrTreasury_v1(address(this), msg.sender));
-    }
-
-    function _applyConfig(FactoryConfig memory cfg) internal {
-        protocolFeeBps = cfg.protocolFeeBps;
-        submissionDeadlineSeconds = cfg.submissionDeadlineSeconds;
-        streamWindowSeconds = cfg.streamWindowSeconds;
-        maxSubmissionPerType = cfg.maxSubmissionPerType;
-        minWTokenToSubmit = cfg.minWTokenToSubmit;
-        protocolTreasury = cfg.protocolTreasury;
-
-        delete _transferTiers;
-        delete _stakingBoostTiers;
-        uint256 i;
-        for (i = 0; i < cfg.transferTiers.length; i++) {
-            _transferTiers.push(cfg.transferTiers[i].value);
-        }
-        for (i = 0; i < cfg.stakingBoostTiers.length; i++) {
-            _stakingBoostTiers.push(cfg.stakingBoostTiers[i].value);
-        }
-    }
+  }
 }
