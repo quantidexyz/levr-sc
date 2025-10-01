@@ -19,10 +19,9 @@ This document defines the contract architecture and implementation details for L
 
 - **Role**: Global configuration owner and deployment/registry entrypoint for projects
 - **Responsibilities**:
-
   - Deploy/clone per-project contracts (`LevrTreasury_v1`, `LevrGovernor_v1`, `LevrStaking_v1`, `LevrStakedToken_v1`)
   - Manage protocol-wide configuration (fees, limits, tiers, deadlines)
-  - Register projects with optional treasury reuse
+  - Register projects (treasury always deployed fresh per registration)
 
 - **Key Storage**:
   - `protocolFeeBps`: Fee in basis points for mint/redeem operations
@@ -37,7 +36,6 @@ This document defines the contract architecture and implementation details for L
 
 - **Role**: Custody and execution contract for project assets and governance decisions
 - **Responsibilities**:
-
   - Hold underlying reserve tokens and receive Clanker airdrops/fees
   - Execute transfers authorized by governor
   - Apply boosts by moving tokens to staking and accruing rewards
@@ -51,7 +49,6 @@ This document defines the contract architecture and implementation details for L
 
 - **Role**: Governance and proposal execution for project treasury decisions
 - **Responsibilities**:
-
   - Handle proposal submissions (transfer requests, staking boosts)
   - Enforce submission limits, deadlines, and tier constraints
   - Execute approved proposals on the treasury
@@ -81,24 +78,25 @@ This document defines the contract architecture and implementation details for L
 
 #### Project Registration
 
-1. **External Call**: `LevrFactory_v1.register(clankerToken, params)`
-
-   - `params.treasury`: Optional existing treasury address
+1. **External Call**: `LevrFactory_v1.register(clankerToken)`
+   - **Access Control**: Only callable by `clankerToken.tokenAdmin()`
    - Validates clankerToken exists and is properly configured
+   - No treasury reuse; always deploys fresh treasury
 
 2. **Contract Deployment**:
-
-   - If `params.treasury` provided: Use existing treasury, validate ownership
-   - Otherwise: Deploy new `LevrTreasury_v1` via clone/factory pattern
+   - Deploy new `LevrTreasury_v1` via clone/factory pattern (deterministic CREATE2)
    - Deploy `LevrGovernor_v1` with treasury as execution target
-
-- Deploy `LevrStaking_v1` and `LevrStakedToken_v1`
+   - Deploy `LevrStaking_v1` and `LevrStakedToken_v1`
 
 3. **Initialization**:
+   - Treasury: Set governor and underlying addresses
+   - Governor: Set treasury address and factory config reference
+   - Staking: Initialize with underlying and staked token; staking controls staked token mint/burn
 
-- Treasury: Set governor and underlying addresses
-- Governor: Set treasury address and factory config reference
-- Staking: Initialize with underlying and staked token; staking controls staked token mint/burn
+4. **Treasury Address Detection**:
+   - Treasury address is deterministic (CREATE2) and can be predicted via simulation
+   - Flow: `simulateDeployToken` → `simulateRegister` → treasury address
+   - Allows setting treasury as Clanker fee/airdrop recipient before registration
 
 #### Staking and Boost Flows
 
@@ -134,7 +132,7 @@ Notes on Clanker airdrops (as used in E2E tests):
 
 **Proposal Creation**:
 
-- Validate `msg.sender` holds ≥ `minWTokenToSubmit` wrapper tokens
+- Validate `msg.sender` holds ≥ `minWTokenToSubmit` staked tokens
 - Check rolling submission limits per type (7-day windows)
 - Validate amount constraints against selected tier
 - Store proposal with deadline (`block.timestamp + submissionDeadlineSeconds`)
@@ -162,10 +160,11 @@ Notes on Clanker airdrops (as used in E2E tests):
 
 #### Invariants
 
-- Wrapper total supply ≤ underlying balance in treasury (accounting for collected fees)
+- Staked token total supply equals total underlying staked
 - Protocol fees forwarded correctly to protocol treasury (no project fee path)
 - Governance proposals execute atomically with proper access controls
 - Reward claims cannot exceed tracked reserves (revert on insufficient liquidity)
+- Treasury balance ≥ sum of governance-allocated amounts
 
 ---
 
@@ -199,16 +198,17 @@ Notes on Clanker airdrops (as used in E2E tests):
 
 #### Access Control
 
-- **Factory**: Only owner can update global configuration
+- **Factory**: Only owner can update global configuration; `register` callable only by `clankerToken.tokenAdmin()`
 - **Treasury**: Only governor can execute transfers and boosts
-- **Governor**: Only wrapper holders meeting minimum balance can propose
-- **Wrapper**: Treasury has exclusive mint/burn rights
+- **Governor**: Only staked token holders meeting minimum balance can propose
+- **Staked Token**: Staking contract has exclusive mint/burn rights
 
 #### Reentrancy Protection
 
 - Non-reentrant guards on all external treasury functions and staking accrual paths
-- Wrap/unwrap operations use checks-effects-interactions pattern
-- Fee calculations completed before token transfers
+- Stake/unstake operations use checks-effects-interactions pattern
+- Reward accrual and claims protected against reentrancy
+- Balance checks completed before token transfers
 
 #### Input Validation
 
@@ -220,7 +220,7 @@ Notes on Clanker airdrops (as used in E2E tests):
 
 - Factory owner can pause registrations if needed
 - Treasury includes emergency withdrawal mechanisms (governance-controlled)
-- Wrapper includes optional pauser role for extreme circumstances
+- Staking includes optional pauser role for extreme circumstances
 
 ---
 
@@ -231,9 +231,8 @@ Notes on Clanker airdrops (as used in E2E tests):
 ```solidity
 interface ILevrFactory_v1 {
     function register(
-        address clankerToken,
-        RegisterParams calldata params
-    ) external returns (address governor, address stakedToken);
+        address clankerToken
+    ) external returns (address treasury, address governor, address staking, address stakedToken);
 
     function updateConfig(FactoryConfig calldata cfg) external;
 
@@ -241,11 +240,6 @@ interface ILevrFactory_v1 {
         external view returns (address treasury, address governor, address staking, address stakedToken);
 
     function streamWindowSeconds() external view returns (uint32);
-}
-
-struct RegisterParams {
-    address treasury; // optional: reuse existing treasury
-    bytes extraConfig; // future extension data
 }
 
 struct FactoryConfig {
@@ -307,10 +301,28 @@ struct Proposal {
 }
 ```
 
-#### LevrERC20
+#### LevrStaking_v1
 
 ```solidity
-interface ILevrERC20 is IERC20 {
+interface ILevrStaking_v1 {
+    function stake(uint256 amount) external;
+    function unstake(uint256 amount, address to) external;
+
+    function accrueRewards(address token, uint256 amount) external;
+    function accrueFromTreasury(address token, uint256 amount, bool pull) external;
+
+    function claimRewards(address[] calldata tokens, address to) external;
+
+    function totalStaked() external view returns (uint256);
+    function stakedToken() external view returns (address);
+    function underlying() external view returns (address);
+}
+```
+
+#### LevrStakedToken_v1
+
+```solidity
+interface ILevrStakedToken_v1 is IERC20 {
     function mint(address to, uint256 amount) external;
     function burn(address from, uint256 amount) external;
 
@@ -318,6 +330,8 @@ interface ILevrERC20 is IERC20 {
     function underlying() external view returns (address);
 }
 ```
+
+Note: Mint/burn functions are exclusively callable by the associated `LevrStaking_v1` contract.
 
 ---
 
@@ -360,15 +374,15 @@ interface ILevrERC20 is IERC20 {
 
 #### Integration Tests
 
-- End-to-end wrap/unwrap flows with fee collection
+- End-to-end stake/unstake flows with reward accrual
 - Governance proposal creation and execution
 - Multi-project registration and isolation
 - Emergency controls and pause functionality
 
 #### Invariant Tests
 
-- Wrapper supply never exceeds treasury underlying balance
-- Fee collections properly accounted and split
+- Staked token supply equals total staked underlying
+- Reward reserves properly tracked per token
 - Governance proposals execute atomically
 - Rolling counters accurately track submission limits
 
@@ -387,6 +401,27 @@ interface ILevrERC20 is IERC20 {
 - **Contract Verification**: All contracts should be verified on deployment networks
 - **Proxy Patterns**: Consider upgradeable proxies for critical infrastructure contracts
 - **Initialization**: Ensure proper initialization order and validation
+
+---
+
+### Key Changes from Prior Versions
+
+#### Removed
+
+- ❌ `deployTreasury()` function (treasury always deployed via `register`)
+- ❌ `treasuryAddress` constructor param
+- ❌ `RegisterParams.treasury` field (no treasury reuse)
+- ❌ Treasury fallback logic (no reusing existing treasuries)
+- ❌ Wrapper token (direct staking of underlying)
+
+#### Added
+
+- ✅ `tokenAdmin` gating on `register` (only token admin can register)
+- ✅ Deterministic treasury detection via simulation (CREATE2)
+- ✅ Staking-based governance (no wrapper intermediary)
+- ✅ Multi-token reward accounting
+- ✅ ERC-1363 auto-credit for reward tokens
+- ✅ Treasury address prediction before registration
 
 ---
 

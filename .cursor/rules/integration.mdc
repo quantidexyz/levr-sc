@@ -2,531 +2,249 @@
 alwaysApply: true
 ---
 
-## Integration Rule v1 — Clanker x Levr Protocol v1 (Base Sepolia Fork + Code/Test wiring)
+# Levr Protocol v1 — Integration Guide
 
-This document standardizes how we integrate the modular `LevrFactory_v1`, `LevrTreasury_v1`, `LevrGovernor_v1`, `LevrStaking_v1`, and `LevrStakedToken_v1` contracts with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
+Integration guide for the modular Levr protocol with Clanker v4 on Base Mainnet.
 
-## Network Fork
+## Quick Reference
 
-- **Chain**: Base Mainnet
-- **Chain ID**: 8453
+### Network
 
-Notes:
+- **Chain**: Base Mainnet (`8453`)
+- **Test Fork**: Use `BASE_RPC_URL` environment variable
 
-- These are read-only anchors for integration and testing. Actual pool deployments (PoolKey/PoolId) are per-token and not global.
-
-## Project Structure
+### Core Architecture
 
 ```
-/Users/anon/Desktop/mguleryuz/levr/
-├── .cursor/rules/
-│   ├── integration_v1.md    # This file
-│   ├── protocol_v1.md       # Levr v1 protocol rules
-│   ├── clanker_sc.mdc       # Clanker Smart Contract overview
-│   └── clanker_sdk.mdc      # Clanker SDK usage
-├── lib/
-│   ├── forge-std/           # Foundry testing utilities
-│   ├── openzeppelin-contracts/  # OZ contracts
-│   └── v4-core/             # Uniswap v4 core contracts
-├── src/
-│   ├── interfaces/
-│   │   ├── ILevrFactory_v1.sol          # Factory interface
-│   │   ├── ILevrTreasury_v1.sol         # Treasury interface
-│   │   ├── ILevrGovernor_v1.sol         # Governor interface
-│   │   ├── ILevrStaking_v1.sol          # Staking module interface
-│   │   ├── ILevrStakedToken_v1.sol      # Staked token interface
-│   │   └── external/                    # External dependencies
-│   │       ├── IPoolManager.sol         # Uniswap v4 PoolManager (minimal)
-│   │       ├── IProtocolFees.sol        # Protocol fee management
-│   │       ├── IClankerHookDynamicFee.sol   # Dynamic fee queries
-│   │       ├── IClankerHookV1.sol           # Main Clanker hook
-│   │       ├── IClankerHook.sol             # Base Clanker hook
-│   │       ├── IClankerHookV1PoolExtension.sol  # Pool extensions
-│   │       ├── IClankerPoolExtensionAllowlist.sol # Extension governance
-│   │       └── IOwnerAdmins.sol           # Admin management
-│   ├── LevrFactory_v1.sol       # Factory contract
-│   ├── LevrTreasury_v1.sol      # Treasury contract (cloneable)
-│   ├── LevrGovernor_v1.sol      # Governor contract (cloneable)
-│   ├── LevrStaking_v1.sol       # Staking contract (per-project)
-│   ├── LevrStakedToken_v1.sol   # Staked ERC20 (per-project)
-│   └── implementations/         # Base implementations for cloning
-├── test/
-│   ├── LevrFactoryV1.t.sol      # Factory tests
-│   ├── LevrTreasuryV1.t.sol     # Treasury tests
-│   ├── LevrGovernorV1.t.sol     # Governor tests
-│   ├── LevrERC20.t.sol          # Wrapper tests
-│   └── integration/             # Cross-contract integration tests
-├── script/
-│   ├── DeployLevrV1.s.sol       # Deployment script
-│   └── ExampleDeploy.s.sol      # Example deployments
-├── foundry.toml                 # Foundry configuration
-├── remappings.txt               # Import remappings
-└── Makefile                     # Build automation
+LevrFactory_v1 (singleton)
+  ↓ register(clankerToken) — gated by tokenAdmin
+  ├─→ LevrTreasury_v1 (per-token clone)
+  ├─→ LevrGovernor_v1 (per-token clone)
+  ├─→ LevrStaking_v1 (per-token instance)
+  └─→ LevrStakedToken_v1 (per-token instance)
 ```
 
-## Dependencies & Remappings
+### Treasury Detection
 
-- **Installed via forge:**
-
-  - `@uniswap/v4-core` - Uniswap v4 core contracts
-  - `forge-std` - Foundry testing utilities
-  - `openzeppelin-contracts` - OpenZeppelin contracts
-  - `clones-with-immutable-args` - ERC-1167 clones with immutable args
-
-- **Remappings** (`remappings.txt`):
-  ```
-  @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
-  @uniswap/v4-core/=lib/v4-core/src/
-  forge-std/=lib/forge-std/src/
-  clones-with-immutable-args/=lib/clones-with-immutable-args/src/
-  ```
-
-## Contract Integration (src/_.sol, src/interfaces/I_.sol)
-
-### Core Contracts (to be implemented)
-
-#### LevrFactory_v1.sol
-
-- **Role**: Global factory and configuration manager
-- **Key Functions**:
-  - `register(clankerToken, params)`: Deploy or reuse treasury, deploy governor and wrapper
-  - `updateConfig(cfg)`: Update protocol-wide configuration
-- `getProjectContracts(clankerToken)`: Query deployed addresses (treasury, governor, staking, stakedToken)
-- `streamWindowSeconds()`: Global streaming window (seconds) for staking accruals
-- **Storage**:
-  - Protocol configuration (fees, limits, tiers)
-  - Project registry mappings
-  - Implementation contract addresses for cloning
-- **Dependencies**: Uses ERC-1167 clones for gas-efficient deployment
-
-#### LevrTreasury_v1.sol (Cloneable)
-
-- **Role**: Per-project asset custody and execution (no wrapping)
-- **Key Functions**:
-  - `transfer(to, amount)`: Execute governance-approved transfers
-  - `applyBoost(amount)`: Move tokens to staking and accrue rewards via `staking.accrueFromTreasury`
-- **Storage**:
-  - Underlying token address
-  - Governor address
-- **Security**: Non-reentrant guards, access control validation
-
-#### LevrGovernor_v1.sol (Cloneable)
-
-- **Role**: Per-project governance and proposal management
-- **Key Functions**:
-  - `proposeTransfer(receiver, amount, reason, tier)`
-  - `proposeBoost(amount, tier)` (executes treasury.applyBoost)
-  - `execute(proposalId)`
-- **Storage**:
-  - Active proposals with metadata
-  - Rolling submission counters (7-day windows)
-  - Proposal execution state
-- **Validation**: Balance checks, tier limits, deadline enforcement
-
-#### LevrStaking_v1.sol (Per-Project)
-
-- **Role**: Escrow underlying stakes; mint/burn staked token; accrue/claim multi-token rewards
-- **Key Functions**:
-  - `stake(amount)`, `unstake(amount, to)`, `claimRewards(tokens, to)`
-  - `accrueRewards(token, amount)`, `accrueFromTreasury(token, amount, pull)`
-- **Storage**:
-  - Underlying, stakedToken, per-token reward accumulators
-
-#### LevrStakedToken_v1.sol (Per-Project)
-
-- **Role**: ERC20 representing staked balances (mint/burn controlled by staking)
-
-### Interfaces (Implemented)
-
-- `src/interfaces/ILevrFactory_v1.sol`: Complete factory interface
-- `src/interfaces/ILevrTreasury_v1.sol`: Treasury interface with wrap/unwrap and execution
-- `src/interfaces/ILevrGovernor_v1.sol`: Governor interface with proposal management
-- `src/interfaces/ILevrStaking_v1.sol`: Staking module interface
-- `src/interfaces/ILevrStakedToken_v1.sol`: Staked token interface
-- External interfaces same as v1 for Clanker integration
-
-### Wiring and Safety
-
-- **Fee Integration**:
-  - LP fees/airdrop recipient SHOULD be set to the staking contract when possible.
-  - If the reward token supports ERC-1363, staking auto-credits via `onTransferReceived` and resets the 3-day stream window using the delta.
-  - Governor-triggered boosts transfer from treasury to staking via `applyBoost`; staking measures received delta inside `accrueFromTreasury(..., true)` and credits immediately (no external sync function).
-- **Access Control**: Governor-only treasury execution, balance-gated proposals
-- **Reentrancy**: Guards on all external treasury functions
-  - Staking accrual paths (`accrueRewards`, `accrueFromTreasury`) are also non-reentrant
-- **Validation**: Input validation at all boundaries
-- **Events**: Comprehensive event emission for all state changes
-
-## Tests Integration (test/\*.t.sol)
-
-### Fork Configuration
-
-- Set env variable `BASE_SEPOLIA_RPC_URL`
-- Foundry CLI:
-  ```bash
-  forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532
-  ```
-- In tests, select fork:
-  ```solidity
-  vm.createSelectFork(vm.envString("BASE_SEPOLIA_RPC_URL"));
-  ```
-
-### Recommended Test Files
-
-#### Factory Tests
-
-- `test/LevrFactoryV1.t.sol`:
-  - Deploy factory with initial config
-  - Register projects with and without existing treasury
-  - Validate deployed contract relationships
-  - Test configuration updates (owner-only)
-
-#### Staking & Treasury Tests
-
-- `test/LevrStakingV1.t.sol`:
-  - Stake/unstake flow and staked token mint/burn
-  - Rewards accrual (delta-based accrueRewards, accrueFromTreasury with treasury pull, ERC-1363 auto-credit) and claims
-  - Reward reserve tracking and liquidity-guarded claims
-- `test/LevrTreasuryV1.Execution.t.sol`:
-  - Governor-authorized transfers and boosts (applyBoost → staking)
-  - Access control validation
-
-#### Governor Tests
-
-- `test/LevrGovernorV1.Proposals.t.sol`:
-  - Proposal creation with balance requirements
-  - Tier validation and submission limits
-  - Rolling window enforcement
-- `test/LevrGovernorV1.Execution.t.sol`:
-  - Deadline enforcement
-  - Atomic execution with treasury calls
-  - Event emission and state cleanup
-
-#### Integration Tests
-
--- `test/integration/LevrV1.EndToEnd.t.sol`:
-
-- Flow: deploy → register → stake → LP fees drop to staking (ERC-1363) → auto stream reset → governor boost → claim
-- Multi-project isolation
-- Protocol fee forwarding; staking rewards accrual for both pool tokens
-
-### Utilities and Mocks
-
-- Mock Clanker tokens for testing without live pools
-- Helper functions for tier configuration setup
-- Event assertion utilities
-- Time manipulation for deadline testing
-
-## Foundry Configuration
-
-### foundry.toml
-
-```toml
-[profile.default]
-src = "src"
-out = "out"
-libs = ["lib"]
-evm_version = "cancun"
-optimizer = true
-optimizer_runs = 1_000_000
-
-[rpc_endpoints]
-base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
-```
-
-### remappings.txt (automatically loaded)
-
-```
-@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
-@uniswap/v4-core/=lib/v4-core/src/
-forge-std/=lib/forge-std/src/
-clones-with-immutable-args/=lib/clones-with-immutable-args/src/
-```
-
-### Build Commands
-
-```bash
-forge build          # Build contracts
-forge build --silent # Build without verbose output
-forge test           # Run tests
-forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532  # Fork tests
-```
-
-### Deployment Scripts
-
-- `script/DeployLevrV1.s.sol`: Deploy factory and set initial configuration
-- Use `StdCheats` and `vm` cheatcodes for testing utilities
+- **Method**: Simulated calls (deterministic CREATE2)
+- **Flow**: `simulateDeployToken` → `simulateRegister` → treasury address
+- **No fallback**: Treasury is always freshly deployed per registration
 
 ---
 
-This rule is normative for v1 integration and testing. Keep contract behavior aligned with the Protocol v1 Rule (`contracts/.cursor/rules/protocol_v1.md`) and Clanker integration expectations.
+## Contracts
 
-## Integration Rule v1 — Clanker x Levr Protocol v1 (Base Sepolia Fork + Code/Test wiring)
+### LevrFactory_v1
 
-This document standardizes how we integrate the modular `LevrFactory_v1`, `LevrTreasury_v1`, `LevrGovernor_v1`, and `LevrERC20` contracts with Clanker v4 on a forked network and how to wire contracts (`src/*.sol`, `src/interfaces/I*.sol`) and tests (`test/*.t.sol`).
+**Role**: Global registry and deployment coordinator
 
-## Network Fork
+**Key Functions**:
 
-- **Chain**: Base Sepolia
-- **Chain ID**: 84532
+- `register(clankerToken)` — Deploy full project stack (treasury, governor, staking, stakedToken)
+  - **Access**: Callable only by `clankerToken.tokenAdmin()`
+  - **Returns**: `(treasury, governor, staking, stakedToken)` addresses
+- `getProjectContracts(clankerToken)` — Query deployed addresses
+- `updateConfig(cfg)` — Update protocol config (owner-only)
+- `streamWindowSeconds()` — Global reward streaming window
 
-### Clanker Contracts (Base Sepolia)
+**Storage**:
 
-| Contract                      | Address                                      |
-| ----------------------------- | -------------------------------------------- |
-| ClankerHookDynamicFeeV1       | `0xBF4983dC0f2F8FE78C5cf8Fc621f294A993728Cc` |
-| ClankerHookStaticFeeV1        | `0x11b51DBC2f7F683b81CeDa83DC0078D57bA328cc` |
-| ClankerSniperAuctionV1        | `0x8CBD6694A9DFc0eF4D1cd333e013B88E7003E10A` |
-| ClankerSniperUtilV1           | `0x4DC6348D38E3e199D7Ea032c8cfE4EbDe94b442A` |
-| ClankerAirdropV1              | `0x5c68F1560a5913c176Fc5238038098970B567B19` |
-| ClankerPoolExtensionAllowlist | `0x532d79D18F0F1782884662fCC1e74581A3289680` |
-
-Notes:
-
-- These are read-only anchors for integration and testing. Actual pool deployments (PoolKey/PoolId) are per-token and not global.
-
-## Project Structure
-
-```
-/Users/anon/Desktop/mguleryuz/levr/
-├── .cursor/rules/
-│   ├── integration_v1.md    # This file
-│   ├── protocol_v1.md       # Levr v1 protocol rules
-│   ├── clanker_sc.mdc       # Clanker Smart Contract overview
-│   └── clanker_sdk.mdc      # Clanker SDK usage
-├── lib/
-│   ├── forge-std/           # Foundry testing utilities
-│   ├── openzeppelin-contracts/  # OZ contracts
-│   └── v4-core/             # Uniswap v4 core contracts
-├── src/
-│   ├── interfaces/
-│   │   ├── ILevrFactory_v1.sol          # Factory interface
-│   │   ├── ILevrTreasury_v1.sol         # Treasury interface
-│   │   ├── ILevrGovernor_v1.sol         # Governor interface
-│   │   ├── ILevrERC20.sol               # Wrapper token interface
-│   │   └── external/                    # External dependencies
-│   │       ├── IPoolManager.sol         # Uniswap v4 PoolManager (minimal)
-│   │       ├── IProtocolFees.sol        # Protocol fee management
-│   │       ├── IClankerHookDynamicFee.sol   # Dynamic fee queries
-│   │       ├── IClankerHookV1.sol           # Main Clanker hook
-│   │       ├── IClankerHook.sol             # Base Clanker hook
-│   │       ├── IClankerHookV1PoolExtension.sol  # Pool extensions
-│   │       ├── IClankerPoolExtensionAllowlist.sol # Extension governance
-│   │       └── IOwnerAdmins.sol           # Admin management
-│   ├── LevrFactory_v1.sol       # Factory contract
-│   ├── LevrTreasury_v1.sol      # Treasury contract (cloneable)
-│   ├── LevrGovernor_v1.sol      # Governor contract (cloneable)
-│   ├── LevrERC20.sol            # Wrapper ERC20 (cloneable)
-│   └── implementations/         # Base implementations for cloning
-├── test/
-│   ├── LevrFactoryV1.t.sol      # Factory tests
-│   ├── LevrTreasuryV1.t.sol     # Treasury tests
-│   ├── LevrGovernorV1.t.sol     # Governor tests
-│   ├── LevrERC20.t.sol          # Wrapper tests
-│   └── integration/             # Cross-contract integration tests
-├── script/
-│   ├── DeployLevrV1.s.sol       # Deployment script
-│   └── ExampleDeploy.s.sol      # Example deployments
-├── foundry.toml                 # Foundry configuration
-├── remappings.txt               # Import remappings
-└── Makefile                     # Build automation
-```
-
-## Dependencies & Remappings
-
-- **Installed via forge:**
-
-  - `@uniswap/v4-core` - Uniswap v4 core contracts
-  - `forge-std` - Foundry testing utilities
-  - `openzeppelin-contracts` - OpenZeppelin contracts
-  - `clones-with-immutable-args` - ERC-1167 clones with immutable args
-
-- **Remappings** (`remappings.txt`):
-  ```
-  @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
-  @uniswap/v4-core/=lib/v4-core/src/
-  forge-std/=lib/forge-std/src/
-  clones-with-immutable-args/=lib/clones-with-immutable-args/src/
-  ```
-
-## Contract Integration (src/_.sol, src/interfaces/I_.sol)
-
-### Core Contracts (to be implemented)
-
-#### LevrFactory_v1.sol
-
-- **Role**: Global factory and configuration manager
-- **Key Functions**:
-  - `register(clankerToken, params)`: Deploy or reuse treasury, deploy governor and wrapper
-  - `updateConfig(cfg)`: Update protocol-wide configuration
-  - `getProjectContracts(clankerToken)`: Query deployed contract addresses
-- **Storage**:
-  - Protocol configuration (fees, limits, tiers)
-  - Project registry mappings
-  - Implementation contract addresses for cloning
-- **Dependencies**: Uses ERC-1167 clones for gas-efficient deployment
-
-#### LevrTreasury_v1.sol (Cloneable)
-
-- **Role**: Per-project asset custody and execution
-- **Key Functions**:
-  - `wrap(amount, to)`: Accept underlying, mint wrapper tokens (minus fees)
-  - `unwrap(amount, to)`: Burn wrapper, return underlying (minus fees)
-  - `transfer(to, amount)`: Execute governance-approved transfers
-  - `applyBoost(amount)`: Apply staking boost
-  - `collectFees()`: Collect Clanker emissions
-- **Storage**:
-  - Underlying token address
-  - Governor and wrapper contract addresses
-  - Fee collection accounting
-- **Security**: Non-reentrant guards, access control validation
-
-#### LevrGovernor_v1.sol (Cloneable)
-
-- **Role**: Per-project governance and proposal management
-- **Key Functions**:
-  - `proposeTransfer(receiver, amount, reason, tier)`: Create transfer proposal
-  - `proposeBoost(amount, tier)`: Create boost proposal
-  - `execute(proposalId)`: Execute approved proposal
-- **Storage**:
-  - Active proposals with metadata
-  - Rolling submission counters (7-day windows)
-  - Proposal execution state
-- **Validation**: Balance checks, tier limits, deadline enforcement
-
-#### LevrERC20.sol (Cloneable)
-
-- **Role**: Fee-enabled wrapper token
-- **Key Functions**:
-  - `mint(to, amount)`: Mint wrapper tokens (treasury-only)
-  - `burn(from, amount)`: Burn wrapper tokens (treasury-only)
-- **Storage**:
-  - Mirrors underlying token decimals
-  - Standard ERC20 balances and allowances
-- **Access**: Treasury has exclusive mint/burn rights
-
-### Interfaces (Implemented)
-
-- `src/interfaces/ILevrFactory_v1.sol`: Complete factory interface
-- `src/interfaces/ILevrTreasury_v1.sol`: Treasury interface with wrap/unwrap and execution
-- `src/interfaces/ILevrGovernor_v1.sol`: Governor interface with proposal management
-- `src/interfaces/ILevrERC20.sol`: Wrapper token interface extending ERC20
-- External interfaces same as v1 for Clanker integration
-
-### Wiring and Safety
-
-- **Fee Integration**: Treasury must be configured as Clanker fee receiver
-- **Access Control**: Governor-only treasury execution, balance-gated proposals
-- **Reentrancy**: Guards on all external treasury functions
-- **Validation**: Input validation at all boundaries
-- **Events**: Comprehensive event emission for all state changes
-
-## Tests Integration (test/\*.t.sol)
-
-### Fork Configuration
-
-- Set env variable `BASE_SEPOLIA_RPC_URL`
-- Foundry CLI:
-  ```bash
-  forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532
-  ```
-- In tests, select fork:
-  ```solidity
-  vm.createSelectFork(vm.envString("BASE_SEPOLIA_RPC_URL"));
-  ```
-
-### Recommended Test Files
-
-#### Factory Tests
-
-- `test/LevrFactoryV1.t.sol`:
-  - Deploy factory with initial config
-  - Register projects with and without existing treasury
-  - Validate deployed contract relationships
-  - Test configuration updates (owner-only)
-
-#### Treasury Tests
-
-- `test/LevrTreasuryV1.WrapUnwrap.t.sol`:
-  - End-to-end wrap/unwrap with fee calculation
-  - Fee split between protocol and project treasury
-  - Balance invariants and accounting
-- `test/LevrTreasuryV1.Execution.t.sol`:
-  - Governor-authorized transfers and boosts
-  - Access control validation
-  - Reentrancy protection
-
-#### Governor Tests
-
-- `test/LevrGovernorV1.Proposals.t.sol`:
-  - Proposal creation with balance requirements
-  - Tier validation and submission limits
-  - Rolling window enforcement
-- `test/LevrGovernorV1.Execution.t.sol`:
-  - Deadline enforcement
-  - Atomic execution with treasury calls
-  - Event emission and state cleanup
-
-#### Integration Tests (E2E)
-
-- `test/e2e/LevrV1.Registration.t.sol`: end-to-end registration and basic boost
-- `test/e2e/LevrV1.Governance.t.sol`: proposal gating, tiers, deadlines
-- `test/e2e/LevrV1.Treasury.t.sol`: treasury flows including Clanker airdrop claim → boost → streaming claims
-
-Clanker airdrop specifics for E2E:
-
-- Extension data: `(admin, merkleRoot, lockupDuration, vestingDuration)` with lockup ≥ 1 day
-- Leaf format: `keccak256(bytes.concat(keccak256(abi.encode(recipient, amount))))`
-- Helper: `test/utils/MerkleAirdropHelper.sol` builds a single-leaf root for treasury-only claims
-- Claim: `IClankerAirdrop.claim(token, treasury, amount, proof)`; proof empty for single-leaf
-
-### Utilities and Mocks
-
-- Mock Clanker tokens for testing without live pools
-- Helper functions for tier configuration setup
-- Event assertion utilities
-- Time manipulation for deadline testing
-
-## Foundry Configuration
-
-### foundry.toml
-
-```toml
-[profile.default]
-src = "src"
-out = "out"
-libs = ["lib"]
-evm_version = "cancun"
-optimizer = true
-optimizer_runs = 1_000_000
-
-[rpc_endpoints]
-base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
-```
-
-### remappings.txt (automatically loaded)
-
-```
-@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
-@uniswap/v4-core/=lib/v4-core/src/
-forge-std/=lib/forge-std/src/
-clones-with-immutable-args/=lib/clones-with-immutable-args/src/
-```
-
-### Build Commands
-
-```bash
-forge build          # Build contracts
-forge build --silent # Build without verbose output
-forge test           # Run tests
-forge test --fork-url $BASE_SEPOLIA_RPC_URL --chain-id 84532  # Fork tests
-```
-
-### Deployment Scripts
-
-- `script/DeployLevrV1.s.sol`: Deploy factory and set initial configuration
-- Use `StdCheats` and `vm` cheatcodes for testing utilities
+- Protocol config (fees, limits, tiers)
+- Project registry mapping: `clankerToken → (treasury, governor, staking, stakedToken)`
+- Implementation addresses for cloning
 
 ---
 
-This rule is normative for v1 integration and testing. Keep contract behavior aligned with the Protocol v1 Rule (`contracts/.cursor/rules/protocol_v1.md`) and Clanker integration expectations.
+### LevrTreasury_v1
+
+**Role**: Asset custody and execution (no wrapping)
+
+**Key Functions**:
+
+- `transfer(to, amount)` — Execute governor-approved transfers
+- `applyBoost(amount)` — Move tokens to staking; accrue rewards via `staking.accrueFromTreasury`
+
+**Access**: Governor-only execution
+**Security**: Non-reentrant, balance validation
+
+---
+
+### LevrGovernor_v1
+
+**Role**: Governance and proposal lifecycle
+
+**Key Functions**:
+
+- `proposeTransfer(receiver, amount, reason, tier)` — Create transfer proposal
+- `proposeBoost(amount, tier)` — Create staking boost proposal
+- `execute(proposalId)` — Execute approved proposal
+
+**Validation**:
+
+- Balance requirements (min staked token to submit)
+- Tier limits (transfer amounts, boost percentages)
+- Rolling submission windows (7-day)
+  - Deadline enforcement
+
+---
+
+### LevrStaking_v1
+
+**Role**: Stake escrow and multi-token reward accounting
+
+**Key Functions**:
+
+- `stake(amount)`, `unstake(amount, to)`
+- `accrueRewards(token, amount)` — Manual accrual (delta-based)
+- `accrueFromTreasury(token, amount, pull)` — Boost accrual; measures received delta
+- `claimRewards(tokens[], to)` — Multi-token claim
+
+**Features**:
+
+- 1:1 mint/burn of `LevrStakedToken_v1`
+- Per-token reward accumulators
+- Reward reserve tracking (prevents double-counting)
+- ERC-1363 auto-credit via `onTransferReceived`
+- Liquidity-guarded claims (revert if insufficient reserves)
+
+---
+
+### LevrStakedToken_v1
+
+**Role**: ERC20 representation of staked balances
+
+**Control**: Exclusive mint/burn by staking contract
+
+---
+
+## Fee & Reward Integration
+
+### Clanker Fee Recipients
+
+**Recommended**: Set LP fees/airdrop recipient to **staking contract**
+
+### Reward Accrual Paths
+
+1. **ERC-1363 auto-credit**: Staking auto-detects transfers via `onTransferReceived`; resets stream window
+2. **Governor boosts**: `treasury.applyBoost(amount)` → `staking.accrueFromTreasury(token, amount, pull=true)`
+3. **Manual accrual**: External caller via `staking.accrueRewards(token, amount)`
+
+### Delta-Based Accounting
+
+- Staking measures **actual received delta** (not trusting `amount` parameter)
+- Prevents double-accounting; tracks reward reserves per token
+- Claims gated by liquidity checks
+
+---
+
+## Testing Strategy
+
+### Fork Setup
+
+All tests inherit from `BaseForkTest` for automatic Base Mainnet forking:
+
+```solidity
+import {BaseForkTest} from "test/utils/BaseForkTest.sol";
+
+contract MyTest is BaseForkTest {
+    // Fork automatically set up in BaseForkTest.setUp()
+    // Chain ID: 8453 (Base Mainnet)
+}
+```
+
+**RPC Configuration** (in `foundry.toml`):
+
+```toml
+[rpc_endpoints]
+base-mainnet = "${BASE_RPC_URL}"
+```
+
+### Test Coverage
+
+**Unit Tests**:
+
+- `test/unit/LevrFactoryV1.t.sol` — Registration, config updates, access control
+- `test/unit/LevrStakingV1.t.sol` — Stake/unstake, accrual paths, claims
+- `test/unit/LevrGovernorV1.t.sol` — Proposal gating, tiers, execution
+- `test/unit/LevrTreasuryV1.t.sol` — Governor execution, access validation
+
+**E2E Tests**:
+
+- `test/e2e/LevrV1.Registration.t.sol` — Full registration flow
+- `test/e2e/LevrV1.Governance.t.sol` — Proposal lifecycle with deadlines
+- `test/e2e/LevrV1.Treasury.t.sol` — Airdrop → boost → claim flow
+
+**Helpers**:
+
+- `test/utils/BaseForkTest.sol` — Base test contract with automatic fork setup
+- `test/utils/MerkleAirdropHelper.sol` — Single-leaf Merkle root builder for treasury-only airdrops
+- `test/mocks/MockERC1363.sol` — ERC-1363 compatible token for testing auto-credit
+
+---
+
+## Deployment
+
+### Scripts
+
+- `script/DeployLevrFactoryDevnet.s.sol` — Deploy factory with initial config
+
+### Example Flow
+
+```solidity
+// 1. Deploy factory
+LevrFactory_v1 factory = new LevrFactory_v1(config);
+
+// 2. Simulate to get treasury address (off-chain)
+address predictedTreasury = simulateRegister(clankerToken);
+
+// 3. Deploy Clanker token with predictedTreasury as fee/airdrop recipient
+// (Clanker deployment step)
+
+// 4. Register (on-chain, as tokenAdmin)
+vm.prank(tokenAdmin);
+(address treasury, address governor, address staking, address stakedToken)
+= factory.register(clankerToken);
+
+// Treasury address matches prediction
+assert(treasury == predictedTreasury);
+```
+
+---
+
+## Security Checklist
+
+- [x] `register` gated by `tokenAdmin` only
+- [x] Treasury execution gated by governor
+- [x] Proposal submission gated by min staked token balance
+- [x] Non-reentrant guards on treasury + staking accrual paths
+- [x] Delta-based reward accounting (no trust of `amount` params)
+- [x] Reward reserve tracking to prevent overdraw
+- [x] Tier validation and rolling submission limits
+- [x] Deadline enforcement on proposals
+
+---
+
+## Key Changes from Prior Versions
+
+### Removed
+
+- ❌ `deployTreasury()` function (treasury always deployed via `register`)
+- ❌ `treasuryAddress` constructor param
+- ❌ Treasury fallback logic (no reusing existing treasuries)
+- ❌ Wrapper token (direct staking of underlying)
+
+### Added
+
+- ✅ `tokenAdmin` gating on `register`
+- ✅ Deterministic treasury detection via simulation
+- ✅ Staking-based governance (no wrapper intermediary)
+- ✅ Multi-token reward accounting
+- ✅ ERC-1363 auto-credit for reward tokens
+
+---
+
+## References
+
+- **Protocol Rules**: `.cursor/rules/protocol.mdc`
+- **Clanker Integration**: `.cursor/rules/clanker_sc.mdc`, `.cursor/rules/clanker_sdk.mdc`
+- **Foundry Docs**: [book.getfoundry.sh](https://book.getfoundry.sh)
