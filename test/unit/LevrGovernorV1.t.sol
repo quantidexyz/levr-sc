@@ -40,10 +40,7 @@ contract LevrGovernorV1_UnitTest is Test {
       protocolTreasury: protocolTreasury
     });
     factory = new LevrFactory_v1(cfg, address(this));
-    (, address govAddr, , ) = factory.register(
-      address(underlying),
-      ILevrFactory_v1.RegisterParams({extraConfig: bytes('')})
-    );
+    (, address govAddr, , ) = factory.register(address(underlying));
     (address t, , address st, address s) = factory.getProjectContracts(address(underlying));
     governor = LevrGovernor_v1(govAddr);
     treasury = LevrTreasury_v1(payable(t));
@@ -106,10 +103,7 @@ contract LevrGovernorV1_UnitTest is Test {
       protocolTreasury: protocolTreasury
     });
     LevrFactory_v1 fac = new LevrFactory_v1(cfg, address(this));
-    (, address govAddr, , ) = fac.register(
-      address(underlying),
-      ILevrFactory_v1.RegisterParams({extraConfig: bytes('')})
-    );
+    (, address govAddr, , ) = fac.register(address(underlying));
     (address t, , address st, ) = fac.getProjectContracts(address(underlying));
     LevrGovernor_v1 g = LevrGovernor_v1(govAddr);
 

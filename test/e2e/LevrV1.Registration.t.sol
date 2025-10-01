@@ -80,7 +80,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
       revert('Token does not implement symbol()');
     }
 
-    (, address governor, , ) = factory.register(clankerToken, ILevrFactory_v1.RegisterParams({extraConfig: bytes('')}));
+    (, address governor, , ) = factory.register(clankerToken);
 
     (address treasury, , address staking, address stakedToken) = factory.getProjectContracts(clankerToken);
     assertTrue(treasury != address(0) && staking != address(0) && stakedToken != address(0));
@@ -136,7 +136,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     });
 
     // Register project
-    factory.register(clankerToken, ILevrFactory_v1.RegisterParams({extraConfig: bytes('')}));
+    factory.register(clankerToken);
     (, , address staking, ) = factory.getProjectContracts(clankerToken);
     assertTrue(staking != address(0));
 

@@ -57,10 +57,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
       pairedFeeBps: 100
     });
 
-    (, governor, , ) = LevrFactory_v1(fac).register(
-      clankerToken,
-      ILevrFactory_v1.RegisterParams({extraConfig: bytes('')})
-    );
+    (, governor, , ) = LevrFactory_v1(fac).register(clankerToken);
     (treasury, , staking, stakedToken) = LevrFactory_v1(fac).getProjectContracts(clankerToken);
   }
 

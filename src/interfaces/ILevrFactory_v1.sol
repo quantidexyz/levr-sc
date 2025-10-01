@@ -6,11 +6,6 @@ pragma solidity ^0.8.30;
 interface ILevrFactory_v1 {
   // ============ Structs ============
 
-  /// @notice Parameters controlling registration.
-  struct RegisterParams {
-    bytes extraConfig;
-  }
-
   /// @notice Single numeric tier value.
   struct TierConfig {
     uint256 value;
@@ -58,15 +53,28 @@ interface ILevrFactory_v1 {
   /// @notice Register a project and deploy contracts.
   /// @dev Only callable by the Clanker token admin. Always deploys fresh treasury.
   /// @param clankerToken Underlying Clanker token
-  /// @param params Optional registration params
   /// @return treasury Deployed treasury address
   /// @return governor Deployed governor address
   /// @return staking Deployed staking module address
   /// @return stakedToken Deployed staked token address
   function register(
-    address clankerToken,
-    RegisterParams calldata params
+    address clankerToken
   ) external returns (address treasury, address governor, address staking, address stakedToken);
+
+  /// @notice Simulate registration to predict deployed addresses without authorization checks.
+  /// @dev This function does not revert for authorization and does not modify state.
+  ///      Uses CREATE2 with token address as salt for deterministic address prediction.
+  ///      Addresses are stable and can be predicted at any time regardless of factory state.
+  /// @param clankerToken Underlying Clanker token used as basis for CREATE2 salt
+  /// @param startNonce Deprecated parameter kept for backwards compatibility, not used
+  /// @return treasury Predicted treasury address
+  /// @return governor Predicted governor address
+  /// @return staking Predicted staking module address
+  /// @return stakedToken Predicted staked token address
+  function registerDryRun(
+    address clankerToken,
+    uint256 startNonce
+  ) external view returns (address treasury, address governor, address staking, address stakedToken);
 
   /// @notice Update global protocol configuration.
   /// @param cfg New configuration

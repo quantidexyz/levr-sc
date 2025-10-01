@@ -38,7 +38,7 @@ contract LevrTreasuryV1_UnitTest is Test {
     });
     factory = new LevrFactory_v1(cfg, address(this));
 
-    (, governor, , ) = factory.register(address(underlying), ILevrFactory_v1.RegisterParams({extraConfig: bytes('')}));
+    (, governor, , ) = factory.register(address(underlying));
     (address t, , address st, address s) = factory.getProjectContracts(address(underlying));
     treasury = LevrTreasury_v1(payable(t));
     staking = LevrStaking_v1(st);

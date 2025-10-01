@@ -60,10 +60,7 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
       pairedFeeBps: 100
     });
 
-    (, governor, , ) = LevrFactory_v1(fac).register(
-      clankerToken,
-      ILevrFactory_v1.RegisterParams({extraConfig: bytes('')})
-    );
+    (, governor, , ) = LevrFactory_v1(fac).register(clankerToken);
     (treasury, , staking, stakedToken) = LevrFactory_v1(fac).getProjectContracts(clankerToken);
   }
 
@@ -134,13 +131,10 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
     address bob = address(0x2222);
     vm.prank(bob);
     vm.expectRevert(ILevrFactory_v1.UnauthorizedCaller.selector);
-    factory.register(sharedClankerToken, ILevrFactory_v1.RegisterParams({extraConfig: bytes('')}));
+    factory.register(sharedClankerToken);
 
     // Only the tokenAdmin (this contract) can successfully register
-    (, address governor, , ) = factory.register(
-      sharedClankerToken,
-      ILevrFactory_v1.RegisterParams({extraConfig: bytes('')})
-    );
+    (, address governor, , ) = factory.register(sharedClankerToken);
 
     // Verify registration succeeded
     (, address registeredGovernor, , ) = factory.getProjectContracts(sharedClankerToken);

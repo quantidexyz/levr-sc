@@ -83,20 +83,24 @@ This document defines the contract architecture and implementation details for L
    - Validates clankerToken exists and is properly configured
    - No treasury reuse; always deploys fresh treasury
 
-2. **Contract Deployment**:
-   - Deploy new `LevrTreasury_v1` via clone/factory pattern (deterministic CREATE2)
-   - Deploy `LevrGovernor_v1` with treasury as execution target
-   - Deploy `LevrStaking_v1` and `LevrStakedToken_v1`
+2. **Contract Deployment** (CREATE2-based):
+   - Deploy new `LevrTreasury_v1` using CREATE2 with `clankerToken` address as salt
+   - Deploy `LevrStaking_v1` using CREATE2 with same base salt
+   - Deploy `LevrStakedToken_v1` using CREATE2 with derived salt (`keccak256(baseSalt, 'stakedToken')`)
+   - Deploy `LevrGovernor_v1` using CREATE2 with derived salt (`keccak256(baseSalt, 'governor')`)
 
 3. **Initialization**:
    - Treasury: Set governor and underlying addresses
    - Governor: Set treasury address and factory config reference
    - Staking: Initialize with underlying and staked token; staking controls staked token mint/burn
 
-4. **Treasury Address Detection**:
-   - Treasury address is deterministic (CREATE2) and can be predicted via simulation
-   - Flow: `simulateDeployToken` → `simulateRegister` → treasury address
-   - Allows setting treasury as Clanker fee/airdrop recipient before registration
+4. **Treasury Address Prediction** (via `registerDryRun`):
+   - **Deterministic**: Treasury address is fully deterministic based on `clankerToken` address
+   - **Time-Independent**: Addresses can be predicted at any time before registration
+   - **Method**: Call `factory.registerDryRun(clankerToken, 0)` to get all four addresses
+   - **Use Case**: Allows setting treasury as Clanker fee/airdrop recipient before registration
+   - **CREATE2 Salt**: Uses `bytes32(uint256(uint160(clankerToken)))` as base salt
+   - **Stability**: Same token always produces same addresses regardless of factory state
 
 #### Staking and Boost Flows
 
@@ -234,6 +238,11 @@ interface ILevrFactory_v1 {
         address clankerToken
     ) external returns (address treasury, address governor, address staking, address stakedToken);
 
+    function registerDryRun(
+        address clankerToken,
+        uint256 startNonce
+    ) external view returns (address treasury, address governor, address staking, address stakedToken);
+
     function updateConfig(FactoryConfig calldata cfg) external;
 
     function getProjectContracts(address clankerToken)
@@ -253,6 +262,20 @@ struct FactoryConfig {
     address protocolTreasury;
 }
 ```
+
+**Key Function Details**:
+
+- **`register`**: Deploys all project contracts using CREATE2 with deterministic addresses
+  - Only callable by `clankerToken.tokenAdmin()`
+  - Uses token address as base salt for CREATE2 deployments
+  - Returns addresses of all deployed contracts
+
+- **`registerDryRun`**: Predicts deployment addresses without authorization checks
+  - View function, safe to call at any time
+  - Uses CREATE2 address computation with token metadata
+  - `startNonce` parameter is deprecated (kept for backwards compatibility)
+  - Queries token metadata (name, symbol, decimals, admin) for accurate predictions
+  - Same token always returns same addresses
 
 #### LevrTreasury_v1
 
@@ -339,9 +362,12 @@ Note: Mint/burn functions are exclusively callable by the associated `LevrStakin
 
 #### Contract Deployment
 
-- Use minimal proxy (ERC-1167) clones for gas-efficient deployment
+- Use CREATE2 for deterministic deployment addresses based on token address
+- Base salt: `bytes32(uint256(uint160(clankerToken)))`
+- Derived salts for stakedToken and governor: `keccak256(abi.encodePacked(baseSalt, 'stakedToken'))` / `'governor'`
 - Initialize contracts with immutable references to avoid storage costs
 - Validate all constructor parameters and relationships
+- Same token address always deploys to same addresses (prevents duplicate registrations)
 
 #### Storage Optimization
 
@@ -410,18 +436,21 @@ Note: Mint/burn functions are exclusively callable by the associated `LevrStakin
 
 - ❌ `deployTreasury()` function (treasury always deployed via `register`)
 - ❌ `treasuryAddress` constructor param
-- ❌ `RegisterParams.treasury` field (no treasury reuse)
+- ❌ `RegisterParams` struct entirely (register takes only clankerToken parameter)
 - ❌ Treasury fallback logic (no reusing existing treasuries)
 - ❌ Wrapper token (direct staking of underlying)
+- ❌ Nonce-based address prediction (replaced with CREATE2)
 
 #### Added
 
 - ✅ `tokenAdmin` gating on `register` (only token admin can register)
-- ✅ Deterministic treasury detection via simulation (CREATE2)
+- ✅ **CREATE2-based deterministic deployment** - addresses based on token address
+- ✅ **`registerDryRun` function** - predict addresses at any time before registration
 - ✅ Staking-based governance (no wrapper intermediary)
 - ✅ Multi-token reward accounting
 - ✅ ERC-1363 auto-credit for reward tokens
-- ✅ Treasury address prediction before registration
+- ✅ Time-independent address prediction (stable regardless of factory state)
+- ✅ Sub-salt derivation for stakedToken and governor to prevent collisions
 
 ---
 
