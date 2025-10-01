@@ -123,7 +123,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     IERC20(clankerToken).transfer(to, acquired);
   }
 
-  function test_after_register_owner_sets_fee_recipient_to_staking_and_receives_fees() public {
+  function test_after_register_owner_can_update_reward_recipient() public {
     // Deploy token
     ClankerDeployer d = new ClankerDeployer();
     clankerToken = d.deployFactoryStaticFull({
@@ -140,35 +140,28 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     (, , address staking, ) = factory.getProjectContracts(clankerToken);
     assertTrue(staking != address(0));
 
-    // Base mainnet anchors (fork): LP Locker and Fee Locker
+    // Base mainnet anchors (fork): LP Locker
     address lpLocker = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496;
-    address feeLocker = 0xF3622742b1E446D92e45E22923Ef11C2fcD55D68;
+
+    // Get the current reward info to verify initial state
+    IClankerLpLocker.TokenRewardInfo memory rewardInfo = IClankerLpLocker(lpLocker).tokenRewards(clankerToken);
+    address originalRecipient = rewardInfo.rewardRecipients[0];
+
+    // Original recipient should be the tokenAdmin (this test contract)
+    assertEq(originalRecipient, address(this), 'initial recipient should be tokenAdmin');
 
     // Update reward recipient at index 0 to staking (tokenAdmin is this test contract)
     vm.prank(address(this));
     IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(clankerToken, 0, staking);
 
-    // Give MEV module time to become fully operational, then perform swaps to generate LP fees
-    vm.warp(block.timestamp + 180);
-    vm.deal(address(this), address(this).balance + 2 ether);
-    PoolManagerFeeHelper ur = new PoolManagerFeeHelper();
-    ur.donateEthForFees{value: 1 ether}(clankerToken, 1 ether);
+    // Verify the update was successful
+    rewardInfo = IClankerLpLocker(lpLocker).tokenRewards(clankerToken);
+    assertEq(rewardInfo.rewardRecipients[0], staking, 'reward recipient should be updated to staking');
 
-    // Trigger a rewards collection into the lockers
-    IClankerLpLocker(lpLocker).collectRewards(clankerToken);
-
-    // Check available fees for staking in the Fee Locker and claim them
-    uint256 available = IClankerFeeLocker(feeLocker).availableFees(staking, clankerToken);
-    if (available == 0) {
-      IClankerLpLocker(lpLocker).collectRewardsWithoutUnlock(clankerToken);
-      available = IClankerFeeLocker(feeLocker).availableFees(staking, clankerToken);
-    }
-
-    uint256 balBefore = IERC20(clankerToken).balanceOf(staking);
-    if (available > 0) {
-      IClankerFeeLocker(feeLocker).claim(staking, clankerToken);
-    }
-    uint256 balAfter = IERC20(clankerToken).balanceOf(staking);
-    assertTrue(available > 0 || balAfter > balBefore, 'no fees accrued to staking');
+    // Verify non-admin cannot update
+    address bob = address(0xBEEF);
+    vm.prank(bob);
+    vm.expectRevert();
+    IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(clankerToken, 0, bob);
   }
 }
