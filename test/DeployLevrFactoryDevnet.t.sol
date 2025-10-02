@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from "forge-std/Test.sol";
+import {ERC2771Forwarder} from "@openzeppelin/contracts/metatx/ERC2771Forwarder.sol";
 import {ILevrFactory_v1} from "../src/interfaces/ILevrFactory_v1.sol";
 import {LevrFactory_v1} from "../src/LevrFactory_v1.sol";
 
@@ -11,6 +12,9 @@ import {LevrFactory_v1} from "../src/LevrFactory_v1.sol";
  */
 contract DeployLevrFactoryDevnetTest is Test {
     function test_DevnetConfig() public {
+        // Deploy forwarder first (matching deployment script)
+        ERC2771Forwarder forwarder = new ERC2771Forwarder("LevrForwarder");
+        
         // Test the same configuration values used in the deployment script
         uint16 protocolFeeBps = 50;
         uint32 submissionDeadlineSeconds = 604800;
@@ -28,8 +32,8 @@ contract DeployLevrFactoryDevnetTest is Test {
             protocolTreasury: protocolTreasury
         });
 
-        // Deploy factory with config
-        LevrFactory_v1 factory = new LevrFactory_v1(config, address(this));
+        // Deploy factory with forwarder
+        LevrFactory_v1 factory = new LevrFactory_v1(config, address(this), address(forwarder));
 
         // Verify configuration
         assertEq(factory.protocolFeeBps(), protocolFeeBps);

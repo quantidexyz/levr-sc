@@ -2,17 +2,22 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
 contract LevrFactoryV1_SecurityTest is Test {
   LevrFactory_v1 internal factory;
+  ERC2771Forwarder internal forwarder;
   address internal protocolTreasury = address(0xFEE);
   address internal alice = address(0xA11CE);
   address internal bob = address(0xB0B);
 
   function setUp() public {
+    // Deploy forwarder first
+    forwarder = new ERC2771Forwarder('LevrForwarder');
+    
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
@@ -21,7 +26,7 @@ contract LevrFactoryV1_SecurityTest is Test {
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
   }
 
   function test_cannot_register_with_someone_elses_treasury() public {

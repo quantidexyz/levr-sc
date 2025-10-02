@@ -58,6 +58,11 @@ All contracts extend ERC2771ContextBase → support meta-transactions
   - Returns `Project{treasury, governor, staking, stakedToken}`
 - `getProjectContracts(clankerToken)` → Query registered project
 - `trustedForwarder()` → Returns the deployed forwarder address
+- `executeTransaction(target, data)` → Execute arbitrary call from factory
+  - Public function, anyone can call
+  - Useful for chaining transactions in forwarder multicall
+  - Executes call FROM the factory contract
+  - Returns `(success, returnData)`
 
 **Security**: Only deployer can use their prepared contracts; only tokenAdmin can register
 
@@ -288,11 +293,12 @@ struct PreparedContracts {
 
 ### Meta-Transaction Forwarder
 
-- **Auto-deployed**: `ERC2771Forwarder` created in factory constructor
-- **Name**: "LevrForwarder"
+- **Deployment**: `ERC2771Forwarder` must be deployed BEFORE factory
+- **Name**: "LevrForwarder" (by convention)
 - **Access**: `factory.trustedForwarder()` returns address
-- **Immutable**: Cannot be changed after deployment
+- **Immutable**: Cannot be changed after factory deployment
 - **Shared**: All projects from same factory use same forwarder
+- **Factory Support**: Factory itself supports meta-tx for `prepareForDeployment()` and `register()`
 
 ---
 
@@ -301,11 +307,11 @@ struct PreparedContracts {
 ### Registration
 
 ```solidity
-// Factory setup (forwarder deployed automatically)
-LevrFactory_v1 factory = new LevrFactory_v1(config, owner);
+// Deploy forwarder FIRST
+ERC2771Forwarder forwarder = new ERC2771Forwarder("LevrForwarder");
 
-// Get forwarder address
-address forwarder = factory.trustedForwarder();
+// Factory setup with forwarder
+LevrFactory_v1 factory = new LevrFactory_v1(config, owner, address(forwarder));
 
 // Prepare before Clanker
 (address treas, address stak) = factory.prepareForDeployment();
@@ -348,6 +354,38 @@ ERC2771Forwarder.ForwardRequestData memory request = ERC2771Forwarder.ForwardReq
 forwarder.execute(request);
 ```
 
+### Chaining Transactions with Multicall
+
+The factory's `executeTransaction` enables complex multi-step operations via the forwarder's multicall:
+
+```solidity
+// Example: Approve token + Stake in one meta-transaction
+ITransactionForwarder_v1.SingleCall[] memory calls = new ITransactionForwarder_v1.SingleCall[](2);
+
+// Call 1: Factory executes approve on token (user is msg.sender via forwarder)
+calls[0] = ITransactionForwarder_v1.SingleCall({
+  target: address(factory),
+  allowFailure: false,
+  callData: abi.encodeWithSelector(
+    LevrFactory_v1.executeTransaction.selector,
+    address(token),
+    abi.encodeWithSelector(IERC20.approve.selector, address(staking), amount)
+  )
+});
+
+// Call 2: Direct stake call
+calls[1] = ITransactionForwarder_v1.SingleCall({
+  target: address(staking),
+  allowFailure: false,
+  callData: abi.encodeWithSelector(LevrStaking_v1.stake.selector, amount)
+});
+
+// User signs, relayer executes multicall
+forwarder.executeMulticall(calls);
+```
+
+**Note**: `executeTransaction` executes FROM the factory, so it's useful for intermediate calls in multicall chains, not for operations requiring specific caller identity.
+
 ### Creating New Contracts
 
 **ALWAYS extend ERC2771ContextBase for user-facing contracts:**
@@ -386,6 +424,13 @@ contract MyContract is ERC2771ContextBase {
 - `test/e2e/LevrV1.MetaTx.t.sol` - Meta-transaction tests
 - `test/unit/LevrStakingV1.t.sol` - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
 
+**Test Coverage for executeTransaction**:
+
+- Test basic call execution via factory
+- Test with forwarder multicall chaining
+- Test return values (success, returnData)
+- Test reentrancy protection
+
 ## Key Design Decisions
 
 ### Why No CREATE2 / Deterministic Addresses?
@@ -412,12 +457,14 @@ contract MyContract is ERC2771ContextBase {
 - **Type safety**: All addresses grouped logically
 - **Easier usage**: `proj.treasury` vs destructuring
 
-### Why Auto-Deploy Forwarder in Constructor?
+### Why Forwarder Deployed Before Factory?
 
-- **Simplicity**: No manual forwarder configuration needed
+- **Factory Meta-TX Support**: Factory needs to extend ERC2771Context to support meta-tx on `prepareForDeployment()` and `register()`
+- **Constructor Limitation**: Can't deploy forwarder in constructor if factory extends ERC2771Context
 - **Security**: Immutable, can't be changed after deployment
 - **Consistency**: All projects from same factory share same forwarder
 - **Standard**: Uses OpenZeppelin's battle-tested `ERC2771Forwarder`
+- **Factory Functions**: `prepareForDeployment()` and `register()` use `_msgSender()` for meta-tx support
 
 ### Why ERC2771ContextBase Base Contract?
 
@@ -425,6 +472,14 @@ contract MyContract is ERC2771ContextBase {
 - **Maintainability**: One place to update ERC2771 logic
 - **Multiple Inheritance**: Cleanly resolves ReentrancyGuard + ERC2771Context diamond pattern
 - **Type Safety**: Enforces consistent meta-transaction handling
+
+### Why executeTransaction on Factory?
+
+- **Multicall Composition**: Enables complex transaction chains via forwarder
+- **Flexible Routing**: Factory can execute arbitrary calls in multicall sequences
+- **Gas Efficiency**: Single meta-tx signature covers multiple operations
+- **Public Access**: No restrictions - useful for composability
+- **Reentrancy Protected**: Uses ReentrancyGuard for safety
 
 ---
 
@@ -450,6 +505,7 @@ contract MyContract is ERC2771ContextBase {
 - ✅ **ERC2771 meta-transaction support** - gasless transactions via forwarder
 - ✅ **ERC2771ContextBase** - base contract eliminates duplication
 - ✅ **Auto-deployed forwarder** - no manual configuration needed
+- ✅ **executeTransaction** - factory function for multicall composition
 
 ---
 
@@ -458,17 +514,21 @@ contract MyContract is ERC2771ContextBase {
 ### ✅ DO
 
 - **ALWAYS** use `_msgSender()` instead of `msg.sender` in user-facing contracts
-- **ALWAYS** extend `ERC2771ContextBase` for new contracts that need meta-tx support
+- **ALWAYS** extend `ERC2771ContextBase` for new contracts that need meta-tx support (except factory)
+- **ALWAYS** deploy forwarder BEFORE factory
 - **ALWAYS** pass `trustedForwarder` to contract constructors
 - **ALWAYS** update this rule when making architectural changes
+- **CONSIDER** using `factory.executeTransaction()` for complex multicall sequences
 
 ### ❌ DON'T
 
-- **NEVER** use `msg.sender` directly in contracts that extend ERC2771ContextBase
+- **NEVER** use `msg.sender` directly in contracts that extend ERC2771ContextBase or ERC2771Context
 - **NEVER** create custom forwarders - use OpenZeppelin's `ERC2771Forwarder`
-- **NEVER** manually override `_msgSender()/_msgData()/_contextSuffixLength()` - use base contract
+- **NEVER** manually override `_msgSender()/_msgData()/_contextSuffixLength()` - use base contract (except factory)
 - **NEVER** forget to pass `address(0)` for forwarder in unit tests if not testing meta-tx
 - **NEVER** let this rule become outdated
+- **NEVER** deploy factory before deploying forwarder
+- **AVOID** using `executeTransaction` for operations requiring specific caller identity
 
 ---
 
@@ -478,7 +538,7 @@ contract MyContract is ERC2771ContextBase {
 src/
   base/
     ERC2771ContextBase.sol         # Base contract for meta-tx support
-  LevrFactory_v1.sol                # Factory (deploys forwarder in constructor)
+  LevrFactory_v1.sol                # Factory (extends ERC2771Context directly)
   LevrTreasury_v1.sol               # Extends ERC2771ContextBase
   LevrGovernor_v1.sol               # Extends ERC2771ContextBase
   LevrStaking_v1.sol                # Extends ERC2771ContextBase

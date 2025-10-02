@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {BaseForkTest} from '../utils/BaseForkTest.sol';
+import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
@@ -14,6 +15,7 @@ import {MerkleAirdropHelper} from '../utils/MerkleAirdropHelper.sol';
 
 contract LevrV1_TreasuryE2E is BaseForkTest {
   LevrFactory_v1 internal factory;
+  ERC2771Forwarder internal forwarder;
 
   address internal protocolTreasury = address(0xFEE);
   address internal clankerToken;
@@ -24,6 +26,9 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
     super.setUp();
     clankerFactory = DEFAULT_CLANKER_FACTORY;
 
+    // Deploy forwarder first
+    forwarder = new ERC2771Forwarder('LevrForwarder');
+
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
@@ -32,7 +37,7 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
   }
 
   function _deployRegisterAndGet(

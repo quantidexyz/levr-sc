@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -12,6 +13,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 contract LevrTreasuryV1_UnitTest is Test {
   MockERC20 internal underlying;
   LevrFactory_v1 internal factory;
+  ERC2771Forwarder internal forwarder;
   LevrTreasury_v1 internal treasury;
   LevrStaking_v1 internal staking;
   LevrStakedToken_v1 internal sToken;
@@ -22,6 +24,9 @@ contract LevrTreasuryV1_UnitTest is Test {
   function setUp() public {
     underlying = new MockERC20('Token', 'TKN');
 
+    // Deploy forwarder first
+    forwarder = new ERC2771Forwarder('LevrForwarder');
+
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
@@ -30,7 +35,7 @@ contract LevrTreasuryV1_UnitTest is Test {
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
 
     ILevrFactory_v1.Project memory project = factory.register(address(underlying));
     governor = project.governor;

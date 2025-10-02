@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
@@ -14,6 +15,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 contract LevrGovernorV1_UnitTest is Test {
   MockERC20 internal underlying;
   LevrFactory_v1 internal factory;
+  ERC2771Forwarder internal forwarder;
   LevrGovernor_v1 internal governor;
   LevrTreasury_v1 internal treasury;
   LevrStaking_v1 internal staking;
@@ -25,6 +27,9 @@ contract LevrGovernorV1_UnitTest is Test {
   function setUp() public {
     underlying = new MockERC20('Token', 'TKN');
 
+    // Deploy forwarder first
+    forwarder = new ERC2771Forwarder('LevrForwarder');
+
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 3 days,
@@ -33,7 +38,7 @@ contract LevrGovernorV1_UnitTest is Test {
       minWTokenToSubmit: 100 ether,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
     ILevrFactory_v1.Project memory project = factory.register(address(underlying));
     governor = LevrGovernor_v1(project.governor);
     treasury = LevrTreasury_v1(payable(project.treasury));
@@ -81,6 +86,7 @@ contract LevrGovernorV1_UnitTest is Test {
 
   function test_rate_limit_per_week_enforced() public {
     // Create a new factory with maxSubmissionPerType = 1
+    ERC2771Forwarder fwd = new ERC2771Forwarder('LevrForwarder');
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 3 days,
@@ -89,7 +95,7 @@ contract LevrGovernorV1_UnitTest is Test {
       minWTokenToSubmit: 1,
       protocolTreasury: protocolTreasury
     });
-    LevrFactory_v1 fac = new LevrFactory_v1(cfg, address(this));
+    LevrFactory_v1 fac = new LevrFactory_v1(cfg, address(this), address(fwd));
     ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
     LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
 

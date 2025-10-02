@@ -3,7 +3,9 @@ pragma solidity ^0.8.30;
 
 import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
-import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
+import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
+import {ERC2771Context} from '@openzeppelin/contracts/metatx/ERC2771Context.sol';
+import {Context} from '@openzeppelin/contracts/utils/Context.sol';
 
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
@@ -13,38 +15,40 @@ import {LevrGovernor_v1} from './LevrGovernor_v1.sol';
 import {LevrStaking_v1} from './LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from './LevrStakedToken_v1.sol';
 
-contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
+contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Context {
   uint16 public override protocolFeeBps;
   uint32 public override submissionDeadlineSeconds;
   uint32 public override streamWindowSeconds;
   uint16 public override maxSubmissionPerType; // reserved for future rate limits
   uint256 public override minWTokenToSubmit;
   address public override protocolTreasury;
-  address public override trustedForwarder; // immutable forwarder deployed in constructor
 
   mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
 
   // Track prepared contracts by deployer
   mapping(address => ILevrFactory_v1.PreparedContracts) private _preparedContracts; // deployer => PreparedContracts
 
-  constructor(FactoryConfig memory cfg, address owner_) Ownable(owner_) {
-    // Deploy OpenZeppelin ERC2771Forwarder
-    trustedForwarder = address(new ERC2771Forwarder('LevrForwarder'));
+  constructor(
+    FactoryConfig memory cfg,
+    address owner_,
+    address trustedForwarder_
+  ) Ownable(owner_) ERC2771Context(trustedForwarder_) {
     _applyConfig(cfg);
   }
 
   /// @inheritdoc ILevrFactory_v1
   function prepareForDeployment() external override returns (address treasury, address staking) {
+    address deployer = _msgSender();
     // Deploy treasury and staking without salt - each call creates independent contracts
-    treasury = address(new LevrTreasury_v1(address(this), trustedForwarder));
+    treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
 
     // Deploy staking (will be initialized later during register)
-    staking = address(new LevrStaking_v1(trustedForwarder));
+    staking = address(new LevrStaking_v1(trustedForwarder()));
 
     // Store prepared contracts for this deployer (overwrites previous if called again)
-    _preparedContracts[msg.sender] = ILevrFactory_v1.PreparedContracts({treasury: treasury, staking: staking});
+    _preparedContracts[deployer] = ILevrFactory_v1.PreparedContracts({treasury: treasury, staking: staking});
 
-    emit PreparationComplete(msg.sender, treasury, staking);
+    emit PreparationComplete(deployer, treasury, staking);
   }
 
   /// @inheritdoc ILevrFactory_v1
@@ -52,14 +56,16 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     Project storage p = _projects[clankerToken];
     require(p.staking == address(0), 'ALREADY_REGISTERED');
 
+    address caller = _msgSender();
+
     // Only token admin can register
     address tokenAdmin = IClankerToken(clankerToken).admin();
-    if (msg.sender != tokenAdmin) {
+    if (caller != tokenAdmin) {
       revert UnauthorizedCaller();
     }
 
     // Look up prepared contracts for this caller
-    ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[msg.sender];
+    ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[caller];
 
     return _deployProject(clankerToken, prepared.treasury, prepared.staking);
   }
@@ -73,14 +79,14 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     if (treasury_ != address(0)) {
       project.treasury = treasury_;
     } else {
-      project.treasury = address(new LevrTreasury_v1(address(this), trustedForwarder));
+      project.treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
     }
 
     // Use provided staking or deploy new one
     if (staking_ != address(0)) {
       project.staking = staking_;
     } else {
-      project.staking = address(new LevrStaking_v1(trustedForwarder));
+      project.staking = address(new LevrStaking_v1(trustedForwarder()));
     }
 
     // Deploy stakedToken
@@ -94,7 +100,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
 
     // Deploy governor
     project.governor = address(
-      new LevrGovernor_v1(address(this), project.treasury, project.stakedToken, trustedForwarder)
+      new LevrGovernor_v1(address(this), project.treasury, project.stakedToken, trustedForwarder())
     );
 
     // Initialize treasury now that governor and underlying are known
@@ -119,6 +125,15 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     return _projects[clankerToken];
   }
 
+  /// @inheritdoc ILevrFactory_v1
+  function executeTransaction(
+    address target,
+    bytes calldata data
+  ) external nonReentrant returns (bool success, bytes memory returnData) {
+    // Execute the call - note this executes FROM the factory contract
+    (success, returnData) = target.call(data);
+  }
+
   function _applyConfig(FactoryConfig memory cfg) internal {
     protocolFeeBps = cfg.protocolFeeBps;
     submissionDeadlineSeconds = cfg.submissionDeadlineSeconds;
@@ -126,6 +141,25 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     maxSubmissionPerType = cfg.maxSubmissionPerType;
     minWTokenToSubmit = cfg.minWTokenToSubmit;
     protocolTreasury = cfg.protocolTreasury;
-    // Note: trustedForwarder is immutable and set in constructor
+  }
+
+  /// @dev Override trustedForwarder to satisfy both ILevrFactory_v1 and ERC2771Context
+  function trustedForwarder() public view override(ERC2771Context, ILevrFactory_v1) returns (address) {
+    return ERC2771Context.trustedForwarder();
+  }
+
+  /// @dev Override required for multiple inheritance (Ownable and ReentrancyGuard use Context)
+  function _msgSender() internal view override(Context, ERC2771Context) returns (address) {
+    return ERC2771Context._msgSender();
+  }
+
+  /// @dev Override required for multiple inheritance
+  function _msgData() internal view override(Context, ERC2771Context) returns (bytes calldata) {
+    return ERC2771Context._msgData();
+  }
+
+  /// @dev Override required for multiple inheritance
+  function _contextSuffixLength() internal view override(Context, ERC2771Context) returns (uint256) {
+    return ERC2771Context._contextSuffixLength();
   }
 }

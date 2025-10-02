@@ -35,7 +35,11 @@ contract LevrV1MetaTxTest is Test {
   function setUp() public {
     user = vm.addr(userPrivateKey);
 
-    // Deploy factory (forwarder is deployed automatically in constructor)
+    // Deploy forwarder first
+    vm.prank(owner);
+    forwarder = new ERC2771Forwarder('LevrForwarder');
+
+    // Deploy factory with forwarder
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 100,
       submissionDeadlineSeconds: 7 days,
@@ -46,10 +50,7 @@ contract LevrV1MetaTxTest is Test {
     });
 
     vm.prank(owner);
-    factory = new LevrFactory_v1(cfg, owner);
-
-    // Get the deployed forwarder
-    forwarder = ERC2771Forwarder(factory.trustedForwarder());
+    factory = new LevrFactory_v1(cfg, owner, address(forwarder));
 
     // Prepare deployment
     vm.prank(user);

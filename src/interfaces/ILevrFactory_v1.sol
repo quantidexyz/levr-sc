@@ -103,4 +103,15 @@ interface ILevrFactory_v1 {
 
   /// @notice Trusted forwarder for ERC2771 meta-transactions.
   function trustedForwarder() external view returns (address);
+
+  /// @notice Execute an arbitrary transaction (useful for chaining with forwarder multicall).
+  /// @dev Executes a call from the factory contract. Useful for composing transactions.
+  /// @param target The contract to call
+  /// @param data The calldata to send
+  /// @return success Whether the call succeeded
+  /// @return returnData The return data from the call
+  function executeTransaction(
+    address target,
+    bytes calldata data
+  ) external returns (bool success, bytes memory returnData);
 }
