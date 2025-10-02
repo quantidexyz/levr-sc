@@ -75,19 +75,15 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
     }
     assertTrue(treasBal > 0, 'treasury needs funds');
 
-    // Valid transfer within tier 0 and within treasury balance
+    // Valid transfer (custom amount, no tiers)
     address receiver = address(0xBEEF);
     uint256 recvBefore = IERC20(clankerToken).balanceOf(receiver);
-    uint256 cap = ILevrFactory_v1(address(factory)).getTransferTier(0);
-    uint256 amount = treasBal < cap ? treasBal : cap;
+    uint256 amount = treasBal / 2; // Transfer half
     if (amount == 0) amount = treasBal;
     uint256 pid = ILevrGovernor_v1(governor).proposeTransfer(receiver, amount, 'ops');
     ILevrGovernor_v1(governor).execute(pid);
     uint256 recvAfter = IERC20(clankerToken).balanceOf(receiver);
     assertEq(recvAfter - recvBefore, amount);
-
-    // Exceed tier limit should revert
-    // Remove tier validation test since tiers are removed
   }
 
   function test_min_balance_gating_and_deadline_enforcement() public {

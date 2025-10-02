@@ -25,17 +25,11 @@ contract LevrGovernorV1_UnitTest is Test {
   function setUp() public {
     underlying = new MockERC20('Token', 'TKN');
 
-    ILevrFactory_v1.TierConfig[] memory ttiers = new ILevrFactory_v1.TierConfig[](1);
-    ttiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    ILevrFactory_v1.TierConfig[] memory btiers = new ILevrFactory_v1.TierConfig[](1);
-    btiers[0] = ILevrFactory_v1.TierConfig({value: 5_000 ether});
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 3 days,
       maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      transferTiers: ttiers,
-      stakingBoostTiers: btiers,
       minWTokenToSubmit: 100 ether,
       protocolTreasury: protocolTreasury
     });
@@ -67,9 +61,9 @@ contract LevrGovernorV1_UnitTest is Test {
     governor.execute(pid);
   }
 
-  function test_proposeBoost_respectsTier_limit_and_deadline() public {
+  function test_proposeBoost_and_deadline_enforcement() public {
     vm.startPrank(user);
-    uint256 pid = governor.proposeBoost(4_000 ether, 0);
+    uint256 pid = governor.proposeBoost(4_000 ether);
     vm.stopPrank();
 
     // move time forward but before deadline
@@ -78,7 +72,7 @@ contract LevrGovernorV1_UnitTest is Test {
 
     // After deadline should revert
     vm.startPrank(user);
-    uint256 pid2 = governor.proposeBoost(4_000 ether, 0);
+    uint256 pid2 = governor.proposeBoost(4_000 ether);
     vm.stopPrank();
     vm.warp(block.timestamp + 4 days);
     vm.expectRevert(ILevrGovernor_v1.DeadlinePassed.selector);
@@ -87,17 +81,11 @@ contract LevrGovernorV1_UnitTest is Test {
 
   function test_rate_limit_per_week_enforced() public {
     // Create a new factory with maxSubmissionPerType = 1
-    ILevrFactory_v1.TierConfig[] memory ttiers = new ILevrFactory_v1.TierConfig[](1);
-    ttiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    ILevrFactory_v1.TierConfig[] memory btiers = new ILevrFactory_v1.TierConfig[](1);
-    btiers[0] = ILevrFactory_v1.TierConfig({value: 5_000 ether});
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 3 days,
       maxSubmissionPerType: 1,
       streamWindowSeconds: 3 days,
-      transferTiers: ttiers,
-      stakingBoostTiers: btiers,
       minWTokenToSubmit: 1,
       protocolTreasury: protocolTreasury
     });

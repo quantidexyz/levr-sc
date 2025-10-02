@@ -22,17 +22,11 @@ contract LevrTreasuryV1_UnitTest is Test {
   function setUp() public {
     underlying = new MockERC20('Token', 'TKN');
 
-    ILevrFactory_v1.TierConfig[] memory ttiers = new ILevrFactory_v1.TierConfig[](1);
-    ttiers[0] = ILevrFactory_v1.TierConfig({value: type(uint256).max});
-    ILevrFactory_v1.TierConfig[] memory btiers = new ILevrFactory_v1.TierConfig[](1);
-    btiers[0] = ILevrFactory_v1.TierConfig({value: type(uint256).max});
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
       maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      transferTiers: ttiers,
-      stakingBoostTiers: btiers,
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
