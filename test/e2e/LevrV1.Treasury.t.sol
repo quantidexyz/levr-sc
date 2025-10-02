@@ -24,23 +24,11 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
     super.setUp();
     clankerFactory = DEFAULT_CLANKER_FACTORY;
 
-    ILevrFactory_v1.TierConfig[] memory transferTiers = new ILevrFactory_v1.TierConfig[](3);
-    transferTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    transferTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    transferTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
-    ILevrFactory_v1.TierConfig[] memory boostTiers = new ILevrFactory_v1.TierConfig[](3);
-    boostTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    boostTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    boostTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
       maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      transferTiers: transferTiers,
-      stakingBoostTiers: boostTiers,
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
@@ -97,7 +85,7 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
     IERC20(clankerToken).transfer(treasury, boostAmt);
 
     // Boost via governor using treasury funds
-    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt, 0);
+    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt);
     ILevrGovernor_v1(governor).execute(pid);
 
     // Let some time pass and claim; with streaming, claim ~ boostAmt * elapsed/window
@@ -168,7 +156,7 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
     // Fund treasury and execute boost
     uint256 boostAmt = userGot - stakeAmt;
     IERC20(clankerToken).transfer(treasury, boostAmt);
-    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt, 0);
+    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt);
     ILevrGovernor_v1(governor).execute(pid);
 
     // Now check APR and reward rate calculations

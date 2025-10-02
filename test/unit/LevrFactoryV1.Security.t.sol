@@ -13,23 +13,11 @@ contract LevrFactoryV1_SecurityTest is Test {
   address internal bob = address(0xB0B);
 
   function setUp() public {
-    ILevrFactory_v1.TierConfig[] memory transferTiers = new ILevrFactory_v1.TierConfig[](3);
-    transferTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    transferTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    transferTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
-    ILevrFactory_v1.TierConfig[] memory boostTiers = new ILevrFactory_v1.TierConfig[](3);
-    boostTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    boostTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    boostTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
       maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      transferTiers: transferTiers,
-      stakingBoostTiers: boostTiers,
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });

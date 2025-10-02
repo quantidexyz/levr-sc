@@ -27,23 +27,11 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     super.setUp();
     clankerFactory = DEFAULT_CLANKER_FACTORY;
 
-    ILevrFactory_v1.TierConfig[] memory transferTiers = new ILevrFactory_v1.TierConfig[](3);
-    transferTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    transferTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    transferTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
-    ILevrFactory_v1.TierConfig[] memory boostTiers = new ILevrFactory_v1.TierConfig[](3);
-    boostTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    boostTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    boostTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
       maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      transferTiers: transferTiers,
-      stakingBoostTiers: boostTiers,
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
@@ -105,7 +93,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     }
 
     // Governor can create a boost proposal and execute it immediately
-    uint256 pid = ILevrGovernor_v1(project.governor).proposeBoost(boostAmount, 0);
+    uint256 pid = ILevrGovernor_v1(project.governor).proposeBoost(boostAmount);
     ILevrGovernor_v1(project.governor).execute(pid);
 
     // Treasury balance read works on live token

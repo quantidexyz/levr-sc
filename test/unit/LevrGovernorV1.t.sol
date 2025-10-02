@@ -59,7 +59,7 @@ contract LevrGovernorV1_UnitTest is Test {
 
   function test_propose_and_execute_transfer() public {
     vm.startPrank(user);
-    uint256 pid = governor.proposeTransfer(address(0xB0B), 500 ether, 'ops', 0);
+    uint256 pid = governor.proposeTransfer(address(0xB0B), 500 ether, 'ops');
     ILevrGovernor_v1.Proposal memory p = governor.getProposal(pid);
     assertEq(uint8(p.proposalType), uint8(ILevrGovernor_v1.ProposalType.Transfer));
     vm.stopPrank();
@@ -118,16 +118,16 @@ contract LevrGovernorV1_UnitTest is Test {
 
     // First transfer proposal succeeds
     vm.prank(u);
-    g.proposeTransfer(address(0xB0B), 1 ether, 'ops', 0);
+    g.proposeTransfer(address(0xB0B), 1 ether, 'ops');
 
     // Second transfer proposal in same week should revert
     vm.prank(u);
     vm.expectRevert(ILevrGovernor_v1.RateLimitExceeded.selector);
-    g.proposeTransfer(address(0xB0B), 1 ether, 'ops2', 0);
+    g.proposeTransfer(address(0xB0B), 1 ether, 'ops2');
 
     // Move to next week and it should succeed again
     vm.warp(block.timestamp + 8 days);
     vm.prank(u);
-    g.proposeTransfer(address(0xB0B), 1 ether, 'ops3', 0);
+    g.proposeTransfer(address(0xB0B), 1 ether, 'ops3');
   }
 }

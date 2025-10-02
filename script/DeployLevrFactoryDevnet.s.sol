@@ -36,16 +36,6 @@ contract DeployLevrFactoryDevnet is Script {
     uint16 constant MAX_SUBMISSION_PER_TYPE = 10;
     uint256 constant MIN_WTOKEN_TO_SUBMIT = 100e18; // 100 tokens (assuming 18 decimals)
 
-    // Transfer tiers in underlying token units (assuming 18 decimals)
-    uint256[] private TRANSFER_TIERS = [1e18, 10e18, 100e18]; // 1, 10, 100 tokens
-
-    // Staking boost tiers as percentages (0.03 = 3%, 0.6 = 60%, 0.9 = 90%)
-    uint256[] private STAKING_BOOST_TIERS = [
-        30000000000000000,
-        600000000000000000,
-        900000000000000000
-    ];
-
     function run() external {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(privateKey);
@@ -63,53 +53,21 @@ contract DeployLevrFactoryDevnet is Script {
         console.log("");
 
         // Build factory configuration
-        ILevrFactory_v1.TierConfig[]
-            memory transferTiers = new ILevrFactory_v1.TierConfig[](
-                TRANSFER_TIERS.length
-            );
-        for (uint256 i = 0; i < TRANSFER_TIERS.length; i++) {
-            transferTiers[i] = ILevrFactory_v1.TierConfig({
-                value: TRANSFER_TIERS[i]
-            });
-        }
-
-        ILevrFactory_v1.TierConfig[]
-            memory stakingBoostTiers = new ILevrFactory_v1.TierConfig[](
-                STAKING_BOOST_TIERS.length
-            );
-        for (uint256 i = 0; i < STAKING_BOOST_TIERS.length; i++) {
-            stakingBoostTiers[i] = ILevrFactory_v1.TierConfig({
-                value: STAKING_BOOST_TIERS[i]
-            });
-        }
-
-        ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1
-            .FactoryConfig({
-                protocolFeeBps: PROTOCOL_FEE_BPS,
-                submissionDeadlineSeconds: SUBMISSION_DEADLINE_SECONDS,
-                maxSubmissionPerType: MAX_SUBMISSION_PER_TYPE,
-                streamWindowSeconds: STREAM_WINDOW_SECONDS,
-                transferTiers: transferTiers,
-                stakingBoostTiers: stakingBoostTiers,
-                minWTokenToSubmit: MIN_WTOKEN_TO_SUBMIT,
-                protocolTreasury: protocolTreasury
-            });
+        ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: PROTOCOL_FEE_BPS,
+            submissionDeadlineSeconds: SUBMISSION_DEADLINE_SECONDS,
+            maxSubmissionPerType: MAX_SUBMISSION_PER_TYPE,
+            streamWindowSeconds: STREAM_WINDOW_SECONDS,
+            minWTokenToSubmit: MIN_WTOKEN_TO_SUBMIT,
+            protocolTreasury: protocolTreasury
+        });
 
         console.log("Factory Configuration:");
         console.log("- Protocol Fee BPS:", config.protocolFeeBps);
-        console.log(
-            "- Submission Deadline (seconds):",
-            config.submissionDeadlineSeconds
-        );
+        console.log("- Submission Deadline (seconds):", config.submissionDeadlineSeconds);
         console.log("- Stream Window (seconds):", config.streamWindowSeconds);
         console.log("- Max Submissions Per Type:", config.maxSubmissionPerType);
-        console.log(
-            "- Min WToken to Submit:",
-            config.minWTokenToSubmit / 1e18,
-            "tokens"
-        );
-        console.log("- Transfer Tiers Count:", transferTiers.length);
-        console.log("- Staking Boost Tiers Count:", stakingBoostTiers.length);
+        console.log("- Min WToken to Submit:", config.minWTokenToSubmit / 1e18, "tokens");
         console.log("");
 
         vm.startBroadcast(privateKey);
@@ -130,31 +88,11 @@ contract DeployLevrFactoryDevnet is Script {
         // Verify factory configuration
         console.log("=== FACTORY CONFIGURATION VERIFICATION ===");
         console.log("protocolFeeBps:", factory.protocolFeeBps());
-        console.log(
-            "submissionDeadlineSeconds:",
-            factory.submissionDeadlineSeconds()
-        );
+        console.log("submissionDeadlineSeconds:", factory.submissionDeadlineSeconds());
         console.log("streamWindowSeconds:", factory.streamWindowSeconds());
         console.log("maxSubmissionPerType:", factory.maxSubmissionPerType());
         console.log("minWTokenToSubmit:", factory.minWTokenToSubmit());
         console.log("protocolTreasury:", factory.protocolTreasury());
-        console.log("transferTierCount:", factory.getTransferTierCount());
-        console.log(
-            "stakingBoostTierCount:",
-            factory.getStakingBoostTierCount()
-        );
-
-        // Log transfer tiers
-        console.log("Transfer Tiers:");
-        for (uint256 i = 0; i < factory.getTransferTierCount(); i++) {
-            console.log("-", i, ":", factory.getTransferTier(i));
-        }
-
-        // Log staking boost tiers
-        console.log("Staking Boost Tiers:");
-        for (uint256 i = 0; i < factory.getStakingBoostTierCount(); i++) {
-            console.log("-", i, ":", factory.getStakingBoostTier(i));
-        }
 
         console.log("");
         console.log("=== NEXT STEPS ===");

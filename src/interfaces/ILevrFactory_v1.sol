@@ -6,19 +6,12 @@ pragma solidity ^0.8.30;
 interface ILevrFactory_v1 {
   // ============ Structs ============
 
-  /// @notice Single numeric tier value.
-  struct TierConfig {
-    uint256 value;
-  }
-
   /// @notice Global protocol configuration stored in the factory.
   struct FactoryConfig {
     uint16 protocolFeeBps;
     uint32 submissionDeadlineSeconds;
     uint16 maxSubmissionPerType;
     uint32 streamWindowSeconds;
-    TierConfig[] transferTiers;
-    TierConfig[] stakingBoostTiers;
     uint256 minWTokenToSubmit;
     address protocolTreasury;
   }
@@ -107,16 +100,4 @@ interface ILevrFactory_v1 {
 
   /// @notice Reward streaming window for staking accruals (in seconds).
   function streamWindowSeconds() external view returns (uint32);
-
-  /// @notice Number of transfer tiers.
-  function getTransferTierCount() external view returns (uint256);
-
-  /// @notice Transfer tier value by index.
-  function getTransferTier(uint256 index) external view returns (uint256);
-
-  /// @notice Number of staking boost tiers.
-  function getStakingBoostTierCount() external view returns (uint256);
-
-  /// @notice Staking boost tier value by index.
-  function getStakingBoostTier(uint256 index) external view returns (uint256);
 }

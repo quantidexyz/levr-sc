@@ -20,7 +20,6 @@ interface ILevrGovernor_v1 {
     /// @param receiver Target address (for Transfer)
     /// @param amount Amount associated with the proposal
     /// @param reason Human-readable description
-    /// @param tier Tier index for validation
     /// @param deadline Timestamp for execution deadline
     /// @param executed Whether proposal has been executed
     struct Proposal {
@@ -29,7 +28,6 @@ interface ILevrGovernor_v1 {
         address receiver;
         uint256 amount;
         string reason;
-        uint8 tier;
         uint32 deadline;
         bool executed;
     }
@@ -39,7 +37,7 @@ interface ILevrGovernor_v1 {
     /// @notice Revert if caller lacks permission or balance requirements.
     error NotAuthorized();
 
-    /// @notice Revert if amount is zero or exceeds tier limit.
+    /// @notice Revert if amount is zero.
     error InvalidAmount();
 
     /// @notice Revert if proposal deadline has passed.
@@ -47,9 +45,6 @@ interface ILevrGovernor_v1 {
 
     /// @notice Revert if proposal already executed.
     error AlreadyExecuted();
-
-    /// @notice Revert if tier index is out of bounds.
-    error TierOutOfBounds();
 
     /// @notice Revert if proposal rate limit exceeded.
     error RateLimitExceeded();
@@ -76,23 +71,17 @@ interface ILevrGovernor_v1 {
     /// @param receiver Recipient of funds
     /// @param amount Amount to transfer
     /// @param reason Description of the transfer
-    /// @param tier Governance tier to apply
     /// @return proposalId Newly created proposal id
     function proposeTransfer(
         address receiver,
         uint256 amount,
-        string calldata reason,
-        uint8 tier
+        string calldata reason
     ) external returns (uint256 proposalId);
 
     /// @notice Create a staking boost proposal.
     /// @param amount Amount to apply
-    /// @param tier Governance tier to apply
     /// @return proposalId Newly created proposal id
-    function proposeBoost(
-        uint256 amount,
-        uint8 tier
-    ) external returns (uint256 proposalId);
+    function proposeBoost(uint256 amount) external returns (uint256 proposalId);
 
     /// @notice Execute a previously created proposal.
     /// @param proposalId Id of the proposal to execute

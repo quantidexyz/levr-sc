@@ -34,37 +34,31 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
     function proposeTransfer(
         address receiver,
         uint256 amount,
-        string calldata reason,
-        uint8 tier
+        string calldata reason
     ) external returns (uint256 proposalId) {
         _requireCanSubmit(msg.sender);
-        _validateTierAmount(true, tier, amount);
+        if (amount == 0) revert InvalidAmount();
         _enforceAndBumpRateLimit(uint8(ProposalType.Transfer));
         proposalId = _createProposal(
             msg.sender,
             ProposalType.Transfer,
             receiver,
             amount,
-            reason,
-            tier
+            reason
         );
     }
 
     /// @inheritdoc ILevrGovernor_v1
-    function proposeBoost(
-        uint256 amount,
-        uint8 tier
-    ) external returns (uint256 proposalId) {
+    function proposeBoost(uint256 amount) external returns (uint256 proposalId) {
         _requireCanSubmit(msg.sender);
-        _validateTierAmount(false, tier, amount);
+        if (amount == 0) revert InvalidAmount();
         _enforceAndBumpRateLimit(uint8(ProposalType.Boost));
         proposalId = _createProposal(
             msg.sender,
             ProposalType.Boost,
             address(0),
             amount,
-            "",
-            tier
+            ""
         );
     }
 
@@ -105,8 +99,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
         ProposalType proposalType,
         address receiver,
         uint256 amount,
-        string memory reason,
-        uint8 tier
+        string memory reason
     ) internal returns (uint256 proposalId) {
         uint32 deadline = uint32(
             block.timestamp +
@@ -119,7 +112,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
             receiver: receiver,
             amount: amount,
             reason: reason,
-            tier: tier,
             deadline: deadline,
             executed: false
         });
@@ -129,22 +121,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1 {
     function _hasMinBalance(address proposer) internal view returns (bool) {
         uint256 minBal = ILevrFactory_v1(factory).minWTokenToSubmit();
         return ILevrStakedToken_v1(stakedToken).balanceOf(proposer) >= minBal;
-    }
-
-    function _validateTierAmount(
-        bool isTransfer,
-        uint8 tier,
-        uint256 amount
-    ) internal view {
-        if (amount == 0) revert InvalidAmount();
-        uint256 count = isTransfer
-            ? ILevrFactory_v1(factory).getTransferTierCount()
-            : ILevrFactory_v1(factory).getStakingBoostTierCount();
-        if (tier >= count) revert TierOutOfBounds();
-        uint256 limit = isTransfer
-            ? ILevrFactory_v1(factory).getTransferTier(tier)
-            : ILevrFactory_v1(factory).getStakingBoostTier(tier);
-        if (amount > limit) revert InvalidAmount();
     }
 
     function _enforceAndBumpRateLimit(uint8 pType) internal {

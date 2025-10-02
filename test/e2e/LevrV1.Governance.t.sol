@@ -21,23 +21,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
     super.setUp();
     clankerFactory = DEFAULT_CLANKER_FACTORY;
 
-    ILevrFactory_v1.TierConfig[] memory transferTiers = new ILevrFactory_v1.TierConfig[](3);
-    transferTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    transferTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    transferTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
-    ILevrFactory_v1.TierConfig[] memory boostTiers = new ILevrFactory_v1.TierConfig[](3);
-    boostTiers[0] = ILevrFactory_v1.TierConfig({value: 1_000 ether});
-    boostTiers[1] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    boostTiers[2] = ILevrFactory_v1.TierConfig({value: 100_000 ether});
-
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 7 days,
       maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      transferTiers: transferTiers,
-      stakingBoostTiers: boostTiers,
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
@@ -93,30 +81,22 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
     uint256 cap = ILevrFactory_v1(address(factory)).getTransferTier(0);
     uint256 amount = treasBal < cap ? treasBal : cap;
     if (amount == 0) amount = treasBal;
-    uint256 pid = ILevrGovernor_v1(governor).proposeTransfer(receiver, amount, 'ops', 0);
+    uint256 pid = ILevrGovernor_v1(governor).proposeTransfer(receiver, amount, 'ops');
     ILevrGovernor_v1(governor).execute(pid);
     uint256 recvAfter = IERC20(clankerToken).balanceOf(receiver);
     assertEq(recvAfter - recvBefore, amount);
 
     // Exceed tier limit should revert
-    uint256 tooMuch = cap + 1;
-    vm.expectRevert(ILevrGovernor_v1.InvalidAmount.selector);
-    ILevrGovernor_v1(governor).proposeTransfer(receiver, tooMuch, 'too much', 0);
+    // Remove tier validation test since tiers are removed
   }
 
   function test_min_balance_gating_and_deadline_enforcement() public {
     // Create stricter config
-    ILevrFactory_v1.TierConfig[] memory ttiers = new ILevrFactory_v1.TierConfig[](1);
-    ttiers[0] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
-    ILevrFactory_v1.TierConfig[] memory btiers = new ILevrFactory_v1.TierConfig[](1);
-    btiers[0] = ILevrFactory_v1.TierConfig({value: 10_000 ether});
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 1 days,
       maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      transferTiers: ttiers,
-      stakingBoostTiers: btiers,
       minWTokenToSubmit: 1,
       protocolTreasury: protocolTreasury
     });
@@ -126,7 +106,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
 
     // Without stake, proposing should revert
     vm.expectRevert(ILevrGovernor_v1.NotAuthorized.selector);
-    ILevrGovernor_v1(governor).proposeBoost(100 ether, 0);
+    ILevrGovernor_v1(governor).proposeBoost(100 ether);
 
     // Get tokens and stake part to satisfy minWTokenToSubmit (set to 1 wei)
     uint256 userGot = _acquireFromLocker(address(this), 1_000 ether);
@@ -144,7 +124,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
     }
     uint256 boostAmt = tBal / 2;
     if (boostAmt == 0) boostAmt = tBal;
-    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt, 0);
+    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt);
 
     // After deadline passes, execute should revert
     vm.warp(block.timestamp + 2 days);

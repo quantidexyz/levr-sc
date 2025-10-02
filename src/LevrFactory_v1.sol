@@ -20,9 +20,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
   uint256 public override minWTokenToSubmit;
   address public override protocolTreasury;
 
-  uint256[] private _transferTiers;
-  uint256[] private _stakingBoostTiers;
-
   mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
 
   // Track prepared contracts by deployer
@@ -116,26 +113,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     return _projects[clankerToken];
   }
 
-  /// @inheritdoc ILevrFactory_v1
-  function getTransferTierCount() external view override returns (uint256) {
-    return _transferTiers.length;
-  }
-
-  /// @inheritdoc ILevrFactory_v1
-  function getTransferTier(uint256 index) external view override returns (uint256) {
-    return _transferTiers[index];
-  }
-
-  /// @inheritdoc ILevrFactory_v1
-  function getStakingBoostTierCount() external view override returns (uint256) {
-    return _stakingBoostTiers.length;
-  }
-
-  /// @inheritdoc ILevrFactory_v1
-  function getStakingBoostTier(uint256 index) external view override returns (uint256) {
-    return _stakingBoostTiers[index];
-  }
-
   function _applyConfig(FactoryConfig memory cfg) internal {
     protocolFeeBps = cfg.protocolFeeBps;
     submissionDeadlineSeconds = cfg.submissionDeadlineSeconds;
@@ -143,15 +120,5 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     maxSubmissionPerType = cfg.maxSubmissionPerType;
     minWTokenToSubmit = cfg.minWTokenToSubmit;
     protocolTreasury = cfg.protocolTreasury;
-
-    delete _transferTiers;
-    delete _stakingBoostTiers;
-    uint256 i;
-    for (i = 0; i < cfg.transferTiers.length; i++) {
-      _transferTiers.push(cfg.transferTiers[i].value);
-    }
-    for (i = 0; i < cfg.stakingBoostTiers.length; i++) {
-      _stakingBoostTiers.push(cfg.stakingBoostTiers[i].value);
-    }
   }
 }
