@@ -5,7 +5,6 @@ import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
-import {ILevrTreasury_v1} from './interfaces/ILevrTreasury_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 
 import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
@@ -26,8 +25,25 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
 
   mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
 
+  // Track prepared contracts by deployer
+  mapping(address => ILevrFactory_v1.PreparedContracts) private _preparedContracts; // deployer => PreparedContracts
+
   constructor(FactoryConfig memory cfg, address owner_) Ownable(owner_) {
     _applyConfig(cfg);
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function prepareForDeployment() external override returns (address treasury, address staking) {
+    // Deploy treasury and staking without salt - each call creates independent contracts
+    treasury = address(new LevrTreasury_v1(address(this)));
+
+    // Deploy staking (will be initialized later during register)
+    staking = address(new LevrStaking_v1());
+
+    // Store prepared contracts for this deployer (overwrites previous if called again)
+    _preparedContracts[msg.sender] = ILevrFactory_v1.PreparedContracts({treasury: treasury, staking: staking});
+
+    emit PreparationComplete(msg.sender, treasury, staking);
   }
 
   /// @inheritdoc ILevrFactory_v1
@@ -43,73 +59,42 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
       revert UnauthorizedCaller();
     }
 
-    return _deployProject(clankerToken, msg.sender);
-  }
+    // Look up prepared contracts for this caller
+    ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[msg.sender];
 
-  /// @inheritdoc ILevrFactory_v1
-  function registerDryRun(
-    address clankerToken
-  ) external view override returns (address treasury, address governor, address staking, address stakedToken) {
-    // Query token metadata for accurate address prediction
-    uint8 uDec = IERC20Metadata(clankerToken).decimals();
-    string memory tokenName = IERC20Metadata(clankerToken).name();
-    string memory tokenSymbol = IERC20Metadata(clankerToken).symbol();
-    address tokenAdmin = IClankerToken(clankerToken).admin();
-
-    // Compute predicted addresses using CREATE2 with clankerToken as salt
-    // These addresses are deterministic and can be predicted at any time
-    bytes32 salt = bytes32(uint256(uint160(clankerToken)));
-
-    // Treasury uses actual tokenAdmin (will be msg.sender in actual register call)
-    // Note: This means prediction is only accurate if called by the tokenAdmin
-    treasury = _computeCreate2Address(salt, type(LevrTreasury_v1).creationCode, abi.encode(address(this), tokenAdmin));
-
-    staking = _computeCreate2Address(salt, type(LevrStaking_v1).creationCode, bytes(''));
-
-    // For stakedToken, use actual metadata
-    string memory name_ = string(abi.encodePacked('Levr Staked ', tokenName));
-    string memory symbol_ = string(abi.encodePacked('s', tokenSymbol));
-    bytes32 stakedTokenSalt = keccak256(abi.encodePacked(salt, 'stakedToken'));
-    stakedToken = _computeCreate2Address(
-      stakedTokenSalt,
-      type(LevrStakedToken_v1).creationCode,
-      abi.encode(name_, symbol_, uDec, clankerToken, staking)
-    );
-
-    // Governor uses another sub-salt
-    bytes32 governorSalt = keccak256(abi.encodePacked(salt, 'governor'));
-    governor = _computeCreate2Address(
-      governorSalt,
-      type(LevrGovernor_v1).creationCode,
-      abi.encode(address(this), treasury, stakedToken)
-    );
+    return _deployProject(clankerToken, prepared.treasury, prepared.staking);
   }
 
   function _deployProject(
     address clankerToken,
-    address tokenAdmin
+    address treasury_,
+    address staking_
   ) internal returns (address treasury, address governor, address staking, address stakedToken) {
-    bytes32 salt = bytes32(uint256(uint160(clankerToken)));
+    // Use provided treasury or deploy new one
+    if (treasury_ != address(0)) {
+      treasury = treasury_;
+    } else {
+      treasury = address(new LevrTreasury_v1(address(this)));
+    }
 
-    // Deploy treasury with CREATE2
-    treasury = address(new LevrTreasury_v1{salt: salt}(address(this), tokenAdmin));
+    // Use provided staking or deploy new one
+    if (staking_ != address(0)) {
+      staking = staking_;
+    } else {
+      staking = address(new LevrStaking_v1());
+    }
 
-    // Deploy staking with CREATE2
-    staking = address(new LevrStaking_v1{salt: salt}());
-
-    // Deploy stakedToken with CREATE2 using sub-salt
+    // Deploy stakedToken
     uint8 uDec = IERC20Metadata(clankerToken).decimals();
     string memory name_ = string(abi.encodePacked('Levr Staked ', IERC20Metadata(clankerToken).name()));
     string memory symbol_ = string(abi.encodePacked('s', IERC20Metadata(clankerToken).symbol()));
-    bytes32 stakedTokenSalt = keccak256(abi.encodePacked(salt, 'stakedToken'));
-    stakedToken = address(new LevrStakedToken_v1{salt: stakedTokenSalt}(name_, symbol_, uDec, clankerToken, staking));
+    stakedToken = address(new LevrStakedToken_v1(name_, symbol_, uDec, clankerToken, staking));
 
     // Initialize staking
     LevrStaking_v1(staking).initialize(clankerToken, stakedToken, treasury);
 
-    // Deploy governor with CREATE2 using sub-salt
-    bytes32 governorSalt = keccak256(abi.encodePacked(salt, 'governor'));
-    governor = address(new LevrGovernor_v1{salt: governorSalt}(address(this), treasury, stakedToken));
+    // Deploy governor
+    governor = address(new LevrGovernor_v1(address(this), treasury, stakedToken));
 
     // Initialize treasury now that governor and underlying are known
     LevrTreasury_v1(treasury).initialize(governor, clankerToken);
@@ -121,16 +106,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     p.stakedToken = stakedToken;
 
     emit Registered(clankerToken, treasury, governor, stakedToken);
-  }
-
-  function _computeCreate2Address(
-    bytes32 salt,
-    bytes memory bytecode,
-    bytes memory constructorArgs
-  ) internal view returns (address) {
-    bytes32 bytecodeHash = keccak256(abi.encodePacked(bytecode, constructorArgs));
-    bytes32 hash = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, bytecodeHash));
-    return address(uint160(uint256(hash)));
   }
 
   /// @inheritdoc ILevrFactory_v1

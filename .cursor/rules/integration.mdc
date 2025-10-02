@@ -17,18 +17,24 @@ Integration guide for the modular Levr protocol with Clanker v4 on Base Mainnet.
 
 ```
 LevrFactory_v1 (singleton)
-  ↓ register(clankerToken) — gated by tokenAdmin
-  ├─→ LevrTreasury_v1 (per-token clone)
-  ├─→ LevrGovernor_v1 (per-token clone)
-  ├─→ LevrStaking_v1 (per-token instance)
-  └─→ LevrStakedToken_v1 (per-token instance)
+  ↓ prepareForDeployment() — anyone can call
+  ├─→ LevrTreasury_v1 (owned by deployer)
+  └─→ LevrStaking_v1 (uninitialized)
+
+  ↓ register(clankerToken, treasury, staking) — gated by tokenAdmin
+  ├─→ Uses provided treasury/staking OR deploys new ones
+  ├─→ LevrGovernor_v1 (per-token)
+  └─→ LevrStakedToken_v1 (per-token)
 ```
 
-### Treasury Detection
+### Pre-Deployment Flow
 
-- **Method**: Simulated calls (deterministic CREATE2)
-- **Flow**: `simulateDeployToken` → `simulateRegister` → treasury address
-- **No fallback**: Treasury is always freshly deployed per registration
+- **Why**: Need treasury and staking addresses BEFORE Clanker token deployment
+- **Flow**:
+  1. Call `prepareForDeployment()` → get treasury and staking addresses
+  2. Deploy Clanker with treasury as airdrop recipient, staking as fee recipient
+  3. Call `register(clankerToken, treasury, staking)` to complete setup
+- **Flexibility**: Can also register without preparation (pass `address(0)` for both)
 
 ---
 
@@ -40,8 +46,13 @@ LevrFactory_v1 (singleton)
 
 **Key Functions**:
 
-- `register(clankerToken)` — Deploy full project stack (treasury, governor, staking, stakedToken)
+- `prepareForDeployment()` — Deploy treasury and staking BEFORE Clanker token deployment
+  - **Access**: Anyone can call
+  - **Returns**: `(treasury, staking)` addresses
+  - **Purpose**: Get addresses to use as Clanker airdrop/fee recipients
+- `register(clankerToken, treasury, staking)` — Complete project setup
   - **Access**: Callable only by `clankerToken.tokenAdmin()`
+  - **Parameters**: Optional pre-deployed treasury/staking (use `address(0)` to deploy new)
   - **Returns**: `(treasury, governor, staking, stakedToken)` addresses
 - `getProjectContracts(clankerToken)` — Query deployed addresses
 - `updateConfig(cfg)` — Update protocol config (owner-only)
@@ -121,7 +132,10 @@ LevrFactory_v1 (singleton)
 
 ### Clanker Fee Recipients
 
-**Recommended**: Set LP fees/airdrop recipient to **staking contract**
+**Recommended Setup**:
+
+- **Airdrop recipient**: **treasury** (receives initial token allocation)
+- **LP fee recipient**: **staking** (receives ongoing trading fees)
 
 ### Reward Accrual Paths
 

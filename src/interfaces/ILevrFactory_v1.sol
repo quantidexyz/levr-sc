@@ -31,12 +31,24 @@ interface ILevrFactory_v1 {
     address stakedToken;
   }
 
+  /// @notice Prepared contracts for a deployer (before registration).
+  struct PreparedContracts {
+    address treasury;
+    address staking;
+  }
+
   // ============ Errors ============
 
   /// @notice Revert if caller is not the token admin.
   error UnauthorizedCaller();
 
   // ============ Events ============
+
+  /// @notice Emitted when treasury and staking are prepared for deployment.
+  /// @param deployer Address that deployed the contracts
+  /// @param treasury Deployed treasury address
+  /// @param staking Deployed staking address
+  event PreparationComplete(address indexed deployer, address indexed treasury, address staking);
 
   /// @notice Emitted when a project is registered.
   /// @param clankerToken Underlying Clanker token address
@@ -50,29 +62,28 @@ interface ILevrFactory_v1 {
 
   // ============ Functions ============
 
-  /// @notice Register a project and deploy contracts.
-  /// @dev Only callable by the Clanker token admin. Always deploys fresh treasury.
-  /// @param clankerToken Underlying Clanker token
+  /// @notice Prepare for deployment by deploying treasury and staking modules.
+  /// @dev Deploys treasury and staking contracts.
+  ///      Call this BEFORE deploying Clanker token to get the treasury address.
+  ///      The returned treasury address should be used as the fee/airdrop recipient in Clanker deployment.
+  ///      Treasury operations are controlled by the governor (deployed during register).
   /// @return treasury Deployed treasury address
-  /// @return governor Deployed governor address
   /// @return staking Deployed staking module address
+  function prepareForDeployment() external returns (address treasury, address staking);
+
+  /// @notice Register a project and deploy contracts.
+  /// @dev Only callable by the Clanker token admin.
+  ///      Uses treasury/staking from prepareForDeployment() if called by same address.
+  ///      Otherwise deploys fresh contracts.
+  ///      Treasury control is always via the deployed governor.
+  /// @param clankerToken Underlying Clanker token
+  /// @return treasury Treasury address
+  /// @return governor Deployed governor address
+  /// @return staking Staking module address
   /// @return stakedToken Deployed staked token address
   function register(
     address clankerToken
   ) external returns (address treasury, address governor, address staking, address stakedToken);
-
-  /// @notice Simulate registration to predict deployed addresses without authorization checks.
-  /// @dev This function does not revert for authorization and does not modify state.
-  ///      Uses CREATE2 with token address as salt for deterministic address prediction.
-  ///      Addresses are stable and can be predicted at any time regardless of factory state.
-  /// @param clankerToken Underlying Clanker token used as basis for CREATE2 salt
-  /// @return treasury Predicted treasury address
-  /// @return governor Predicted governor address
-  /// @return staking Predicted staking module address
-  /// @return stakedToken Predicted staked token address
-  function registerDryRun(
-    address clankerToken
-  ) external view returns (address treasury, address governor, address staking, address stakedToken);
 
   /// @notice Update global protocol configuration.
   /// @param cfg New configuration
