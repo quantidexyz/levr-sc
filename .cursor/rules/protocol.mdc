@@ -54,11 +54,11 @@ LevrFactory_v1
 
 **Functions**:
 
-- `proposeTransfer(receiver, amount, reason, tier)`
-- `proposeBoost(amount, tier)`
+- `proposeTransfer(receiver, amount, reason)` → Custom amounts
+- `proposeBoost(amount)` → Custom amounts
 - `execute(proposalId)`
 
-**Validation**: Min staked balance, tier limits, rolling windows, deadlines
+**Validation**: Min staked balance, rolling windows, deadlines
 
 ---
 
@@ -137,8 +137,8 @@ Users claim → Multi-token claim with reserve checks
 ### Governance
 
 ```
-User (with minWTokenToSubmit) → proposeTransfer or proposeBoost
-Validates: tier limits, rolling windows, deadlines
+User (with minWTokenToSubmit) → proposeTransfer or proposeBoost (custom amounts)
+Validates: rolling windows, deadlines
 Execute → Treasury performs action (transfer or boost)
 ```
 
@@ -195,14 +195,13 @@ struct PreparedContracts {
 - `protocolFeeBps` — Protocol fee (basis points)
 - `submissionDeadlineSeconds` — Proposal deadline (7 days default)
 - `streamWindowSeconds` — Reward streaming (3 days default)
-- `minWTokenToSubmit` — Min staked to propose
-- `transferTiers[]` — Max transfer amounts (low, mid, high)
-- `stakingBoostTiers[]` — Max boost percentages
+- `maxSubmissionPerType` — Rate limit per proposal type (0 = unlimited)
+- `minWTokenToSubmit` — Min staked tokens to propose
+- `protocolTreasury` — Protocol treasury address
 
-### Tiers
+### Proposal Amounts
 
-**Transfer**: Absolute amounts per proposal  
-**Boost**: Percentage of treasury balance
+**Custom amounts**: No tiers - proposers specify exact amounts for transfers and boosts
 
 ---
 
@@ -242,7 +241,7 @@ LevrStakedToken_v1(proj.stakedToken);
 
 - Security: Access controls, deployer tracking
 - Flows: Stake → Boost → Claim → Unstake
-- Governance: Proposals, tiers, execution
+- Governance: Proposals, custom amounts, execution, deadlines
 - Rewards: Multi-token, reserves, streaming
 - Edge cases: Zero amounts, double registration, unauthorized calls
 
@@ -283,6 +282,7 @@ LevrStakedToken_v1(proj.stakedToken);
 - ❌ Treasury `Ownable` - redundant
 - ❌ Multiple return values - now returns struct
 - ❌ Treasury/staking params in register - auto-lookup
+- ❌ Tier system - replaced with custom amounts
 
 ### Added
 
@@ -291,6 +291,7 @@ LevrStakedToken_v1(proj.stakedToken);
 - ✅ `Project` struct returns - cleaner API
 - ✅ Auto-lookup prepared contracts
 - ✅ Treasury receives airdrops, Staking receives fees (split roles)
+- ✅ Custom proposal amounts - no tier restrictions
 
 ---
 
