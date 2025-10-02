@@ -2,454 +2,296 @@
 alwaysApply: true
 ---
 
-## Levr Protocol v1 — Contracts Architecture
+## Levr Protocol v1 — Architecture Guide
 
-This document defines the contract architecture and implementation details for Levr Protocol v1, focusing on the modular contract system with factory, treasury, governor, staking module, and staked token components. It is the source-of-truth for contract implementations and integration decisions.
+Source-of-truth for Levr Protocol v1 contracts. Modular system: Factory deploys per-project Treasury, Governor, Staking, and StakedToken.
 
-### Scope and Compatibility
-
-- **Protocol version**: v1
-- **Architecture**: Modular system with `LevrFactory_v1` as the entry point, deploying per-project `LevrTreasury_v1`, `LevrGovernor_v1`, `LevrStaking_v1`, and `LevrStakedToken_v1`.
-
----
-
-### Core Contract Entities
-
-#### LevrFactory_v1
-
-- **Role**: Global configuration owner and deployment/registry entrypoint for projects
-- **Responsibilities**:
-  - Deploy/clone per-project contracts (`LevrTreasury_v1`, `LevrGovernor_v1`, `LevrStaking_v1`, `LevrStakedToken_v1`)
-  - Manage protocol-wide configuration (fees, limits, tiers, deadlines)
-  - Register projects (treasury always deployed fresh per registration)
-
-- **Key Storage**:
-  - `protocolFeeBps`: Fee in basis points for mint/redeem operations
-  - `submissionDeadlineSeconds`: Proposal deadline (default 7 days)
-  - `maxSubmissionPerType`: Max proposals per type per 7-day window
-  - `stakingBoostTiers`, `transferTiers`: Governance tier configurations
-- `minWTokenToSubmit`: Minimum staked token balance to submit proposals
-  - `protocolTreasury`: Protocol fee recipient address
-  - Contract implementation addresses for cloning
-
-#### LevrTreasury_v1 (Per-Project)
-
-- **Role**: Custody and execution contract for project assets and governance decisions
-- **Responsibilities**:
-  - Hold underlying reserve tokens and receive Clanker airdrops/fees
-  - Execute transfers authorized by governor
-  - Apply boosts by moving tokens to staking and accruing rewards
-
-- **Key Storage**:
-  - `underlying`: Address of the Clanker token
-  - `governor`: Address of the project's governor contract
-  - (no wrapper)
-
-#### LevrGovernor_v1 (Per-Project)
-
-- **Role**: Governance and proposal execution for project treasury decisions
-- **Responsibilities**:
-  - Handle proposal submissions (transfer requests, staking boosts)
-  - Enforce submission limits, deadlines, and tier constraints
-  - Execute approved proposals on the treasury
-
-- **Key Storage**:
-  - Active proposals with metadata (type, amounts, deadlines, tiers)
-  - Rolling counters for submission rate limiting
-  - Proposal execution state and voting records
-
-#### LevrStaking_v1 (Per-Project)
-
-- **Role**: Escrows underlying stakes and manages multi-token reward accrual and claims
-- **Responsibilities**:
-  - Stake/unstake underlying; mint/burn `LevrStakedToken_v1` 1:1
-  - Accrue rewards per token via `accrueRewards` or `accrueFromTreasury` using delta-based accounting
-  - Maintain per-token reward reserves to prevent double counting; decrement reserves on claim
-  - Guard claims with liquidity checks to avoid overdrawing rewards
-  - Claim rewards per token to a recipient
-
-#### LevrStakedToken_v1 (Per-Project)
-
-- **Role**: 1:1 staked token representing staked balances; governance weight source
-
----
-
-### Contract Interactions and Flow
-
-#### Project Registration
-
-1. **External Call**: `LevrFactory_v1.register(clankerToken)`
-   - **Access Control**: Only callable by `clankerToken.tokenAdmin()`
-   - Validates clankerToken exists and is properly configured
-   - No treasury reuse; always deploys fresh treasury
-
-2. **Contract Deployment** (CREATE2-based):
-   - Deploy new `LevrTreasury_v1` using CREATE2 with `clankerToken` address as salt
-   - Deploy `LevrStaking_v1` using CREATE2 with same base salt
-   - Deploy `LevrStakedToken_v1` using CREATE2 with derived salt (`keccak256(baseSalt, 'stakedToken')`)
-   - Deploy `LevrGovernor_v1` using CREATE2 with derived salt (`keccak256(baseSalt, 'governor')`)
-
-3. **Initialization**:
-   - Treasury: Set governor and underlying addresses
-   - Governor: Set treasury address and factory config reference
-   - Staking: Initialize with underlying and staked token; staking controls staked token mint/burn
-
-4. **Treasury Address Prediction** (via `registerDryRun`):
-   - **Deterministic**: Treasury address is fully deterministic based on `clankerToken` address
-   - **Time-Independent**: Addresses can be predicted at any time before registration
-   - **Method**: Call `factory.registerDryRun(clankerToken)` to get all four addresses
-   - **Use Case**: Allows setting treasury as Clanker fee/airdrop recipient before registration
-   - **CREATE2 Salt**: Uses `bytes32(uint256(uint160(clankerToken)))` as base salt
-   - **Stability**: Same token always produces same addresses regardless of factory state
-
-#### Staking and Boost Flows
-
-**Stake/Unstake**:
+### Architecture
 
 ```
-User → Underlying.transferFrom(user, staking, amount)
-Staking → mint sToken 1:1 to user
-
-User → burn sToken
-Staking → transfer underlying back to user
+LevrFactory_v1
+  ↓ prepareForDeployment() → (treasury, staking)
+  ↓ register(clankerToken) → Project{treasury, governor, staking, stakedToken}
 ```
 
-**Airdrop/Boost**:
+## Contracts
 
-```
-Clanker → Treasury (fees/airdrops)
-Governor → Treasury.applyBoost(amount)
-Treasury → Staking.accrueFromTreasury(underlying, amount, pull=true)
-Staking → measures actual received delta and immediately credits rewards; no external sync required
-Staking → accPerShare[underlying] += delta / totalStaked; stream window resets using delta
-```
+### LevrFactory_v1 (Singleton)
 
-Notes on Clanker airdrops (as used in E2E tests):
+**Role**: Registry and deployment coordinator
 
-- ClankerAirdrop leaf format (deployed extension): `keccak256(bytes.concat(keccak256(abi.encode(recipient, amount))))`.
-- Our tests construct a single-leaf Merkle root for the treasury as the sole recipient and pass the root via the extension data.
-- Extension data encoding used: `(admin, merkleRoot, lockupDuration, vestingDuration)`; lockup must be ≥ 1 day.
-- Claims are triggered via `IClankerAirdrop.claim(token, recipient, allocatedAmount, proof)`; for single-leaf trees the proof is empty.
-- Helper: `test/utils/MerkleAirdropHelper.sol` exposes `singleLeafRoot(recipient, amount)` that builds the double-hash leaf root.
+**Functions**:
 
-#### Governance Proposals
+- `prepareForDeployment()` → Deploy treasury & staking, return addresses
+  - Anyone can call; stores `deployer → PreparedContracts`
+  - Call BEFORE Clanker deployment to get addresses
+- `register(clankerToken)` → Complete setup, return `Project` struct
+  - Only `clankerToken.tokenAdmin()` can call
+  - Auto-uses prepared contracts from `msg.sender` (or deploys new)
+  - Returns `Project{treasury, governor, staking, stakedToken}`
+- `getProjectContracts(clankerToken)` → Query registered project
 
-**Proposal Creation**:
-
-- Validate `msg.sender` holds ≥ `minWTokenToSubmit` staked tokens
-- Check rolling submission limits per type (7-day windows)
-- Validate amount constraints against selected tier
-- Store proposal with deadline (`block.timestamp + submissionDeadlineSeconds`)
-
-**Proposal Execution**:
-
-- Verify proposal deadline not exceeded
-- Execute treasury action based on proposal type
-- Update rolling counters and emit events
+**Security**: Only deployer can use their prepared contracts; only tokenAdmin can register
 
 ---
 
-### Fee Model and Accounting
+### LevrTreasury_v1
 
-#### Fees
+**Role**: Asset custody (NOT Ownable - governor controls)
 
-- **Protocol Fee**: `protocolFeeBps / 10000` of operation amount on applicable actions (forwarded to protocol treasury)
+**Functions**:
 
-#### Rounding and Precision
+- `transfer(to, amount)` → Governor-authorized transfer
+- `applyBoost(amount)` → Move to staking, accrue rewards
 
-- Use conservative rounding favoring reserves safety
-- Track reward reserves at staking per token to avoid double-accounting
-- Track fee accumulations in project treasury for governance distribution
-- Emit fee collection events for transparency
-
-#### Invariants
-
-- Staked token total supply equals total underlying staked
-- Protocol fees forwarded correctly to protocol treasury (no project fee path)
-- Governance proposals execute atomically with proper access controls
-- Reward claims cannot exceed tracked reserves (revert on insufficient liquidity)
-- Treasury balance ≥ sum of governance-allocated amounts
+**Access**: `onlyGovernor` modifier
 
 ---
 
-### Governance: Submission Limits and Tiers
+### LevrGovernor_v1
 
-#### Global Configuration (Factory Level)
+**Role**: Governance and proposals
 
-- `submissionDeadlineSeconds: uint32` — Common deadline for all proposal types (default: 604,800 = 7 days)
-- `maxSubmissionPerType: uint16` — Max proposals per type per rolling 7-day window
-- `minWTokenToSubmit: uint256` — Minimum wrapper balance required to submit proposals
+**Functions**:
 
-#### Tier Definitions
+- `proposeTransfer(receiver, amount, reason, tier)`
+- `proposeBoost(amount, tier)`
+- `execute(proposalId)`
 
-**Transfer Tiers** (absolute amounts in underlying units):
-
-- `low`, `mid`, `high`: Maximum transfer amounts per proposal
-
-**Staking Boost Tiers** (fraction of treasury or emissions):
-
-- `low`, `mid`, `high`: Boost percentages (e.g., 0.03, 0.6, 0.9)
-
-#### Rolling Window Enforcement
-
-- Track submissions per `(projectId, proposalType, weekStart)` mapping
-- Use `block.timestamp / 604800` for week calculation
-- Revert if `currentCount >= maxSubmissionPerType`
+**Validation**: Min staked balance, tier limits, rolling windows, deadlines
 
 ---
 
-### Security Considerations
+### LevrStaking_v1
 
-#### Access Control
+**Role**: Stake escrow, multi-token rewards
 
-- **Factory**: Only owner can update global configuration; `register` callable only by `clankerToken.tokenAdmin()`
-- **Treasury**: Only governor can execute transfers and boosts
-- **Governor**: Only staked token holders meeting minimum balance can propose
-- **Staked Token**: Staking contract has exclusive mint/burn rights
+**Functions**:
 
-#### Reentrancy Protection
+- `stake(amount)`, `unstake(amount, to)` → Mint/burn stakedToken 1:1
+- `accrueRewards(token, amount)` → Delta-based accrual
+- `accrueFromTreasury(token, amount, pull)` → Boost from treasury
+- `claimRewards(tokens[], to)` → Multi-token claim
 
-- Non-reentrant guards on all external treasury functions and staking accrual paths
-- Stake/unstake operations use checks-effects-interactions pattern
-- Reward accrual and claims protected against reentrancy
-- Balance checks completed before token transfers
+**Reward Paths**:
 
-#### Input Validation
+1. ERC-1363 auto-credit (`onTransferReceived`)
+2. Governor boost → `treasury.applyBoost` → `staking.accrueFromTreasury`
+3. Manual `accrueRewards`
 
-- All addresses validated as non-zero
-- Amounts checked against tier limits and balance availability
-- Deadline calculations prevent overflow/underflow
-
-#### Emergency Controls
-
-- Factory owner can pause registrations if needed
-- Treasury includes emergency withdrawal mechanisms (governance-controlled)
-- Staking includes optional pauser role for extreme circumstances
+**Safety**: Reserve tracking, liquidity checks, streaming windows
 
 ---
 
-### Contract Interfaces (Implementation Requirements)
+### LevrStakedToken_v1
 
-#### LevrFactory_v1
+**Role**: 1:1 staked representation, governance weight
+
+**Access**: Only staking can mint/burn
+
+## Deployment Flow
+
+### Complete Workflow
 
 ```solidity
-interface ILevrFactory_v1 {
-    function register(
-        address clankerToken
-    ) external returns (address treasury, address governor, address staking, address stakedToken);
+// 1. Prepare (get addresses before Clanker exists)
+(address treasury, address staking) = factory.prepareForDeployment();
 
-    function registerDryRun(
-        address clankerToken
-    ) external view returns (address treasury, address governor, address staking, address stakedToken);
+// 2. Deploy Clanker token
+// - Set treasury as airdrop recipient → receives initial allocation
+// - Set staking as LP fee recipient → receives ongoing trading fees
 
-    function updateConfig(FactoryConfig calldata cfg) external;
-
-    function getProjectContracts(address clankerToken)
-        external view returns (address treasury, address governor, address staking, address stakedToken);
-
-    function streamWindowSeconds() external view returns (uint32);
-}
-
-struct FactoryConfig {
-    uint16 protocolFeeBps;
-    uint32 submissionDeadlineSeconds;
-    uint16 maxSubmissionPerType;
-    uint32 streamWindowSeconds;
-    TierConfig[] transferTiers;
-    TierConfig[] stakingBoostTiers;
-    uint256 minWTokenToSubmit;
-    address protocolTreasury;
-}
+// 3. Register (as tokenAdmin)
+ILevrFactory_v1.Project memory project = factory.register(clankerToken);
+// Access: project.treasury, project.governor, project.staking, project.stakedToken
 ```
 
-**Key Function Details**:
+### Initialization Sequence
 
-- **`register`**: Deploys all project contracts using CREATE2 with deterministic addresses
-  - Only callable by `clankerToken.tokenAdmin()`
-  - Uses token address as base salt for CREATE2 deployments
-  - Returns addresses of all deployed contracts
+1. Treasury & Staking deployed via `prepareForDeployment()`
+2. Clanker token deployed (uses treasury/staking addresses)
+3. `register()` deploys governor & stakedToken, initializes all contracts
+4. Governor set as treasury controller, staking linked to treasury
 
-- **`registerDryRun`**: Predicts deployment addresses without authorization checks
-  - View function, safe to call at any time
-  - Uses CREATE2 address computation with token metadata
-  - Queries token metadata (name, symbol, decimals, admin) for accurate predictions
-  - Same token always returns same addresses
+---
 
-#### LevrTreasury_v1
+## Core Flows
+
+### Staking
+
+```
+User stakes → Staking escrows underlying, mints stakedToken 1:1
+User unstakes → Staking burns stakedToken, returns underlying
+```
+
+### Rewards
+
+```
+Clanker LP fees → Staking (auto-accrues via ERC-1363)
+Clanker airdrops → Treasury
+Governor proposes boost → Treasury.applyBoost(amount)
+Treasury → Staking.accrueFromTreasury (measures delta, credits immediately)
+Users claim → Multi-token claim with reserve checks
+```
+
+### Governance
+
+```
+User (with minWTokenToSubmit) → proposeTransfer or proposeBoost
+Validates: tier limits, rolling windows, deadlines
+Execute → Treasury performs action (transfer or boost)
+```
+
+## Data Structures
 
 ```solidity
-interface ILevrTreasury_v1 {
-    function transfer(address to, uint256 amount) external;
-    function applyBoost(uint256 amount) external;
-    function getUnderlyingBalance() external view returns (uint256);
-    function underlying() external view returns (address);
+struct Project {
+  address treasury;
+  address governor;
+  address staking;
+  address stakedToken;
+}
+
+struct PreparedContracts {
+  address treasury;
+  address staking;
 }
 ```
 
-#### LevrGovernor_v1
+---
+
+## Security
+
+### Access Controls
+
+| Function                         | Who Can Call                           |
+| -------------------------------- | -------------------------------------- |
+| `factory.prepareForDeployment()` | Anyone (tracked by deployer)           |
+| `factory.register()`             | Only `clankerToken.tokenAdmin()`       |
+| `treasury.transfer/applyBoost()` | Only governor                          |
+| `governor.propose*()`            | Anyone with `minWTokenToSubmit` staked |
+| `staking.stake/unstake/claim()`  | Anyone                                 |
+| `stakedToken.mint/burn()`        | Only staking                           |
+
+### Protections
+
+- **Reentrancy**: Guards on all treasury/staking external functions
+- **Double Registration**: Prevented via `ALREADY_REGISTERED` check
+- **Front-running**: Only deployer can use their prepared contracts
+- **Reward Safety**: Reserve tracking prevents overdraw
+- **No Owner on Treasury**: Governor controls all operations
+
+### Invariants
+
+- StakedToken supply == total underlying staked
+- Reward reserves >= pending claims
+- One project per clankerToken
+- Prepared contracts only usable by deployer
+
+## Configuration
+
+### Factory Config
+
+- `protocolFeeBps` — Protocol fee (basis points)
+- `submissionDeadlineSeconds` — Proposal deadline (7 days default)
+- `streamWindowSeconds` — Reward streaming (3 days default)
+- `minWTokenToSubmit` — Min staked to propose
+- `transferTiers[]` — Max transfer amounts (low, mid, high)
+- `stakingBoostTiers[]` — Max boost percentages
+
+### Tiers
+
+**Transfer**: Absolute amounts per proposal  
+**Boost**: Percentage of treasury balance
+
+---
+
+## Code Patterns
+
+### Registration
 
 ```solidity
-interface ILevrGovernor_v1 {
-    function proposeTransfer(
-        address receiver,
-        uint256 amount,
-        string calldata reason,
-        uint8 tier
-    ) external returns (uint256 proposalId);
+// Factory setup
+LevrFactory_v1 factory = new LevrFactory_v1(config, owner);
 
-    function proposeBoost(
-        uint256 amount,
-        uint8 tier
-    ) external returns (uint256 proposalId);
+// Prepare before Clanker
+(address treas, address stak) = factory.prepareForDeployment();
 
-    function execute(uint256 proposalId) external;
+// Deploy Clanker (use treas & stak addresses)
 
-    function getProposal(uint256 proposalId)
-        external view returns (Proposal memory);
-
-    function canSubmit(address proposer) external view returns (bool);
-}
-
-struct Proposal {
-    address proposer;
-    ProposalType proposalType;
-    address receiver;
-    uint256 amount;
-    string reason;
-    uint8 tier;
-    uint32 deadline;
-    bool executed;
-}
+// Register
+ILevrFactory_v1.Project memory p = factory.register(clankerToken);
 ```
 
-#### LevrStaking_v1
+### Accessing Components
 
 ```solidity
-interface ILevrStaking_v1 {
-    function stake(uint256 amount) external;
-    function unstake(uint256 amount, address to) external;
+ILevrFactory_v1.Project memory proj = factory.getProjectContracts(token);
 
-    function accrueRewards(address token, uint256 amount) external;
-    function accrueFromTreasury(address token, uint256 amount, bool pull) external;
-
-    function claimRewards(address[] calldata tokens, address to) external;
-
-    function totalStaked() external view returns (uint256);
-    function stakedToken() external view returns (address);
-    function underlying() external view returns (address);
-}
+LevrTreasury_v1(payable(proj.treasury));
+LevrGovernor_v1(proj.governor);
+LevrStaking_v1(proj.staking);
+LevrStakedToken_v1(proj.stakedToken);
 ```
 
-#### LevrStakedToken_v1
+---
 
-```solidity
-interface ILevrStakedToken_v1 is IERC20 {
-    function mint(address to, uint256 amount) external;
-    function burn(address from, uint256 amount) external;
+## Testing
 
-    function decimals() external view returns (uint8);
-    function underlying() external view returns (address);
-}
-```
+**Must Cover**:
 
-Note: Mint/burn functions are exclusively callable by the associated `LevrStaking_v1` contract.
+- Security: Access controls, deployer tracking
+- Flows: Stake → Boost → Claim → Unstake
+- Governance: Proposals, tiers, execution
+- Rewards: Multi-token, reserves, streaming
+- Edge cases: Zero amounts, double registration, unauthorized calls
+
+## Key Design Decisions
+
+### Why No CREATE2 / Deterministic Addresses?
+
+- **prepareForDeployment**: Simple `new Contract()` - no salting
+- **register**: Deploys governor/stakedToken without salts
+- **Reason**: Addresses don't need prediction - treasury/staking exist before Clanker
+
+### Why No Ownable on Treasury?
+
+- **Governor controls all operations** via `onlyGovernor` modifier
+- **Register is gated** by `tokenAdmin` check - no front-running
+- **Simpler, cleaner** - one less security layer to manage
+
+### Why Auto-Lookup of Prepared Contracts?
+
+- **Mapping tracks deployer** → `PreparedContracts{treasury, staking}`
+- **register() auto-uses** prepared contracts from `msg.sender`
+- **Security**: Only deployer can use their contracts (no parameters to hijack)
+
+### Why Return Project Struct?
+
+- **Cleaner API**: One struct vs four separate addresses
+- **Type safety**: All addresses grouped logically
+- **Easier usage**: `proj.treasury` vs destructuring
 
 ---
 
-### Implementation Patterns and Best Practices
+## Changes from Previous Versions
 
-#### Contract Deployment
+### Removed
 
-- Use CREATE2 for deterministic deployment addresses based on token address
-- Base salt: `bytes32(uint256(uint160(clankerToken)))`
-- Derived salts for stakedToken and governor: `keccak256(abi.encodePacked(baseSalt, 'stakedToken'))` / `'governor'`
-- Initialize contracts with immutable references to avoid storage costs
-- Validate all constructor parameters and relationships
-- Same token address always deploys to same addresses (prevents duplicate registrations)
+- ❌ `registerDryRun()` - unreliable prediction
+- ❌ CREATE2 salting - not needed
+- ❌ Treasury `Ownable` - redundant
+- ❌ Multiple return values - now returns struct
+- ❌ Treasury/staking params in register - auto-lookup
 
-#### Storage Optimization
+### Added
 
-- Pack related variables into single slots where possible
-- Use mappings for per-user/project data to avoid iteration
-- Cache frequently accessed factory config in governor contracts
-
-#### Event Emission
-
-- Emit comprehensive events for all state changes
-- Include indexed parameters for efficient off-chain querying
-- Follow ERC-20/ERC-721 event standards where applicable
-
-#### Error Handling
-
-- Use custom errors instead of string reverts for gas efficiency
-- Provide descriptive error messages for debugging
-- Validate inputs at function boundaries
+- ✅ `prepareForDeployment()` - pre-deploy infrastructure
+- ✅ Deployer tracking - security via mapping
+- ✅ `Project` struct returns - cleaner API
+- ✅ Auto-lookup prepared contracts
+- ✅ Treasury receives airdrops, Staking receives fees (split roles)
 
 ---
 
-### Testing Guidance (Contract-Focused)
-
-#### Unit Tests
-
-- Test all fee calculations and edge cases (rounding, overflow)
-- Validate tier enforcement and submission limits
-- Test proposal lifecycle (create → execute → cleanup)
-- Verify access controls and permission boundaries
-
-#### Integration Tests
-
-- End-to-end stake/unstake flows with reward accrual
-- Governance proposal creation and execution
-- Multi-project registration and isolation
-- Emergency controls and pause functionality
-
-#### Invariant Tests
-
-- Staked token supply equals total staked underlying
-- Reward reserves properly tracked per token
-- Governance proposals execute atomically
-- Rolling counters accurately track submission limits
-
-#### Fuzz Tests
-
-- Random fee configurations and tier selections
-- Arbitrary proposal amounts and deadlines
-- Concurrent operations and reentrancy attempts
-- Edge case amounts (0, max uint256, etc.)
-
----
-
-### Migration and Deployment Notes
-
-- **From v1**: No automatic migration path; v1 requires fresh deployment
-- **Contract Verification**: All contracts should be verified on deployment networks
-- **Proxy Patterns**: Consider upgradeable proxies for critical infrastructure contracts
-- **Initialization**: Ensure proper initialization order and validation
-
----
-
-### Key Changes from Prior Versions
-
-#### Removed
-
-- ❌ `deployTreasury()` function (treasury always deployed via `register`)
-- ❌ `treasuryAddress` constructor param
-- ❌ `RegisterParams` struct entirely (register takes only clankerToken parameter)
-- ❌ Treasury fallback logic (no reusing existing treasuries)
-- ❌ Wrapper token (direct staking of underlying)
-- ❌ Nonce-based address prediction (replaced with CREATE2)
-
-#### Added
-
-- ✅ `tokenAdmin` gating on `register` (only token admin can register)
-- ✅ **CREATE2-based deterministic deployment** - addresses based on token address
-- ✅ **`registerDryRun` function** - predict addresses at any time before registration
-- ✅ Staking-based governance (no wrapper intermediary)
-- ✅ Multi-token reward accounting
-- ✅ ERC-1363 auto-credit for reward tokens
-- ✅ Time-independent address prediction (stable regardless of factory state)
-- ✅ Sub-salt derivation for stakedToken and governor to prevent collisions
-
----
-
-This rule is normative for contract implementations. All contract code should align with the above specifications. Any architectural changes should update this document first.
+**This rule is normative. All contract code must align with these specifications.**

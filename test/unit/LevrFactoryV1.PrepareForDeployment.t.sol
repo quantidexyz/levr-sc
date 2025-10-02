@@ -49,18 +49,16 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test {
     MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
 
     // Step 3: Complete registration with the prepared contracts
-    (address regTreasury, address governor, address regStaking, address stakedToken) = factory.register(
-      address(clankerToken)
-    );
+    ILevrFactory_v1.Project memory project = factory.register(address(clankerToken));
 
     // Verify same addresses are used
-    assertEq(regTreasury, treasury, 'Should use prepared treasury');
-    assertEq(regStaking, staking, 'Should use prepared staking');
-    assertTrue(governor != address(0), 'Governor should be deployed');
-    assertTrue(stakedToken != address(0), 'StakedToken should be deployed');
+    assertEq(project.treasury, treasury, 'Should use prepared treasury');
+    assertEq(project.staking, staking, 'Should use prepared staking');
+    assertTrue(project.governor != address(0), 'Governor should be deployed');
+    assertTrue(project.stakedToken != address(0), 'StakedToken should be deployed');
 
     // Verify treasury is controlled by governor (not ownable anymore)
-    assertEq(LevrTreasury_v1(payable(treasury)).governor(), governor, 'Treasury controlled by governor');
+    assertEq(LevrTreasury_v1(payable(treasury)).governor(), project.governor, 'Treasury controlled by governor');
   }
 
   function test_prepareForDeployment_multiple_times_creates_different_addresses() public {
@@ -81,15 +79,13 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test {
     // Register directly without prepareForDeployment
     MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
 
-    (address treasury, address governor, address staking, address stakedToken) = factory.register(
-      address(clankerToken)
-    );
+    ILevrFactory_v1.Project memory project = factory.register(address(clankerToken));
 
     // Should deploy new contracts
-    assertTrue(treasury != address(0), 'Treasury should be deployed');
-    assertTrue(governor != address(0), 'Governor should be deployed');
-    assertTrue(staking != address(0), 'Staking should be deployed');
-    assertTrue(stakedToken != address(0), 'StakedToken should be deployed');
+    assertTrue(project.treasury != address(0), 'Treasury should be deployed');
+    assertTrue(project.governor != address(0), 'Governor should be deployed');
+    assertTrue(project.staking != address(0), 'Staking should be deployed');
+    assertTrue(project.stakedToken != address(0), 'StakedToken should be deployed');
   }
 
   function test_typical_workflow_with_preparation() public {
@@ -111,23 +107,20 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test {
 
     // Step 3: Complete registration with prepared contracts
     vm.prank(address(this)); // tokenAdmin for MockERC20 is address(this)
-    (address finalTreasury, address governor, address finalStaking, address stakedToken) = factory.register(
-      address(clankerToken)
-    );
+    ILevrFactory_v1.Project memory project = factory.register(address(clankerToken));
 
-    emit log_named_address('Governor deployed', governor);
-    emit log_named_address('StakedToken deployed', stakedToken);
+    emit log_named_address('Governor deployed', project.governor);
+    emit log_named_address('StakedToken deployed', project.stakedToken);
 
     // Verify the system is fully integrated
-    assertEq(finalTreasury, treasury, 'Treasury address matches');
-    assertEq(finalStaking, staking, 'Staking address matches');
+    assertEq(project.treasury, treasury, 'Treasury address matches');
+    assertEq(project.staking, staking, 'Staking address matches');
 
-    (address projTreasury, address projGovernor, address projStaking, address projStakedToken) = factory
-      .getProjectContracts(address(clankerToken));
+    ILevrFactory_v1.Project memory proj = factory.getProjectContracts(address(clankerToken));
 
-    assertEq(projTreasury, treasury, 'Project treasury registered');
-    assertEq(projGovernor, governor, 'Project governor registered');
-    assertEq(projStaking, staking, 'Project staking registered');
-    assertEq(projStakedToken, stakedToken, 'Project stakedToken registered');
+    assertEq(proj.treasury, treasury, 'Project treasury registered');
+    assertEq(proj.governor, project.governor, 'Project governor registered');
+    assertEq(proj.staking, staking, 'Project staking registered');
+    assertEq(proj.stakedToken, project.stakedToken, 'Project stakedToken registered');
   }
 }

@@ -47,9 +47,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
   }
 
   /// @inheritdoc ILevrFactory_v1
-  function register(
-    address clankerToken
-  ) external override returns (address treasury, address governor, address staking, address stakedToken) {
+  function register(address clankerToken) external override returns (ILevrFactory_v1.Project memory project) {
     Project storage p = _projects[clankerToken];
     require(p.staking == address(0), 'ALREADY_REGISTERED');
 
@@ -69,43 +67,40 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
     address clankerToken,
     address treasury_,
     address staking_
-  ) internal returns (address treasury, address governor, address staking, address stakedToken) {
+  ) internal returns (ILevrFactory_v1.Project memory project) {
     // Use provided treasury or deploy new one
     if (treasury_ != address(0)) {
-      treasury = treasury_;
+      project.treasury = treasury_;
     } else {
-      treasury = address(new LevrTreasury_v1(address(this)));
+      project.treasury = address(new LevrTreasury_v1(address(this)));
     }
 
     // Use provided staking or deploy new one
     if (staking_ != address(0)) {
-      staking = staking_;
+      project.staking = staking_;
     } else {
-      staking = address(new LevrStaking_v1());
+      project.staking = address(new LevrStaking_v1());
     }
 
     // Deploy stakedToken
     uint8 uDec = IERC20Metadata(clankerToken).decimals();
     string memory name_ = string(abi.encodePacked('Levr Staked ', IERC20Metadata(clankerToken).name()));
     string memory symbol_ = string(abi.encodePacked('s', IERC20Metadata(clankerToken).symbol()));
-    stakedToken = address(new LevrStakedToken_v1(name_, symbol_, uDec, clankerToken, staking));
+    project.stakedToken = address(new LevrStakedToken_v1(name_, symbol_, uDec, clankerToken, project.staking));
 
     // Initialize staking
-    LevrStaking_v1(staking).initialize(clankerToken, stakedToken, treasury);
+    LevrStaking_v1(project.staking).initialize(clankerToken, project.stakedToken, project.treasury);
 
     // Deploy governor
-    governor = address(new LevrGovernor_v1(address(this), treasury, stakedToken));
+    project.governor = address(new LevrGovernor_v1(address(this), project.treasury, project.stakedToken));
 
     // Initialize treasury now that governor and underlying are known
-    LevrTreasury_v1(treasury).initialize(governor, clankerToken);
+    LevrTreasury_v1(project.treasury).initialize(project.governor, clankerToken);
 
-    Project storage p = _projects[clankerToken];
-    p.treasury = treasury;
-    p.governor = governor;
-    p.staking = staking;
-    p.stakedToken = stakedToken;
+    // Store in registry
+    _projects[clankerToken] = project;
 
-    emit Registered(clankerToken, treasury, governor, stakedToken);
+    emit Registered(clankerToken, project.treasury, project.governor, project.stakedToken);
   }
 
   /// @inheritdoc ILevrFactory_v1
@@ -117,9 +112,8 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable {
   /// @inheritdoc ILevrFactory_v1
   function getProjectContracts(
     address clankerToken
-  ) external view override returns (address treasury, address governor, address staking, address stakedToken) {
-    Project storage p = _projects[clankerToken];
-    return (p.treasury, p.governor, p.staking, p.stakedToken);
+  ) external view override returns (ILevrFactory_v1.Project memory project) {
+    return _projects[clankerToken];
   }
 
   /// @inheritdoc ILevrFactory_v1

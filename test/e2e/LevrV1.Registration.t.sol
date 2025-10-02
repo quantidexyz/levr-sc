@@ -80,16 +80,15 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
       revert('Token does not implement symbol()');
     }
 
-    (, address governor, , ) = factory.register(clankerToken);
+    ILevrFactory_v1.Project memory project = factory.register(clankerToken);
 
-    (address treasury, , address staking, address stakedToken) = factory.getProjectContracts(clankerToken);
-    assertTrue(treasury != address(0) && staking != address(0) && stakedToken != address(0));
+    assertTrue(project.treasury != address(0) && project.staking != address(0) && project.stakedToken != address(0));
 
     // If caller holds some underlying on fork, try a minimal stake
     uint256 bal = IERC20(clankerToken).balanceOf(address(this));
     if (bal > 0) {
-      IERC20(clankerToken).approve(staking, bal);
-      ILevrStaking_v1(staking).stake(bal);
+      IERC20(clankerToken).approve(project.staking, bal);
+      ILevrStaking_v1(project.staking).stake(bal);
     }
 
     // Fund treasury from user holdings; if insufficient, try to acquire from locker to user then forward
@@ -101,16 +100,16 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     }
     if (userBal > 0) {
       uint256 sendAmt = userBal < boostAmount ? userBal : boostAmount;
-      IERC20(clankerToken).transfer(treasury, sendAmt);
+      IERC20(clankerToken).transfer(project.treasury, sendAmt);
       boostAmount = sendAmt;
     }
 
     // Governor can create a boost proposal and execute it immediately
-    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmount, 0);
-    ILevrGovernor_v1(governor).execute(pid);
+    uint256 pid = ILevrGovernor_v1(project.governor).proposeBoost(boostAmount, 0);
+    ILevrGovernor_v1(project.governor).execute(pid);
 
     // Treasury balance read works on live token
-    uint256 tBal = ILevrTreasury_v1(treasury).getUnderlyingBalance();
+    uint256 tBal = ILevrTreasury_v1(project.treasury).getUnderlyingBalance();
     tBal;
   }
 
@@ -136,9 +135,8 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     });
 
     // Register project
-    factory.register(clankerToken);
-    (, , address staking, ) = factory.getProjectContracts(clankerToken);
-    assertTrue(staking != address(0));
+    ILevrFactory_v1.Project memory project = factory.register(clankerToken);
+    assertTrue(project.staking != address(0));
 
     // Base mainnet anchors (fork): LP Locker
     address lpLocker = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496;
@@ -152,11 +150,11 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
 
     // Update reward recipient at index 0 to staking (tokenAdmin is this test contract)
     vm.prank(address(this));
-    IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(clankerToken, 0, staking);
+    IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(clankerToken, 0, project.staking);
 
     // Verify the update was successful
     rewardInfo = IClankerLpLocker(lpLocker).tokenRewards(clankerToken);
-    assertEq(rewardInfo.rewardRecipients[0], staking, 'reward recipient should be updated to staking');
+    assertEq(rewardInfo.rewardRecipients[0], project.staking, 'reward recipient should be updated to staking');
 
     // Verify non-admin cannot update
     address bob = address(0xBEEF);

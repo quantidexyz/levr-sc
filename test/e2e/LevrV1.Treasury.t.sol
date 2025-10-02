@@ -60,8 +60,11 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
       pairedFeeBps: 100
     });
 
-    (, governor, , ) = LevrFactory_v1(fac).register(clankerToken);
-    (treasury, , staking, stakedToken) = LevrFactory_v1(fac).getProjectContracts(clankerToken);
+    ILevrFactory_v1.Project memory project = LevrFactory_v1(fac).register(clankerToken);
+    treasury = project.treasury;
+    governor = project.governor;
+    staking = project.staking;
+    stakedToken = project.stakedToken;
   }
 
   function _acquireFromLocker(address to, uint256 desired) internal returns (uint256 acquired) {
@@ -134,11 +137,11 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
     factory.register(sharedClankerToken);
 
     // Only the tokenAdmin (this contract) can successfully register
-    (, address governor, , ) = factory.register(sharedClankerToken);
+    ILevrFactory_v1.Project memory project = factory.register(sharedClankerToken);
 
     // Verify registration succeeded
-    (, address registeredGovernor, , ) = factory.getProjectContracts(sharedClankerToken);
-    assertEq(registeredGovernor, governor);
+    ILevrFactory_v1.Project memory registered = factory.getProjectContracts(sharedClankerToken);
+    assertEq(registered.governor, project.governor);
   }
 
   function test_apy_views_work_correctly() public {

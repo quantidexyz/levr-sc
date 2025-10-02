@@ -56,10 +56,10 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard {
   function applyBoost(uint256 amount) external onlyGovernor nonReentrant {
     if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
     // move underlying from treasury to staking and accrue
-    (, , address staking, ) = ILevrFactory_v1(factory).getProjectContracts(underlying);
+    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(underlying);
     // approve and pull via accrueFromTreasury for atomicity
-    IERC20(underlying).approve(staking, amount);
-    ILevrStaking_v1(staking).accrueFromTreasury(underlying, amount, true);
+    IERC20(underlying).approve(project.staking, amount);
+    ILevrStaking_v1(project.staking).accrueFromTreasury(underlying, amount, true);
   }
 
   function getUnderlyingBalance() external view returns (uint256) {

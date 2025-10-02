@@ -57,8 +57,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
       pairedFeeBps: 100
     });
 
-    (, governor, , ) = LevrFactory_v1(fac).register(clankerToken);
-    (treasury, , staking, stakedToken) = LevrFactory_v1(fac).getProjectContracts(clankerToken);
+    ILevrFactory_v1.Project memory project = LevrFactory_v1(fac).register(clankerToken);
+    treasury = project.treasury;
+    governor = project.governor;
+    staking = project.staking;
+    stakedToken = project.stakedToken;
   }
 
   function _acquireFromLocker(address to, uint256 desired) internal returns (uint256 acquired) {

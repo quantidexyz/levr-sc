@@ -38,11 +38,11 @@ contract LevrTreasuryV1_UnitTest is Test {
     });
     factory = new LevrFactory_v1(cfg, address(this));
 
-    (, governor, , ) = factory.register(address(underlying));
-    (address t, , address st, address s) = factory.getProjectContracts(address(underlying));
-    treasury = LevrTreasury_v1(payable(t));
-    staking = LevrStaking_v1(st);
-    sToken = LevrStakedToken_v1(s);
+    ILevrFactory_v1.Project memory project = factory.register(address(underlying));
+    governor = project.governor;
+    treasury = LevrTreasury_v1(payable(project.treasury));
+    staking = LevrStaking_v1(project.staking);
+    sToken = LevrStakedToken_v1(project.stakedToken);
 
     // fund treasury
     underlying.mint(address(treasury), 10_000 ether);

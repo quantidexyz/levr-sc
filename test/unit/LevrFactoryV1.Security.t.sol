@@ -73,13 +73,11 @@ contract LevrFactoryV1_SecurityTest is Test {
     // Bob tries to register - since Bob called prepareForDeployment,
     // it should work with his prepared contracts
     vm.prank(bob);
-    (address regTreasury, address governor, address regStaking, address stakedToken) = factory.register(
-      address(bobToken)
-    );
+    ILevrFactory_v1.Project memory project = factory.register(address(bobToken));
 
     // Should use Bob's prepared contracts
-    assertEq(regTreasury, bobTreasury, 'Should use Bob treasury');
-    assertTrue(regStaking != address(0), 'Should have staking');
+    assertEq(project.treasury, bobTreasury, 'Should use Bob treasury');
+    assertTrue(project.staking != address(0), 'Should have staking');
   }
 
   function test_can_register_with_own_prepared_contracts() public {
@@ -93,14 +91,12 @@ contract LevrFactoryV1_SecurityTest is Test {
 
     // Alice registers with her own prepared contracts - should succeed
     vm.prank(alice);
-    (address regTreasury, address governor, address regStaking, address stakedToken) = factory.register(
-      address(aliceToken)
-    );
+    ILevrFactory_v1.Project memory project = factory.register(address(aliceToken));
 
-    assertEq(regTreasury, aliceTreasury, 'Should use Alice treasury');
-    assertEq(regStaking, aliceStaking, 'Should use Alice staking');
-    assertTrue(governor != address(0), 'Governor deployed');
-    assertTrue(stakedToken != address(0), 'StakedToken deployed');
+    assertEq(project.treasury, aliceTreasury, 'Should use Alice treasury');
+    assertEq(project.staking, aliceStaking, 'Should use Alice staking');
+    assertTrue(project.governor != address(0), 'Governor deployed');
+    assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
   }
 
   function test_can_register_without_preparation() public {
@@ -110,12 +106,12 @@ contract LevrFactoryV1_SecurityTest is Test {
 
     // Bob registers without preparation - should succeed
     vm.prank(bob);
-    (address treasury, address governor, address staking, address stakedToken) = factory.register(address(bobToken));
+    ILevrFactory_v1.Project memory project = factory.register(address(bobToken));
 
-    assertTrue(treasury != address(0), 'Treasury deployed');
-    assertTrue(governor != address(0), 'Governor deployed');
-    assertTrue(staking != address(0), 'Staking deployed');
-    assertTrue(stakedToken != address(0), 'StakedToken deployed');
+    assertTrue(project.treasury != address(0), 'Treasury deployed');
+    assertTrue(project.governor != address(0), 'Governor deployed');
+    assertTrue(project.staking != address(0), 'Staking deployed');
+    assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
   }
 
   function test_tokenAdmin_gate_still_enforced() public {

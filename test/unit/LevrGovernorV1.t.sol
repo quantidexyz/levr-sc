@@ -40,12 +40,11 @@ contract LevrGovernorV1_UnitTest is Test {
       protocolTreasury: protocolTreasury
     });
     factory = new LevrFactory_v1(cfg, address(this));
-    (, address govAddr, , ) = factory.register(address(underlying));
-    (address t, , address st, address s) = factory.getProjectContracts(address(underlying));
-    governor = LevrGovernor_v1(govAddr);
-    treasury = LevrTreasury_v1(payable(t));
-    staking = LevrStaking_v1(st);
-    sToken = LevrStakedToken_v1(s);
+    ILevrFactory_v1.Project memory project = factory.register(address(underlying));
+    governor = LevrGovernor_v1(project.governor);
+    treasury = LevrTreasury_v1(payable(project.treasury));
+    staking = LevrStaking_v1(project.staking);
+    sToken = LevrStakedToken_v1(project.stakedToken);
 
     // fund user and stake to reach min balance
     underlying.mint(user, 1_000 ether);
@@ -103,20 +102,19 @@ contract LevrGovernorV1_UnitTest is Test {
       protocolTreasury: protocolTreasury
     });
     LevrFactory_v1 fac = new LevrFactory_v1(cfg, address(this));
-    (, address govAddr, , ) = fac.register(address(underlying));
-    (address t, , address st, ) = fac.getProjectContracts(address(underlying));
-    LevrGovernor_v1 g = LevrGovernor_v1(govAddr);
+    ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
+    LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
 
     // fund user tokens and stake 1 wei to satisfy minWTokenToSubmit
     address u = address(0x1111);
     underlying.mint(u, 10 ether);
     vm.startPrank(u);
-    underlying.approve(st, type(uint256).max);
-    LevrStaking_v1(st).stake(1);
+    underlying.approve(proj.staking, type(uint256).max);
+    LevrStaking_v1(proj.staking).stake(1);
     vm.stopPrank();
 
     // fund treasury for transfers
-    underlying.mint(t, 10_000 ether);
+    underlying.mint(proj.treasury, 10_000 ether);
 
     // First transfer proposal succeeds
     vm.prank(u);

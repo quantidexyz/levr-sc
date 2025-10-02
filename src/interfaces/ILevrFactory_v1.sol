@@ -77,13 +77,8 @@ interface ILevrFactory_v1 {
   ///      Otherwise deploys fresh contracts.
   ///      Treasury control is always via the deployed governor.
   /// @param clankerToken Underlying Clanker token
-  /// @return treasury Treasury address
-  /// @return governor Deployed governor address
-  /// @return staking Staking module address
-  /// @return stakedToken Deployed staked token address
-  function register(
-    address clankerToken
-  ) external returns (address treasury, address governor, address staking, address stakedToken);
+  /// @return project Project contract addresses
+  function register(address clankerToken) external returns (Project memory project);
 
   /// @notice Update global protocol configuration.
   /// @param cfg New configuration
@@ -91,13 +86,8 @@ interface ILevrFactory_v1 {
 
   /// @notice Get the deployed contracts for a given project.
   /// @param clankerToken Token address used as project key
-  /// @return treasury Project treasury address
-  /// @return governor Project governor address
-  /// @return staking Project staking module address
-  /// @return stakedToken ERC20 representing staked balances
-  function getProjectContracts(
-    address clankerToken
-  ) external view returns (address treasury, address governor, address staking, address stakedToken);
+  /// @return project Project contract addresses
+  function getProjectContracts(address clankerToken) external view returns (Project memory project);
 
   // Config getters for periphery contracts
   /// @notice Protocol fee in basis points applied to wrap/unwrap.
