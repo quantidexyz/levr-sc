@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {BaseForkTest} from '../utils/BaseForkTest.sol';
-import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
@@ -12,7 +12,7 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 contract LevrV1_GovernanceE2E is BaseForkTest {
   LevrFactory_v1 internal factory;
-  ERC2771Forwarder internal forwarder;
+  LevrForwarder_v1 internal forwarder;
 
   address internal protocolTreasury = address(0xFEE);
   address internal clankerToken;
@@ -24,7 +24,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
     clankerFactory = DEFAULT_CLANKER_FACTORY;
 
     // Deploy forwarder first
-    forwarder = new ERC2771Forwarder('LevrForwarder');
+    forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
@@ -93,7 +93,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
 
   function test_min_balance_gating_and_deadline_enforcement() public {
     // Create stricter config
-    ERC2771Forwarder fwd = new ERC2771Forwarder('LevrForwarder');
+    LevrForwarder_v1 fwd = new LevrForwarder_v1('LevrForwarder_v1');
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 1 days,

@@ -40,21 +40,25 @@ All contracts extend ERC2771ContextBase → support meta-transactions
 
 **Role**: Registry and deployment coordinator
 
-**Constructor**:
+**Extends**: `ERC2771Context` (supports meta-transactions)
 
-- Automatically deploys `ERC2771Forwarder` with name "LevrForwarder"
-- Stores forwarder address in `trustedForwarder` (public, immutable)
-- All contracts deployed by factory trust this forwarder
+**Constructor**: `constructor(FactoryConfig, owner, trustedForwarder)`
+
+- Accepts a pre-deployed `ERC2771Forwarder` address
+- Factory itself supports meta-transactions for `prepareForDeployment()` and `register()`
+- All contracts deployed by factory trust the same forwarder
 
 **Functions**:
 
 - `prepareForDeployment()` → Deploy treasury & staking, return addresses
   - Anyone can call; stores `deployer → PreparedContracts`
+  - Uses `_msgSender()` for meta-tx support
   - Call BEFORE Clanker deployment to get addresses
   - Passes `trustedForwarder` to deployed contracts
 - `register(clankerToken)` → Complete setup, return `Project` struct
   - Only `clankerToken.tokenAdmin()` can call
-  - Auto-uses prepared contracts from `msg.sender` (or deploys new)
+  - Uses `_msgSender()` for meta-tx support
+  - Auto-uses prepared contracts from caller (or deploys new)
   - Returns `Project{treasury, governor, staking, stakedToken}`
 - `getProjectContracts(clankerToken)` → Query registered project
 - `trustedForwarder()` → Returns the deployed forwarder address
@@ -66,7 +70,7 @@ All contracts extend ERC2771ContextBase → support meta-transactions
 
 **Security**: Only deployer can use their prepared contracts; only tokenAdmin can register
 
-**Meta-Transactions**: All deployed contracts support gasless transactions via the forwarder
+**Meta-Transactions**: Factory and all deployed contracts support gasless transactions via the forwarder
 
 ---
 
@@ -293,8 +297,13 @@ struct PreparedContracts {
 
 ### Meta-Transaction Forwarder
 
-- **Deployment**: `ERC2771Forwarder` must be deployed BEFORE factory
-- **Name**: "LevrForwarder" (by convention)
+- **Implementation**: `LevrForwarder_v1` (extends OpenZeppelin's `ERC2771Forwarder`)
+- **Deployment**: Must be deployed BEFORE factory
+- **Name**: "LevrForwarder_v1"
+- **Features**:
+  - Standard ERC2771 meta-transaction support (via `execute()`)
+  - **Multicall support** (via `executeMulticall()`) - execute multiple calls in ONE transaction
+  - Signature verification and nonce management
 - **Access**: `factory.trustedForwarder()` returns address
 - **Immutable**: Cannot be changed after factory deployment
 - **Shared**: All projects from same factory use same forwarder
@@ -308,7 +317,7 @@ struct PreparedContracts {
 
 ```solidity
 // Deploy forwarder FIRST
-ERC2771Forwarder forwarder = new ERC2771Forwarder("LevrForwarder");
+LevrForwarder_v1 forwarder = new LevrForwarder_v1("LevrForwarder_v1");
 
 // Factory setup with forwarder
 LevrFactory_v1 factory = new LevrFactory_v1(config, owner, address(forwarder));
@@ -337,7 +346,7 @@ LevrStakedToken_v1(proj.stakedToken);
 
 ```solidity
 // Users sign transactions, relayers execute
-ERC2771Forwarder forwarder = ERC2771Forwarder(factory.trustedForwarder());
+LevrForwarder_v1 forwarder = LevrForwarder_v1(factory.trustedForwarder());
 
 // Example: Gasless stake
 ERC2771Forwarder.ForwardRequestData memory request = ERC2771Forwarder.ForwardRequestData({
@@ -356,35 +365,31 @@ forwarder.execute(request);
 
 ### Chaining Transactions with Multicall
 
-The factory's `executeTransaction` enables complex multi-step operations via the forwarder's multicall:
+`LevrForwarder_v1.executeMulticall()` enables complex multi-step operations in ONE transaction:
 
 ```solidity
-// Example: Approve token + Stake in one meta-transaction
-ITransactionForwarder_v1.SingleCall[] memory calls = new ITransactionForwarder_v1.SingleCall[](2);
+// Example: Complete project deployment - prepare + register in ONE transaction!
+ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](2);
 
-// Call 1: Factory executes approve on token (user is msg.sender via forwarder)
-calls[0] = ITransactionForwarder_v1.SingleCall({
+// Call 1: Prepare deployment
+calls[0] = ILevrForwarder_v1.SingleCall({
   target: address(factory),
   allowFailure: false,
-  callData: abi.encodeWithSelector(
-    LevrFactory_v1.executeTransaction.selector,
-    address(token),
-    abi.encodeWithSelector(IERC20.approve.selector, address(staking), amount)
-  )
+  callData: abi.encodeWithSelector(LevrFactory_v1.prepareForDeployment.selector)
 });
 
-// Call 2: Direct stake call
-calls[1] = ITransactionForwarder_v1.SingleCall({
-  target: address(staking),
+// Call 2: Register token
+calls[1] = ILevrForwarder_v1.SingleCall({
+  target: address(factory),
   allowFailure: false,
-  callData: abi.encodeWithSelector(LevrStaking_v1.stake.selector, amount)
+  callData: abi.encodeWithSelector(LevrFactory_v1.register.selector, clankerToken)
 });
 
-// User signs, relayer executes multicall
+// Execute as user (multicall extracts user from msg.sender and appends to each call)
 forwarder.executeMulticall(calls);
 ```
 
-**Note**: `executeTransaction` executes FROM the factory, so it's useful for intermediate calls in multicall chains, not for operations requiring specific caller identity.
+**Key Benefit**: User deploys entire project without paying gas - just signs off-chain!
 
 ### Creating New Contracts
 
@@ -422,12 +427,16 @@ contract MyContract is ERC2771ContextBase {
 **Test Files**:
 
 - `test/e2e/LevrV1.MetaTx.t.sol` - Meta-transaction tests
+  - `test_MetaTx_Stake` - Gasless staking
+  - `test_MetaTx_ProposeTransfer` - Gasless proposals
+  - `test_MetaTx_Unstake` - Gasless unstaking
+  - `test_MetaTx_Multicall_CompleteDeployment` - Full deployment via multicall (prepare → register)
 - `test/unit/LevrStakingV1.t.sol` - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
 
 **Test Coverage for executeTransaction**:
 
 - Test basic call execution via factory
-- Test with forwarder multicall chaining
+- Test with forwarder multicall chaining (see `test_MetaTx_Multicall_CompleteDeployment`)
 - Test return values (success, returnData)
 - Test reentrancy protection
 
@@ -472,6 +481,8 @@ contract MyContract is ERC2771ContextBase {
 - **Maintainability**: One place to update ERC2771 logic
 - **Multiple Inheritance**: Cleanly resolves ReentrancyGuard + ERC2771Context diamond pattern
 - **Type Safety**: Enforces consistent meta-transaction handling
+
+**Note**: Factory extends `ERC2771Context` directly and implements its own overrides because Solidity's override specification doesn't allow inheriting through abstract base contracts in complex diamond patterns.
 
 ### Why executeTransaction on Factory?
 

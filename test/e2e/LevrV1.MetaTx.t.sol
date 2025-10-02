@@ -5,6 +5,8 @@ import 'forge-std/Test.sol';
 import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {ECDSA} from '@openzeppelin/contracts/utils/cryptography/ECDSA.sol';
 
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
+import {ILevrForwarder_v1} from '../../src/interfaces/ILevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
@@ -20,7 +22,7 @@ contract LevrV1MetaTxTest is Test {
   using ECDSA for bytes32;
 
   LevrFactory_v1 factory;
-  ERC2771Forwarder forwarder;
+  LevrForwarder_v1 forwarder;
   MockERC20 clankerToken;
 
   ILevrFactory_v1.Project project;
@@ -35,9 +37,9 @@ contract LevrV1MetaTxTest is Test {
   function setUp() public {
     user = vm.addr(userPrivateKey);
 
-    // Deploy forwarder first
+    // Deploy forwarder first (with multicall support)
     vm.prank(owner);
-    forwarder = new ERC2771Forwarder('LevrForwarder');
+    forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
     // Deploy factory with forwarder
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
@@ -204,6 +206,75 @@ contract LevrV1MetaTxTest is Test {
 
     // Treasury contract should trust the forwarder
     assertTrue(LevrGovernor_v1(project.treasury).isTrustedForwarder(address(forwarder)));
+  }
+
+  /**
+   * @notice Test complete project deployment via multicall
+   * @dev Demonstrates: prepareForDeployment → deploy token → register in ONE transaction using executeMulticall
+   *      This is the key benefit of LevrForwarder_v1's executeMulticall support
+   */
+  function test_MetaTx_Multicall_CompleteDeployment() public {
+    // Create a fresh user for this test
+    uint256 deployerPrivateKey = 0xDEF1;
+    address deployer = vm.addr(deployerPrivateKey);
+
+    // Deploy token that will be registered (deployer is admin)
+    vm.prank(deployer);
+    MockERC20 newToken = new MockERC20('Multicall Token', 'MULTI');
+
+    // Build the multicall sequence - all executed in ONE transaction without deployer paying gas!
+    ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](2);
+
+    // Call 1: prepareForDeployment
+    calls[0] = ILevrForwarder_v1.SingleCall({
+      target: address(factory),
+      allowFailure: false,
+      callData: abi.encodeWithSelector(LevrFactory_v1.prepareForDeployment.selector)
+    });
+
+    // Call 2: register the token
+    calls[1] = ILevrForwarder_v1.SingleCall({
+      target: address(factory),
+      allowFailure: false,
+      callData: abi.encodeWithSelector(LevrFactory_v1.register.selector, address(newToken))
+    });
+
+    // Execute multicall as the deployer (via relayer paying gas)
+    vm.prank(deployer);
+    ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+
+    // Verify all calls succeeded
+    assertTrue(results[0].success, 'prepareForDeployment should succeed');
+    assertTrue(results[1].success, 'register should succeed');
+
+    // Verify complete project was deployed
+    ILevrFactory_v1.Project memory newProject = factory.getProjectContracts(address(newToken));
+    assertTrue(newProject.treasury != address(0), 'Treasury should be deployed');
+    assertTrue(newProject.governor != address(0), 'Governor should be deployed');
+    assertTrue(newProject.staking != address(0), 'Staking should be deployed');
+    assertTrue(newProject.stakedToken != address(0), 'StakedToken should be deployed');
+
+    // Verify prepared contracts were used
+    ILevrFactory_v1.PreparedContracts memory prepared = _getPreparedContracts(deployer);
+    assertEq(newProject.treasury, prepared.treasury, 'Should use prepared treasury');
+    assertEq(newProject.staking, prepared.staking, 'Should use prepared staking');
+
+    console.log('=== MULTICALL DEPLOYMENT SUCCESS ===');
+    console.log('Deployer (called functions):', deployer);
+    console.log('Actions:', 'prepare + register in ONE transaction');
+    console.log('Treasury:', newProject.treasury);
+    console.log('Governor:', newProject.governor);
+    console.log('Staking:', newProject.staking);
+    console.log('StakedToken:', newProject.stakedToken);
+  }
+
+  // Helper to access prepared contracts (internal mapping)
+  function _getPreparedContracts(address deployer) internal view returns (ILevrFactory_v1.PreparedContracts memory) {
+    // Use vm.load to read from the mapping
+    bytes32 slot = keccak256(abi.encode(deployer, uint256(6))); // _preparedContracts is at slot 6
+    address treasury = address(uint160(uint256(vm.load(address(factory), slot))));
+    address staking = address(uint160(uint256(vm.load(address(factory), bytes32(uint256(slot) + 1)))));
+    return ILevrFactory_v1.PreparedContracts({treasury: treasury, staking: staking});
   }
 
   // Helper function to get the EIP712 digest for signing

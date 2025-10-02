@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from 'forge-std/Script.sol';
-import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
+import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
 import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
 
@@ -73,8 +73,8 @@ contract DeployLevrFactoryDevnet is Script {
 
     vm.startBroadcast(privateKey);
 
-    // Deploy the forwarder first
-    ERC2771Forwarder forwarder = new ERC2771Forwarder('LevrForwarder');
+    // Deploy the forwarder first (includes executeMulticall support)
+    LevrForwarder_v1 forwarder = new LevrForwarder_v1('LevrForwarder_v1');
     console.log('Forwarder deployed at:', address(forwarder));
 
     // Deploy the factory with forwarder

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
-import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
@@ -11,12 +11,12 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 
 contract LevrFactoryV1_PrepareForDeploymentTest is Test {
   LevrFactory_v1 internal factory;
-  ERC2771Forwarder internal forwarder;
+  LevrForwarder_v1 internal forwarder;
   address internal protocolTreasury = address(0xFEE);
 
   function setUp() public {
     // Deploy forwarder first
-    forwarder = new ERC2771Forwarder('LevrForwarder');
+    forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,

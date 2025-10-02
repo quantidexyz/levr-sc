@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
-import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
@@ -15,7 +15,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 contract LevrGovernorV1_UnitTest is Test {
   MockERC20 internal underlying;
   LevrFactory_v1 internal factory;
-  ERC2771Forwarder internal forwarder;
+  LevrForwarder_v1 internal forwarder;
   LevrGovernor_v1 internal governor;
   LevrTreasury_v1 internal treasury;
   LevrStaking_v1 internal staking;
@@ -28,7 +28,7 @@ contract LevrGovernorV1_UnitTest is Test {
     underlying = new MockERC20('Token', 'TKN');
 
     // Deploy forwarder first
-    forwarder = new ERC2771Forwarder('LevrForwarder');
+    forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
@@ -86,7 +86,7 @@ contract LevrGovernorV1_UnitTest is Test {
 
   function test_rate_limit_per_week_enforced() public {
     // Create a new factory with maxSubmissionPerType = 1
-    ERC2771Forwarder fwd = new ERC2771Forwarder('LevrForwarder');
+    LevrForwarder_v1 fwd = new LevrForwarder_v1('LevrForwarder_v1');
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
       submissionDeadlineSeconds: 3 days,
