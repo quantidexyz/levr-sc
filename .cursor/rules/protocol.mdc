@@ -2,16 +2,36 @@
 alwaysApply: true
 ---
 
+# ⚠️ CRITICAL: RULE MAINTENANCE ⚠️
+
+**THIS RULE MUST BE KEPT UP TO DATE WITH THE CODEBASE**
+
+When making ANY architectural changes, contract modifications, or adding new features:
+
+1. **IMMEDIATELY update this rule** to reflect the changes
+2. Update the architecture diagrams
+3. Update contract descriptions and functions
+4. Update code patterns and examples
+5. Add any new design decisions or rationale
+
+**Outdated rules lead to incorrect agent behavior and hallucinated code.**
+
+---
+
 ## Levr Protocol v1 — Architecture Guide
 
 Source-of-truth for Levr Protocol v1 contracts. Modular system: Factory deploys per-project Treasury, Governor, Staking, and StakedToken.
 
+**✨ Full ERC2771 meta-transaction support** - Users can interact gaslessly via trusted forwarder.
+
 ### Architecture
 
 ```
-LevrFactory_v1
+LevrFactory_v1 (deploys ERC2771Forwarder in constructor)
   ↓ prepareForDeployment() → (treasury, staking)
   ↓ register(clankerToken) → Project{treasury, governor, staking, stakedToken}
+
+All contracts extend ERC2771ContextBase → support meta-transactions
 ```
 
 ## Contracts
@@ -20,18 +40,57 @@ LevrFactory_v1
 
 **Role**: Registry and deployment coordinator
 
+**Constructor**:
+
+- Automatically deploys `ERC2771Forwarder` with name "LevrForwarder"
+- Stores forwarder address in `trustedForwarder` (public, immutable)
+- All contracts deployed by factory trust this forwarder
+
 **Functions**:
 
 - `prepareForDeployment()` → Deploy treasury & staking, return addresses
   - Anyone can call; stores `deployer → PreparedContracts`
   - Call BEFORE Clanker deployment to get addresses
+  - Passes `trustedForwarder` to deployed contracts
 - `register(clankerToken)` → Complete setup, return `Project` struct
   - Only `clankerToken.tokenAdmin()` can call
   - Auto-uses prepared contracts from `msg.sender` (or deploys new)
   - Returns `Project{treasury, governor, staking, stakedToken}`
 - `getProjectContracts(clankerToken)` → Query registered project
+- `trustedForwarder()` → Returns the deployed forwarder address
 
 **Security**: Only deployer can use their prepared contracts; only tokenAdmin can register
+
+**Meta-Transactions**: All deployed contracts support gasless transactions via the forwarder
+
+---
+
+### ERC2771ContextBase (Base Contract)
+
+**Role**: Base contract for meta-transaction support
+
+**Location**: `src/base/ERC2771ContextBase.sol`
+
+**Purpose**:
+
+- Eliminates code duplication across contracts
+- Provides centralized ERC2771Context overrides
+- Resolves multiple inheritance (ReentrancyGuard + ERC2771Context)
+
+**Usage**: All user-facing contracts extend this base:
+
+```solidity
+contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, ERC2771ContextBase {
+  constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
+
+  function stake(uint256 amount) external {
+    address staker = _msgSender(); // Extracts real sender from meta-tx
+    // ...
+  }
+}
+```
+
+**Key Pattern**: Use `_msgSender()` instead of `msg.sender` everywhere to support meta-transactions
 
 ---
 
@@ -39,12 +98,19 @@ LevrFactory_v1
 
 **Role**: Asset custody (NOT Ownable - governor controls)
 
+**Extends**: `ERC2771ContextBase` (supports meta-transactions)
+
+**Constructor**: `constructor(address factory_, address trustedForwarder)`
+
 **Functions**:
 
 - `transfer(to, amount)` → Governor-authorized transfer
 - `applyBoost(amount)` → Move to staking, accrue rewards
+- `initialize(governor, underlying)` → One-time init by factory
 
-**Access**: `onlyGovernor` modifier
+**Access**: `onlyGovernor` modifier (uses `_msgSender()` for meta-tx support)
+
+**Meta-Transaction Support**: Governor calls can be relayed via forwarder
 
 ---
 
@@ -52,13 +118,21 @@ LevrFactory_v1
 
 **Role**: Governance and proposals
 
+**Extends**: `ERC2771ContextBase` (supports meta-transactions)
+
+**Constructor**: `constructor(address factory_, address treasury_, address stakedToken_, address trustedForwarder)`
+
 **Functions**:
 
-- `proposeTransfer(receiver, amount, reason)` → Custom amounts
-- `proposeBoost(amount)` → Custom amounts
-- `execute(proposalId)`
+- `proposeTransfer(receiver, amount, reason)` → Custom amounts (gasless via meta-tx)
+- `proposeBoost(amount)` → Custom amounts (gasless via meta-tx)
+- `execute(proposalId)` → Anyone can execute
+- `getProposal(proposalId)` → View proposal
+- `canSubmit(proposer)` → Check eligibility
 
 **Validation**: Min staked balance, rolling windows, deadlines
+
+**Meta-Transaction Support**: Users can submit proposals without holding ETH
 
 ---
 
@@ -66,12 +140,17 @@ LevrFactory_v1
 
 **Role**: Stake escrow, multi-token rewards
 
+**Extends**: `ERC2771ContextBase` (supports meta-transactions)
+
+**Constructor**: `constructor(address trustedForwarder)`
+
 **Functions**:
 
-- `stake(amount)`, `unstake(amount, to)` → Mint/burn stakedToken 1:1
+- `stake(amount)`, `unstake(amount, to)` → Mint/burn stakedToken 1:1 (gasless via meta-tx)
 - `accrueRewards(token, amount)` → Delta-based accrual
 - `accrueFromTreasury(token, amount, pull)` → Boost from treasury
-- `claimRewards(tokens[], to)` → Multi-token claim
+- `claimRewards(tokens[], to)` → Multi-token claim (gasless via meta-tx)
+- `initialize(underlying, stakedToken, treasury)` → One-time init by factory
 
 **Reward Paths**:
 
@@ -80,6 +159,8 @@ LevrFactory_v1
 3. Manual `accrueRewards`
 
 **Safety**: Reserve tracking, liquidity checks, streaming windows
+
+**Meta-Transaction Support**: Users can stake/unstake/claim without holding ETH
 
 ---
 
@@ -199,9 +280,19 @@ struct PreparedContracts {
 - `minWTokenToSubmit` — Min staked tokens to propose
 - `protocolTreasury` — Protocol treasury address
 
+**Note**: `trustedForwarder` is NOT in config - automatically deployed in constructor
+
 ### Proposal Amounts
 
 **Custom amounts**: No tiers - proposers specify exact amounts for transfers and boosts
+
+### Meta-Transaction Forwarder
+
+- **Auto-deployed**: `ERC2771Forwarder` created in factory constructor
+- **Name**: "LevrForwarder"
+- **Access**: `factory.trustedForwarder()` returns address
+- **Immutable**: Cannot be changed after deployment
+- **Shared**: All projects from same factory use same forwarder
 
 ---
 
@@ -210,8 +301,11 @@ struct PreparedContracts {
 ### Registration
 
 ```solidity
-// Factory setup
+// Factory setup (forwarder deployed automatically)
 LevrFactory_v1 factory = new LevrFactory_v1(config, owner);
+
+// Get forwarder address
+address forwarder = factory.trustedForwarder();
 
 // Prepare before Clanker
 (address treas, address stak) = factory.prepareForDeployment();
@@ -233,17 +327,64 @@ LevrStaking_v1(proj.staking);
 LevrStakedToken_v1(proj.stakedToken);
 ```
 
+### Using Meta-Transactions
+
+```solidity
+// Users sign transactions, relayers execute
+ERC2771Forwarder forwarder = ERC2771Forwarder(factory.trustedForwarder());
+
+// Example: Gasless stake
+ERC2771Forwarder.ForwardRequestData memory request = ERC2771Forwarder.ForwardRequestData({
+  from: user,
+  to: address(staking),
+  value: 0,
+  gas: 300000,
+  deadline: uint48(block.timestamp + 1 hours),
+  data: abi.encodeWithSelector(LevrStaking_v1.stake.selector, amount),
+  signature: userSignature
+});
+
+// Relayer executes (pays gas)
+forwarder.execute(request);
+```
+
+### Creating New Contracts
+
+**ALWAYS extend ERC2771ContextBase for user-facing contracts:**
+
+```solidity
+import {ERC2771ContextBase} from './base/ERC2771ContextBase.sol';
+
+contract MyContract is ERC2771ContextBase {
+  constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
+
+  function myFunction() external {
+    address realSender = _msgSender(); // NOT msg.sender!
+    // ...
+  }
+}
+```
+
+**NEVER use `msg.sender` directly - always use `_msgSender()`**
+
 ---
 
 ## Testing
 
 **Must Cover**:
 
-- Security: Access controls, deployer tracking
-- Flows: Stake → Boost → Claim → Unstake
-- Governance: Proposals, custom amounts, execution, deadlines
+- Security: Access controls, deployer tracking, meta-tx signature verification
+- Flows: Stake → Boost → Claim → Unstake (both direct and meta-tx)
+- Governance: Proposals, custom amounts, execution, deadlines (gasless proposals)
 - Rewards: Multi-token, reserves, streaming
+- Meta-Transactions: Stake, unstake, claim, propose via forwarder
 - Edge cases: Zero amounts, double registration, unauthorized calls
+- Forwarder: `isTrustedForwarder()`, signature verification, nonce management
+
+**Test Files**:
+
+- `test/e2e/LevrV1.MetaTx.t.sol` - Meta-transaction tests
+- `test/unit/LevrStakingV1.t.sol` - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
 
 ## Key Design Decisions
 
@@ -271,6 +412,20 @@ LevrStakedToken_v1(proj.stakedToken);
 - **Type safety**: All addresses grouped logically
 - **Easier usage**: `proj.treasury` vs destructuring
 
+### Why Auto-Deploy Forwarder in Constructor?
+
+- **Simplicity**: No manual forwarder configuration needed
+- **Security**: Immutable, can't be changed after deployment
+- **Consistency**: All projects from same factory share same forwarder
+- **Standard**: Uses OpenZeppelin's battle-tested `ERC2771Forwarder`
+
+### Why ERC2771ContextBase Base Contract?
+
+- **DRY Principle**: Eliminates ~135 lines of duplicated override code
+- **Maintainability**: One place to update ERC2771 logic
+- **Multiple Inheritance**: Cleanly resolves ReentrancyGuard + ERC2771Context diamond pattern
+- **Type Safety**: Enforces consistent meta-transaction handling
+
 ---
 
 ## Changes from Previous Versions
@@ -292,7 +447,65 @@ LevrStakedToken_v1(proj.stakedToken);
 - ✅ Auto-lookup prepared contracts
 - ✅ Treasury receives airdrops, Staking receives fees (split roles)
 - ✅ Custom proposal amounts - no tier restrictions
+- ✅ **ERC2771 meta-transaction support** - gasless transactions via forwarder
+- ✅ **ERC2771ContextBase** - base contract eliminates duplication
+- ✅ **Auto-deployed forwarder** - no manual configuration needed
+
+---
+
+## Critical Patterns and Anti-Patterns
+
+### ✅ DO
+
+- **ALWAYS** use `_msgSender()` instead of `msg.sender` in user-facing contracts
+- **ALWAYS** extend `ERC2771ContextBase` for new contracts that need meta-tx support
+- **ALWAYS** pass `trustedForwarder` to contract constructors
+- **ALWAYS** update this rule when making architectural changes
+
+### ❌ DON'T
+
+- **NEVER** use `msg.sender` directly in contracts that extend ERC2771ContextBase
+- **NEVER** create custom forwarders - use OpenZeppelin's `ERC2771Forwarder`
+- **NEVER** manually override `_msgSender()/_msgData()/_contextSuffixLength()` - use base contract
+- **NEVER** forget to pass `address(0)` for forwarder in unit tests if not testing meta-tx
+- **NEVER** let this rule become outdated
+
+---
+
+## File Structure
+
+```
+src/
+  base/
+    ERC2771ContextBase.sol         # Base contract for meta-tx support
+  LevrFactory_v1.sol                # Factory (deploys forwarder in constructor)
+  LevrTreasury_v1.sol               # Extends ERC2771ContextBase
+  LevrGovernor_v1.sol               # Extends ERC2771ContextBase
+  LevrStaking_v1.sol                # Extends ERC2771ContextBase
+  LevrStakedToken_v1.sol            # No meta-tx (not user-facing)
+  interfaces/
+    ILevrFactory_v1.sol             # Factory interface
+    ILevrGovernor_v1.sol            # Governor interface
+    ILevrStaking_v1.sol             # Staking interface
+    ILevrTreasury_v1.sol            # Treasury interface
+    ILevrStakedToken_v1.sol         # StakedToken interface
+
+test/
+  e2e/
+    LevrV1.MetaTx.t.sol             # Meta-transaction tests
+    LevrV1.Governance.t.sol
+    LevrV1.Registration.t.sol
+    LevrV1.Treasury.t.sol
+  unit/
+    LevrFactoryV1.*.t.sol
+    LevrGovernorV1.t.sol
+    LevrStakingV1.t.sol
+    LevrTreasuryV1.t.sol
+    LevrStakedTokenV1.t.sol
+```
 
 ---
 
 **This rule is normative. All contract code must align with these specifications.**
+
+**⚠️ REMEMBER: Update this rule immediately when making any changes! ⚠️**

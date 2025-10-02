@@ -100,4 +100,7 @@ interface ILevrFactory_v1 {
 
   /// @notice Reward streaming window for staking accruals (in seconds).
   function streamWindowSeconds() external view returns (uint32);
+
+  /// @notice Trusted forwarder for ERC2771 meta-transactions.
+  function trustedForwarder() external view returns (address);
 }
