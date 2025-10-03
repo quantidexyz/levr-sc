@@ -11,10 +11,12 @@ interface ILevrForwarder_v1 {
   /// @notice Struct for a single call in a multicall sequence
   /// @param target Target contract to call
   /// @param allowFailure Whether the call is allowed to fail
+  /// @param value Amount of ETH to send with the call
   /// @param callData Encoded function call data
   struct SingleCall {
     address target;
     bool allowFailure;
+    uint256 value;
     bytes callData;
   }
 
@@ -37,15 +39,13 @@ interface ILevrForwarder_v1 {
   /// @notice Execute multiple calls in a single transaction
   /// @dev Each call is executed with the caller's address appended (ERC2771)
   ///      Only calls to contracts that trust this forwarder will succeed
+  ///      Forwards all msg.value to the calls
   /// @param calls Array of calls to execute
   /// @return results Array of results for each call
-  function executeMulticall(SingleCall[] calldata calls) external returns (Result[] memory results);
+  function executeMulticall(SingleCall[] calldata calls) external payable returns (Result[] memory results);
 
   /// @notice Create a digest for signing a forward request
   /// @param req The forward request data
   /// @return digest The EIP-712 digest to sign
-  function createDigest(
-    ERC2771Forwarder.ForwardRequestData memory req
-  ) external view returns (bytes32 digest);
+  function createDigest(ERC2771Forwarder.ForwardRequestData memory req) external view returns (bytes32 digest);
 }
-

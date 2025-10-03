@@ -229,6 +229,7 @@ contract LevrV1MetaTxTest is Test {
     calls[0] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: abi.encodeWithSelector(LevrFactory_v1.prepareForDeployment.selector)
     });
 
@@ -236,6 +237,7 @@ contract LevrV1MetaTxTest is Test {
     calls[1] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: abi.encodeWithSelector(LevrFactory_v1.register.selector, address(newToken))
     });
 

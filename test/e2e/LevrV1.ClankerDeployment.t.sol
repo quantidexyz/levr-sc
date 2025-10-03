@@ -106,15 +106,26 @@ contract LevrV1_ClankerDeployment_Test is BaseForkTest {
     ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](3);
 
     // Call 1: prepareForDeployment
-    calls[0] = ILevrForwarder_v1.SingleCall({target: address(factory), allowFailure: false, callData: prepareCalldata});
+    calls[0] = ILevrForwarder_v1.SingleCall({
+      target: address(factory),
+      allowFailure: false,
+      value: 0,
+      callData: prepareCalldata
+    });
 
     // Call 2: Deploy Clanker token via factory.executeTransaction
-    calls[1] = ILevrForwarder_v1.SingleCall({target: address(factory), allowFailure: false, callData: executeCalldata});
+    calls[1] = ILevrForwarder_v1.SingleCall({
+      target: address(factory),
+      allowFailure: false,
+      value: 0,
+      callData: executeCalldata
+    });
 
     // Call 3: Register token
     calls[2] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: abi.encodeCall(factory.register, (clankerToken))
     });
 
@@ -185,18 +196,21 @@ contract LevrV1_ClankerDeployment_Test is BaseForkTest {
     calls1[0] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: prepareCalldata1
     });
 
     calls1[1] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: executeCalldata1
     });
 
     calls1[2] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: abi.encodeCall(factory.register, (clankerToken1))
     });
 
@@ -241,18 +255,21 @@ contract LevrV1_ClankerDeployment_Test is BaseForkTest {
     calls2[0] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: prepareCalldata2
     });
 
     calls2[1] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: executeCalldata2
     });
 
     calls2[2] = ILevrForwarder_v1.SingleCall({
       target: address(factory),
       allowFailure: false,
+      value: 0,
       callData: abi.encodeCall(factory.register, (clankerToken2))
     });
 

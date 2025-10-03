@@ -106,6 +106,7 @@ interface ILevrFactory_v1 {
 
   /// @notice Execute an arbitrary transaction (useful for chaining with forwarder multicall).
   /// @dev Executes a call from the factory contract. Useful for composing transactions.
+  ///      Forwards any ETH sent with the call.
   /// @param target The contract to call
   /// @param data The calldata to send
   /// @return success Whether the call succeeded
@@ -113,5 +114,5 @@ interface ILevrFactory_v1 {
   function executeTransaction(
     address target,
     bytes calldata data
-  ) external returns (bool success, bytes memory returnData);
+  ) external payable returns (bool success, bytes memory returnData);
 }

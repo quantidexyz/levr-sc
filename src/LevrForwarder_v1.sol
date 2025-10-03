@@ -16,7 +16,7 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder {
   constructor(string memory name) ERC2771Forwarder(name) {}
 
   /// @inheritdoc ILevrForwarder_v1
-  function executeMulticall(SingleCall[] calldata calls) external returns (Result[] memory results) {
+  function executeMulticall(SingleCall[] calldata calls) external payable returns (Result[] memory results) {
     uint256 length = calls.length;
     results = new Result[](length);
 
@@ -36,8 +36,8 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder {
       // This will be extracted by ERC2771Context in the target contract
       data = abi.encodePacked(calli.callData, msg.sender);
 
-      // Execute the call
-      (bool success, bytes memory returnData) = calli.target.call(data);
+      // Execute the call with value
+      (bool success, bytes memory returnData) = calli.target.call{value: calli.value}(data);
 
       // Check if failure is allowed
       if (!success && !calli.allowFailure) {
