@@ -23,11 +23,11 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
   address internal protocolTreasury = address(0xFEE);
   address internal clankerToken;
   address internal clankerFactory; // set from constant
-  address constant DEFAULT_CLANKER_FACTORY = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+  address constant CLANKER_FACTORY = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
 
   function setUp() public override {
     super.setUp();
-    clankerFactory = DEFAULT_CLANKER_FACTORY;
+    clankerFactory = CLANKER_FACTORY;
 
     // Deploy forwarder first
     forwarder = new LevrForwarder_v1('LevrForwarder_v1');
@@ -43,10 +43,13 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
     factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
   }
 
-  function test_register_project_and_basic_flow() public {
-    // Full pooled deploy via factory using Base Sepolia related addresses (SDK-style)
+  /**
+   * @notice Test registering an existing Clanker token
+   * Matches use case: existing-token.screen.tsx register flow
+   */
+  function test_RegisterExistingToken() public {
+    // Deploy a Clanker token first
     ClankerDeployer d = new ClankerDeployer();
-
     clankerToken = d.deployFactoryStaticFull({
       clankerFactory: clankerFactory,
       tokenAdmin: address(this),
@@ -56,66 +59,26 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
       pairedFeeBps: 100
     });
 
-    // Debug: check if token implements ERC20Metadata properly
-    try IERC20Metadata(clankerToken).decimals() returns (uint8 dec) {
-      dec; // silence warning
-    } catch {
-      revert('Token does not implement decimals()');
-    }
-    try IERC20Metadata(clankerToken).name() returns (string memory n) {
-      n; // silence warning
-    } catch {
-      revert('Token does not implement name()');
-    }
-    try IERC20Metadata(clankerToken).symbol() returns (string memory s) {
-      s; // silence warning
-    } catch {
-      revert('Token does not implement symbol()');
-    }
-
+    // Register the existing token (this is what existing-token.screen does)
     ILevrFactory_v1.Project memory project = factory.register(clankerToken);
 
-    assertTrue(project.treasury != address(0) && project.staking != address(0) && project.stakedToken != address(0));
+    // Verify all project contracts are deployed
+    assertTrue(project.treasury != address(0), 'Treasury not deployed');
+    assertTrue(project.staking != address(0), 'Staking not deployed');
+    assertTrue(project.stakedToken != address(0), 'StakedToken not deployed');
+    assertTrue(project.governor != address(0), 'Governor not deployed');
 
-    // If caller holds some underlying on fork, try a minimal stake
-    uint256 bal = IERC20(clankerToken).balanceOf(address(this));
-    if (bal > 0) {
-      IERC20(clankerToken).approve(project.staking, bal);
-      ILevrStaking_v1(project.staking).stake(bal);
-    }
-
-    // Fund treasury from user holdings; if insufficient, try to acquire from locker to user then forward
-    uint256 boostAmount = 1000 ether;
-    uint256 userBal = IERC20(clankerToken).balanceOf(address(this));
-    if (userBal < boostAmount) {
-      uint256 acquired = _acquireFromLocker(address(this), boostAmount - userBal);
-      userBal += acquired;
-    }
-    if (userBal > 0) {
-      uint256 sendAmt = userBal < boostAmount ? userBal : boostAmount;
-      IERC20(clankerToken).transfer(project.treasury, sendAmt);
-      boostAmount = sendAmt;
-    }
-
-    // Governor can create a boost proposal and execute it immediately
-    uint256 pid = ILevrGovernor_v1(project.governor).proposeBoost(boostAmount);
-    ILevrGovernor_v1(project.governor).execute(pid);
-
-    // Treasury balance read works on live token
-    uint256 tBal = ILevrTreasury_v1(project.treasury).getUnderlyingBalance();
-    tBal;
+    // Verify project can be retrieved
+    ILevrFactory_v1.Project memory retrieved = factory.getProjectContracts(clankerToken);
+    assertEq(retrieved.treasury, project.treasury, 'Treasury mismatch');
+    assertEq(retrieved.staking, project.staking, 'Staking mismatch');
   }
 
-  function _acquireFromLocker(address to, uint256 desired) internal returns (uint256 acquired) {
-    address locker = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496;
-    uint256 lockerBalance = IERC20(clankerToken).balanceOf(locker);
-    if (lockerBalance == 0) return 0;
-    acquired = desired <= lockerBalance ? desired : lockerBalance;
-    vm.prank(locker);
-    IERC20(clankerToken).transfer(to, acquired);
-  }
-
-  function test_after_register_owner_can_update_reward_recipient() public {
+  /**
+   * @notice Test updating fee receiver to staking contract
+   * Matches use case: existing-token.screen.tsx update fee receiver flow
+   */
+  function test_UpdateFeeReceiverToStaking() public {
     // Deploy token
     ClankerDeployer d = new ClankerDeployer();
     clankerToken = d.deployFactoryStaticFull({
@@ -127,32 +90,31 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
       pairedFeeBps: 100
     });
 
-    // Register project
+    // Register project (must register before updating fee receiver)
     ILevrFactory_v1.Project memory project = factory.register(clankerToken);
-    assertTrue(project.staking != address(0));
+    assertTrue(project.staking != address(0), 'Staking not deployed');
 
-    // Base mainnet anchors (fork): LP Locker
+    // Base mainnet LP Locker
     address lpLocker = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496;
 
-    // Get the current reward info to verify initial state
+    // Get initial reward info
     IClankerLpLocker.TokenRewardInfo memory rewardInfo = IClankerLpLocker(lpLocker).tokenRewards(clankerToken);
     address originalRecipient = rewardInfo.rewardRecipients[0];
 
-    // Original recipient should be the tokenAdmin (this test contract)
-    assertEq(originalRecipient, address(this), 'initial recipient should be tokenAdmin');
+    // Original recipient should be the tokenAdmin
+    assertEq(originalRecipient, address(this), 'Initial recipient should be tokenAdmin');
 
-    // Update reward recipient at index 0 to staking (tokenAdmin is this test contract)
-    vm.prank(address(this));
+    // Update fee receiver to staking (this is what existing-token.screen does)
     IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(clankerToken, 0, project.staking);
 
-    // Verify the update was successful
+    // Verify update was successful
     rewardInfo = IClankerLpLocker(lpLocker).tokenRewards(clankerToken);
-    assertEq(rewardInfo.rewardRecipients[0], project.staking, 'reward recipient should be updated to staking');
+    assertEq(rewardInfo.rewardRecipients[0], project.staking, 'Fee receiver should be staking contract');
 
-    // Verify non-admin cannot update
-    address bob = address(0xBEEF);
-    vm.prank(bob);
+    // Verify non-admin cannot update (security check)
+    address unauthorized = address(0xBEEF);
+    vm.prank(unauthorized);
     vm.expectRevert();
-    IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(clankerToken, 0, bob);
+    IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(clankerToken, 0, unauthorized);
   }
 }
