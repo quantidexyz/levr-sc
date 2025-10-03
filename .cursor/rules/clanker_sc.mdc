@@ -1,7 +1,6 @@
 ---
-alwaysApply: true
+alwaysApply: false
 ---
-
 ### Clanker integration rule
 
 This rule documents how Clanker pools/tokens are launched, how fees are produced and distributed via Uniswap v4 hooks, and the mechanics your contracts can levrage to wrap tokens, route fees, and perform actions like buybacks.

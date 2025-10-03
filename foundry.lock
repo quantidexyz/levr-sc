@@ -5,7 +5,13 @@
   "lib/openzeppelin-contracts": {
     "rev": "c64a1edb67b6e3f4a15cca8909c9482ad33a02b0"
   },
+  "lib/permit2": {
+    "rev": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+  },
+  "lib/universal-router": {
+    "rev": "3663f6db6e2fe121753cd2d899699c2dc75dca86"
+  },
   "lib/v4-core": {
-    "rev": "e50237c43811bd9b526eff40f26772152a42daba"
+    "rev": "5f00c8416c19a7e6a5a5d0539fad30fd124f7b86"
   }
 }

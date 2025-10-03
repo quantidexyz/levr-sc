@@ -6,13 +6,14 @@ solc = "0.8.30"
 via_ir = true
 optimizer = true
 optimizer_runs = 200
+fs_permissions = [{ access = "read", path = "./" }]
 
 [rpc_endpoints]
 anvil = "http://localhost:8545"
-optimism-sepolia = "https://rpc.inverter.network/main/evm/11155420"
-base-sepolia = "https://rpc.inverter.network/main/evm/84532"
-sepolia = "https://rpc.inverter.network/main/evm/11155111"
-base-mainnet = "https://rpc.inverter.network/main/evm/8453"
+optimism-sepolia = "https://lb.drpc.live/optimism-sepolia/${DRPC_API_KEY}"
+base-sepolia = "https://lb.drpc.live/base-sepolia/${DRPC_API_KEY}"
+sepolia = "https://lb.drpc.live/sepolia/${DRPC_API_KEY}"
+base-mainnet = "https://lb.drpc.live/base/${DRPC_API_KEY}"
 
 [etherscan]
 optimism-sepolia = { key = "${ETHERSCAN_KEY}", url = "https://api.etherscan.io/v2/api?chainid=11155420" }

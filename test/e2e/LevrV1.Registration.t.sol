@@ -14,7 +14,6 @@ import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IClankerLpLocker} from '../../src/interfaces/external/IClankerLPLocker.sol';
 import {IClankerLpLockerMultiple} from '../../src/interfaces/external/IClankerLpLockerMultiple.sol';
 import {IClankerFeeLocker} from '../../src/interfaces/external/IClankerFeeLocker.sol';
-import {PoolManagerFeeHelper} from '../utils/PoolManagerFeeHelper.sol';
 
 contract LevrV1_RegistrationE2E is BaseForkTest {
   LevrFactory_v1 internal factory;

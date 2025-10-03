@@ -1,7 +1,6 @@
 ---
-alwaysApply: true
+alwaysApply: false
 ---
-
 # ⚠️ CRITICAL: RULE MAINTENANCE ⚠️
 
 **THIS RULE MUST BE KEPT UP TO DATE WITH THE CODEBASE**

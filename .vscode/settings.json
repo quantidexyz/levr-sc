@@ -8,7 +8,10 @@
   "solidity.remappings": [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@uniswap/v4-core/=lib/v4-core/src/",
-    "forge-std/=lib/forge-std/src/"
+    "forge-std/=lib/forge-std/src/",
+    "@uniswap/v4-periphery/=lib/v4-periphery/src/",
+    "@uniswap/permit2/=lib/permit2/src/",
+    "@uniswap/universal-router/=lib/universal-router/src/"
   ],
   "files.associations": {
     "*.sol": "solidity"
