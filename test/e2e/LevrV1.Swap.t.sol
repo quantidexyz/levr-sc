@@ -10,7 +10,9 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 import {IClankerLpLocker} from '../../src/interfaces/external/IClankerLPLocker.sol';
 import {PoolKey} from '@uniswap/v4-core/types/PoolKey.sol';
+import {PoolId, PoolIdLibrary} from '@uniswap/v4-core/types/PoolId.sol';
 import {Currency} from '@uniswap/v4-core/types/Currency.sol';
+import {IV4Router} from '@uniswap/v4-periphery/interfaces/IV4Router.sol';
 
 /**
  * @title LevrV1 Swap E2E Test
@@ -18,6 +20,7 @@ import {Currency} from '@uniswap/v4-core/types/Currency.sol';
  * @dev This test mirrors the TypeScript deploy-swap.test.ts to debug router reverts
  */
 contract LevrV1_SwapE2E is BaseForkTest {
+  using PoolIdLibrary for PoolKey;
   // Base mainnet addresses
   address internal constant CLANKER_FACTORY = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
   address internal constant V4_UNIVERSAL_ROUTER = 0x6fF5693b99212Da76ad316178A184AB56D299b43;
@@ -98,6 +101,10 @@ contract LevrV1_SwapE2E is BaseForkTest {
     console.log('tickSpacing:', uint256(uint24(poolKey.tickSpacing)));
     console.log('hooks:', address(poolKey.hooks));
 
+    // Verify pool key matches what we expect
+    require(Currency.unwrap(poolKey.currency0) == clankerToken, 'currency0 should be clanker token');
+    require(Currency.unwrap(poolKey.currency1) == WETH, 'currency1 should be WETH');
+
     // Determine swap direction (WETH -> Token, like DevBuy does)
     address tokenIn = WETH;
     address tokenOut = clankerToken;
@@ -114,10 +121,28 @@ contract LevrV1_SwapE2E is BaseForkTest {
     console.log('zeroForOne:', zeroForOne);
     console.log('amountIn:', amountIn);
 
-    // Wait for MEV protection delay (15 seconds as configured in MEV module)
+    // Wait for MEV protection delay - need to wait from pool creation time
     console.log('\n=== WAITING FOR MEV DELAY ===');
     console.log('Current timestamp:', block.timestamp);
-    vm.warp(block.timestamp + 20); // Wait 20 seconds to bypass MEV delay
+    // Query hook for pool creation time and max delay
+    (bool success, bytes memory data) = address(poolKey.hooks).staticcall(
+      abi.encodeWithSignature('poolCreationTimestamp(bytes32)', poolKey.toId())
+    );
+    require(success, 'Failed to get pool creation timestamp');
+    uint256 poolCreationTime = abi.decode(data, (uint256));
+    console.log('Pool creation time:', poolCreationTime);
+
+    (success, data) = address(poolKey.hooks).staticcall(abi.encodeWithSignature('MAX_MEV_MODULE_DELAY()'));
+    require(success, 'Failed to get MEV delay');
+    uint256 maxMevDelay = abi.decode(data, (uint256));
+    console.log('Max MEV delay (seconds):', maxMevDelay);
+
+    // Warp to after MEV delay expires
+    uint256 unlockTime = poolCreationTime + maxMevDelay + 1;
+    if (block.timestamp < unlockTime) {
+      console.log('Warping to unlock time:', unlockTime);
+      vm.warp(unlockTime);
+    }
     console.log('New timestamp after warp:', block.timestamp);
 
     // Wrap ETH to WETH (like DevBuy does)
@@ -157,7 +182,15 @@ contract LevrV1_SwapE2E is BaseForkTest {
     bytes[] memory params = new bytes[](3);
 
     // SWAP_EXACT_IN_SINGLE params (ExactInputSingleParams struct)
-    params[0] = abi.encode(poolKey, zeroForOne, amountIn, amountOutMinimum, bytes(''));
+    params[0] = abi.encode(
+      IV4Router.ExactInputSingleParams({
+        poolKey: poolKey,
+        zeroForOne: zeroForOne,
+        amountIn: amountIn,
+        amountOutMinimum: amountOutMinimum,
+        hookData: bytes('')
+      })
+    );
 
     // SETTLE_ALL params: (address token, uint256 amount)
     params[1] = abi.encode(tokenIn, uint256(amountIn));
