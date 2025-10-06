@@ -7,7 +7,7 @@ deploy:
 .PHONY: anvil-fork
 anvil-fork:
 	@echo "Starting Anvil with Base mainnet fork..."
-	anvil --fork-url $(shell forge config --json | jq -r '.rpc_endpoints."base-mainnet"') --chain-id 31337
+	anvil --fork-url $(shell forge config --json | jq -r '.rpc_endpoints."base-mainnet"') --fork-block-number 36000000 --chain-id 31337
 
 .PHONY: deploy-devnet-factory
 deploy-devnet-factory:
