@@ -8,17 +8,10 @@ import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {ERC2771ContextBase} from './base/ERC2771ContextBase.sol';
 import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
+import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
+import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
 
-interface IERC1363Receiver {
-  function onTransferReceived(
-    address operator,
-    address from,
-    uint256 value,
-    bytes calldata data
-  ) external returns (bytes4);
-}
-
-contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, ERC2771ContextBase {
+contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase {
   using SafeERC20 for IERC20;
 
   constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
@@ -26,6 +19,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, E
   address public underlying;
   address public stakedToken;
   address public treasury; // for future integrations
+  address public factory; // Levr factory instance
   uint32 private _streamWindowSeconds;
   uint64 private _streamStart;
   uint64 private _streamEnd;
@@ -52,12 +46,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, E
   // for each reward token. Prevents double-accrual and enables liquidity checks.
   mapping(address => uint256) private _rewardReserve;
 
-  function initialize(address underlying_, address stakedToken_, address treasury_) external {
+  function initialize(address underlying_, address stakedToken_, address treasury_, address factory_) external {
     if (underlying != address(0)) revert();
-    if (underlying_ == address(0) || stakedToken_ == address(0) || treasury_ == address(0)) revert ZeroAddress();
+    if (underlying_ == address(0) || stakedToken_ == address(0) || treasury_ == address(0) || factory_ == address(0))
+      revert ZeroAddress();
     underlying = underlying_;
     stakedToken = stakedToken_;
     treasury = treasury_;
+    factory = factory_;
     _rewardInfo[underlying_] = ILevrStaking_v1.RewardInfo({accPerShare: 0, exists: true});
     _rewardTokens.push(underlying_);
   }
@@ -114,9 +110,29 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, E
   /// @inheritdoc ILevrStaking_v1
   function accrueRewards(address token, uint256 amount) external nonReentrant {
     if (amount == 0) revert InvalidAmount();
+
+    // Automatically claim any pending rewards from ClankerFeeLocker first
+    _claimFromClankerFeeLocker(token);
+
     uint256 available = _availableUnaccountedRewards(token);
     require(available >= amount, 'INSUFFICIENT_AVAILABLE');
     _creditRewards(token, amount);
+  }
+
+  /// @inheritdoc ILevrStaking_v1
+  function outstandingRewards(address token) external view returns (uint256 available, uint256 pending) {
+    available = _availableUnaccountedRewards(token);
+
+    pending = _getPendingFromClankerFeeLocker(token);
+  }
+
+  /// @notice Get the ClankerFeeLocker address for the underlying token
+  function getClankerFeeLocker() external view returns (address) {
+    if (factory == address(0)) return address(0);
+
+    // Get clanker metadata from our factory
+    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
+    return metadata.feeLocker;
   }
 
   /// @inheritdoc ILevrStaking_v1
@@ -213,18 +229,49 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, E
     _lastUpdateByToken[token] = uint64(block.timestamp);
   }
 
-  // ERC-1363 auto-sync on transfer (optional if token supports ERC-1363)
-  function onTransferReceived(
-    address /*operator*/,
-    address /*from*/,
-    uint256 value,
-    bytes calldata /*data*/
-  ) external returns (bytes4) {
-    address token = msg.sender;
-    if (value > 0) {
-      _creditRewards(token, value);
+  /// @notice Internal function to get pending rewards from ClankerFeeLocker
+  function _getPendingFromClankerFeeLocker(address token) internal view returns (uint256) {
+    if (factory == address(0)) return 0;
+
+    // Get clanker metadata from our factory
+    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
+    if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
+
+    try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 fees) {
+      return fees;
+    } catch {
+      return 0;
     }
-    return IERC1363Receiver.onTransferReceived.selector;
+  }
+
+  /// @notice Internal function to claim pending rewards from ClankerFeeLocker
+  function _claimFromClankerFeeLocker(address token) internal {
+    if (factory == address(0)) return;
+
+    // Get clanker metadata from our factory
+    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
+    if (!metadata.exists || metadata.feeLocker == address(0)) return;
+
+    try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 availableFees) {
+      if (availableFees > 0) {
+        // Get balance before claiming
+        uint256 balanceBefore = IERC20(token).balanceOf(address(this));
+
+        // Claim rewards from ClankerFeeLocker
+        IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
+
+        // Get balance after claiming to see how much arrived
+        uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+        uint256 received = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+
+        // Auto-accrue any rewards that arrived
+        if (received > 0) {
+          _creditRewards(token, received);
+        }
+      }
+    } catch {
+      // Ignore errors from ClankerFeeLocker - contract might not support this token
+    }
   }
 
   function _creditRewards(address token, uint256 amount) internal {

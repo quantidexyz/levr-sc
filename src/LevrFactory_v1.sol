@@ -9,6 +9,8 @@ import {Context} from '@openzeppelin/contracts/utils/Context.sol';
 
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
+import {IClanker} from './interfaces/external/IClanker.sol';
+import {IClankerLpLockerFeeConversion} from './interfaces/external/IClankerLpLockerFeeConversion.sol';
 
 import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
 import {LevrGovernor_v1} from './LevrGovernor_v1.sol';
@@ -22,6 +24,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
   uint16 public override maxSubmissionPerType; // reserved for future rate limits
   uint256 public override minWTokenToSubmit;
   address public override protocolTreasury;
+  address public clankerFactory;
 
   mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
 
@@ -31,9 +34,11 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
   constructor(
     FactoryConfig memory cfg,
     address owner_,
-    address trustedForwarder_
+    address trustedForwarder_,
+    address clankerFactory_
   ) Ownable(owner_) ERC2771Context(trustedForwarder_) {
     _applyConfig(cfg);
+    clankerFactory = clankerFactory_;
   }
 
   /// @inheritdoc ILevrFactory_v1
@@ -95,8 +100,8 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     string memory symbol_ = string(abi.encodePacked('s', IERC20Metadata(clankerToken).symbol()));
     project.stakedToken = address(new LevrStakedToken_v1(name_, symbol_, uDec, clankerToken, project.staking));
 
-    // Initialize staking
-    LevrStaking_v1(project.staking).initialize(clankerToken, project.stakedToken, project.treasury);
+    // Initialize staking with this factory (enables automatic ClankerFeeLocker integration via factory.clankerFactory)
+    LevrStaking_v1(project.staking).initialize(clankerToken, project.stakedToken, project.treasury, address(this));
 
     // Deploy governor
     project.governor = address(
@@ -123,6 +128,39 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     address clankerToken
   ) external view override returns (ILevrFactory_v1.Project memory project) {
     return _projects[clankerToken];
+  }
+
+  /// @inheritdoc ILevrFactory_v1
+  function getClankerMetadata(
+    address clankerToken
+  ) external view override returns (ILevrFactory_v1.ClankerMetadata memory metadata) {
+    if (clankerFactory == address(0)) {
+      return
+        ILevrFactory_v1.ClankerMetadata({feeLocker: address(0), lpLocker: address(0), hook: address(0), exists: false});
+    }
+
+    try IClanker(clankerFactory).tokenDeploymentInfo(clankerToken) returns (IClanker.DeploymentInfo memory info) {
+      if (info.token == clankerToken) {
+        address feeLocker = address(0);
+
+        // Try to get fee locker from LP locker
+        if (info.locker != address(0)) {
+          try IClankerLpLockerFeeConversion(info.locker).feeLocker() returns (address _feeLocker) {
+            feeLocker = _feeLocker;
+          } catch {
+            // Fee locker not available
+          }
+        }
+
+        return
+          ILevrFactory_v1.ClankerMetadata({feeLocker: feeLocker, lpLocker: info.locker, hook: info.hook, exists: true});
+      }
+    } catch {
+      // Factory doesn't know this token
+    }
+
+    return
+      ILevrFactory_v1.ClankerMetadata({feeLocker: address(0), lpLocker: address(0), hook: address(0), exists: false});
   }
 
   /// @inheritdoc ILevrFactory_v1

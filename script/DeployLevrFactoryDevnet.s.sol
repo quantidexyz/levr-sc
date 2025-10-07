@@ -78,7 +78,9 @@ contract DeployLevrFactoryDevnet is Script {
     console.log('Forwarder deployed at:', address(forwarder));
 
     // Deploy the factory with forwarder
-    LevrFactory_v1 factory = new LevrFactory_v1(config, deployer, address(forwarder));
+    // Use Base mainnet Clanker factory address for deployment
+    address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+    LevrFactory_v1 factory = new LevrFactory_v1(config, deployer, address(forwarder), clankerFactory);
 
     vm.stopBroadcast();
 

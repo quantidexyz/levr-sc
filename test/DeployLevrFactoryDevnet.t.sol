@@ -33,7 +33,12 @@ contract DeployLevrFactoryDevnetTest is Test {
     });
 
     // Deploy factory with forwarder
-    LevrFactory_v1 factory = new LevrFactory_v1(config, address(this), address(forwarder));
+    LevrFactory_v1 factory = new LevrFactory_v1(
+      config,
+      address(this),
+      address(forwarder),
+      0xE85A59c628F7d27878ACeB4bf3b35733630083a9
+    ); // Base Clanker factory
 
     // Verify configuration
     assertEq(factory.protocolFeeBps(), protocolFeeBps);

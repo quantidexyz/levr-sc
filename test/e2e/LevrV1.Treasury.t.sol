@@ -37,7 +37,7 @@ contract LevrV1_TreasuryE2E is BaseForkTest {
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
   }
 
   function _deployRegisterAndGet(

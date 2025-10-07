@@ -26,7 +26,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test {
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
   }
 
   function test_prepareForDeployment_deploys_treasury_and_staking() public {

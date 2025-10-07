@@ -30,6 +30,14 @@ interface ILevrFactory_v1 {
     address staking;
   }
 
+  /// @notice Clanker integration metadata for a token.
+  struct ClankerMetadata {
+    address feeLocker;
+    address lpLocker;
+    address hook;
+    bool exists;
+  }
+
   // ============ Errors ============
 
   /// @notice Revert if caller is not the token admin.
@@ -82,6 +90,11 @@ interface ILevrFactory_v1 {
   /// @return project Project contract addresses
   function getProjectContracts(address clankerToken) external view returns (Project memory project);
 
+  /// @notice Get Clanker integration metadata for a token.
+  /// @param clankerToken The clanker token address
+  /// @return metadata The clanker integration addresses and status
+  function getClankerMetadata(address clankerToken) external view returns (ClankerMetadata memory metadata);
+
   // Config getters for periphery contracts
   /// @notice Protocol fee in basis points applied to wrap/unwrap.
   function protocolFeeBps() external view returns (uint16);
@@ -100,6 +113,9 @@ interface ILevrFactory_v1 {
 
   /// @notice Reward streaming window for staking accruals (in seconds).
   function streamWindowSeconds() external view returns (uint32);
+
+  /// @notice Clanker factory address.
+  function clankerFactory() external view returns (address);
 
   /// @notice Trusted forwarder for ERC2771 meta-transactions.
   function trustedForwarder() external view returns (address);

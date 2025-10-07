@@ -34,7 +34,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
       minWTokenToSubmit: 0,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
   }
 
   function _deployRegisterAndGet(
@@ -102,7 +102,12 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
       minWTokenToSubmit: 1,
       protocolTreasury: protocolTreasury
     });
-    LevrFactory_v1 strictFactory = new LevrFactory_v1(cfg, address(this), address(fwd));
+    LevrFactory_v1 strictFactory = new LevrFactory_v1(
+      cfg,
+      address(this),
+      address(fwd),
+      0xE85A59c628F7d27878ACeB4bf3b35733630083a9
+    ); // Base Clanker factory
 
     (address governor, address treasury, address staking, ) = _deployRegisterAndGet(address(strictFactory));
 

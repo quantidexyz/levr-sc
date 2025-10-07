@@ -38,7 +38,7 @@ contract LevrGovernorV1_UnitTest is Test {
       minWTokenToSubmit: 100 ether,
       protocolTreasury: protocolTreasury
     });
-    factory = new LevrFactory_v1(cfg, address(this), address(forwarder));
+    factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
     ILevrFactory_v1.Project memory project = factory.register(address(underlying));
     governor = LevrGovernor_v1(project.governor);
     treasury = LevrTreasury_v1(payable(project.treasury));
@@ -95,7 +95,12 @@ contract LevrGovernorV1_UnitTest is Test {
       minWTokenToSubmit: 1,
       protocolTreasury: protocolTreasury
     });
-    LevrFactory_v1 fac = new LevrFactory_v1(cfg, address(this), address(fwd));
+    LevrFactory_v1 fac = new LevrFactory_v1(
+      cfg,
+      address(this),
+      address(fwd),
+      0xE85A59c628F7d27878ACeB4bf3b35733630083a9
+    ); // Base Clanker factory
     ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
     LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
 
