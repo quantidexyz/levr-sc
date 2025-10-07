@@ -58,10 +58,9 @@ interface ILevrStaking_v1 {
   function claimRewards(address[] calldata tokens, address to) external;
 
   /// @notice Accrue rewards for token.
-  /// @dev If ClankerFeeLocker is configured, automatically claims pending rewards first.
+  /// @dev If ClankerFeeLocker is configured, automatically claims pending rewards first, then credits all available rewards.
   /// @param token Reward token to accrue
-  /// @param amount Amount to accrue from available balance
-  function accrueRewards(address token, uint256 amount) external;
+  function accrueRewards(address token) external;
 
   /// @notice Accrue rewards from treasury, optionally pulling tokens from treasury first.
   /// @param token Reward token

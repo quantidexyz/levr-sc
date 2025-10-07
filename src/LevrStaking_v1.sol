@@ -108,15 +108,15 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
   }
 
   /// @inheritdoc ILevrStaking_v1
-  function accrueRewards(address token, uint256 amount) external nonReentrant {
-    if (amount == 0) revert InvalidAmount();
-
+  function accrueRewards(address token) external nonReentrant {
     // Automatically claim any pending rewards from ClankerFeeLocker first
     _claimFromClankerFeeLocker(token);
 
+    // Credit all available rewards after claiming
     uint256 available = _availableUnaccountedRewards(token);
-    require(available >= amount, 'INSUFFICIENT_AVAILABLE');
-    _creditRewards(token, amount);
+    if (available > 0) {
+      _creditRewards(token, available);
+    }
   }
 
   /// @inheritdoc ILevrStaking_v1

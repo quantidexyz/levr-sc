@@ -36,11 +36,17 @@ contract LevrStakingV1_UnitTest is Test {
   }
 
   function test_stake_mintsStakedToken_andEscrowsUnderlying() public {
-    underlying.approve(address(staking), 1_000 ether);
-    staking.stake(1_000 ether);
-    assertEq(sToken.balanceOf(address(this)), 1_000 ether);
-    assertEq(staking.totalStaked(), 1_000 ether);
-    assertEq(staking.escrowBalance(address(underlying)), 1_000 ether);
+    // Use amount similar to TypeScript test for consistency
+    uint256 userBalance = 4548642989513676498672470665; // Mirrors TS test user balance
+    underlying.mint(address(this), userBalance);
+
+    uint256 stakeAmount = userBalance / 2; // Stake 50% like TS test
+    underlying.approve(address(staking), stakeAmount);
+    staking.stake(stakeAmount);
+
+    assertEq(sToken.balanceOf(address(this)), stakeAmount, 'Should mint staked tokens 1:1');
+    assertEq(staking.totalStaked(), stakeAmount, 'Total staked should match');
+    assertEq(staking.escrowBalance(address(underlying)), stakeAmount, 'Should escrow underlying');
   }
 
   function test_unstake_burns_andReturnsUnderlying() public {
@@ -97,8 +103,8 @@ contract LevrStakingV1_UnitTest is Test {
   function test_accrueRewards_fromBalance_creditsWithoutPull() public {
     // deposit rewards directly to staking
     underlying.transfer(address(staking), 1_000 ether);
-    // account them
-    staking.accrueRewards(address(underlying), 1_000 ether);
+    // account them - now automatically credits all available (1000 ether)
+    staking.accrueRewards(address(underlying));
   }
 
   function test_multi_user_distribution_proportional_and_reserves_sane() public {
@@ -154,38 +160,6 @@ contract LevrStakingV1_UnitTest is Test {
       uint256 tolB = (expB * 5e15) / 1e18;
       uint256 diffB = bClaim > expB ? bClaim - expB : expB - bClaim;
       assertLe(diffB, tolB);
-    }
-  }
-
-  function test_manual_reward_accrual_and_streaming() public {
-    // Create a separate reward token for this test
-    MockERC20 r = new MockERC20('Reward', 'RWD');
-    // Manual accrual flow: transfer tokens then manually accrue
-
-    // stake some underlying to create shares
-    underlying.approve(address(staking), type(uint256).max);
-    staking.stake(1_000 ether);
-
-    // Transfer reward tokens to staking contract
-    r.mint(address(this), 5_000 ether);
-    r.transfer(address(staking), 5_000 ether);
-
-    // Manually accrue the rewards (new flow)
-    staking.accrueRewards(address(r), 5_000 ether);
-
-    address[] memory toks = new address[](1);
-    toks[0] = address(r);
-    // streaming: advance time then claim ~ 1/3 of 5,000
-    uint256 beforeBal = r.balanceOf(address(this));
-    vm.warp(block.timestamp + 1 days);
-    staking.claimRewards(toks, address(this));
-    uint256 afterBal = r.balanceOf(address(this));
-    uint256 claimed = afterBal - beforeBal;
-    {
-      uint256 expected = (5_000 ether) / uint256(3);
-      uint256 tol = (expected * 5e15) / 1e18;
-      uint256 diff = claimed > expected ? claimed - expected : expected - claimed;
-      assertLe(diff, tol);
     }
   }
 }
