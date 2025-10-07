@@ -333,6 +333,167 @@ contract LevrV1_StakingE2E is BaseForkTest {
   }
 
   /**
+   * @notice Test streaming logic fix - verify rewards accrue and are claimable
+   * @dev Tests the fix for double-crediting issue in _claimFromClankerFeeLocker
+   */
+  function test_streaming_logic_fix() public {
+    (address governor, address treasury, address staking, address stakedToken) = _deployRegisterAndGet(
+      address(factory)
+    );
+
+    // Get tokens and stake
+    uint256 userTokens = 10000 ether;
+    deal(clankerToken, address(this), userTokens);
+
+    uint256 stakeAmount = userTokens / 2;
+    IERC20(clankerToken).approve(staking, stakeAmount);
+    ILevrStaking_v1(staking).stake(stakeAmount);
+
+    // Verify initial state
+    assertEq(ILevrStaking_v1(staking).stakedBalanceOf(address(this)), stakeAmount, 'Should be staked');
+
+    // Simulate some WETH rewards being available for accrual
+    uint256 rewardAmount = 1 ether;
+    deal(WETH, staking, rewardAmount);
+
+    // Check outstanding rewards before accrual
+    (uint256 availableBefore, uint256 pendingBefore) = ILevrStaking_v1(staking).outstandingRewards(WETH);
+    assertEq(availableBefore, rewardAmount, 'Should show available rewards');
+
+    // Check claimable rewards before accrual (should be 0)
+    uint256 claimableBefore = ILevrStaking_v1(staking).claimableRewards(address(this), WETH);
+    assertEq(claimableBefore, 0, 'Should have no claimable rewards before accrual');
+
+    // Accrue rewards
+    ILevrStaking_v1(staking).accrueRewards(WETH);
+
+    // Check that stream is now active
+    uint64 streamEnd = ILevrStaking_v1(staking).streamEnd();
+    assertTrue(streamEnd > block.timestamp, 'Stream should be active after accrual');
+
+    // Check outstanding rewards after accrual (should be 0 available, since they're now streaming)
+    (uint256 availableAfter, ) = ILevrStaking_v1(staking).outstandingRewards(WETH);
+    assertEq(availableAfter, 0, 'Should have no available rewards after accrual');
+
+    // Warp forward 1 hour to allow some streaming
+    vm.warp(block.timestamp + 1 hours);
+
+    // Check claimable rewards after time passes
+    uint256 claimableAfter = ILevrStaking_v1(staking).claimableRewards(address(this), WETH);
+    assertTrue(claimableAfter > 0, 'Should have claimable rewards after streaming');
+
+    // Expected rewards: rewardAmount * elapsed / streamWindow
+    uint256 expectedRewards = (rewardAmount * 1 hours) / 3 days;
+    assertApproxEqRel(claimableAfter, expectedRewards, 1e16, 'Claimable should match streaming calculation'); // 1% tolerance
+
+    // Actually claim the rewards
+    address[] memory tokens = new address[](1);
+    tokens[0] = WETH;
+
+    uint256 wethBefore = IERC20(WETH).balanceOf(address(this));
+    ILevrStaking_v1(staking).claimRewards(tokens, address(this));
+    uint256 wethAfter = IERC20(WETH).balanceOf(address(this));
+
+    uint256 actualClaimed = wethAfter - wethBefore;
+    assertApproxEqRel(actualClaimed, expectedRewards, 1e16, 'Actual claimed should match expected'); // 1% tolerance
+    assertTrue(actualClaimed > 0, 'Should actually receive WETH rewards');
+
+    // Verify claimable is now 0 (or very small due to rounding)
+    uint256 claimableAfterClaim = ILevrStaking_v1(staking).claimableRewards(address(this), WETH);
+    assertLt(claimableAfterClaim, 1e12, 'Should have minimal claimable after claiming'); // Allow for tiny rounding errors
+
+    console2.log('[OK] Streaming logic fix verified:');
+    console2.log('  - Stream activated after accrual');
+    console2.log('  - Rewards stream correctly over time');
+    console2.log('  - Claimable calculation works');
+    console2.log('  - Actual claiming works');
+    console2.log('  - Expected rewards:', expectedRewards);
+    console2.log('  - Actual claimed:', actualClaimed);
+  }
+
+  /**
+   * @notice Test claimable rewards calculation - verify only accrued tokens show as claimable
+   * @dev Tests that claimableRewards doesn't incorrectly show rewards for non-accrued tokens
+   */
+  function test_claimable_rewards_accuracy() public {
+    (address governor, address treasury, address staking, address stakedToken) = _deployRegisterAndGet(
+      address(factory)
+    );
+
+    // Get tokens and stake
+    uint256 userTokens = 10000 ether;
+    deal(clankerToken, address(this), userTokens);
+
+    uint256 stakeAmount = userTokens / 2;
+    IERC20(clankerToken).approve(staking, stakeAmount);
+    ILevrStaking_v1(staking).stake(stakeAmount);
+
+    // Check initial claimable rewards (should be 0 for both tokens)
+    uint256 claimableSwapBefore = ILevrStaking_v1(staking).claimableRewards(address(this), clankerToken);
+    uint256 claimableWethBefore = ILevrStaking_v1(staking).claimableRewards(address(this), WETH);
+
+    assertEq(claimableSwapBefore, 0, 'Should have no claimable SWAP before any accrual');
+    assertEq(claimableWethBefore, 0, 'Should have no claimable WETH before any accrual');
+
+    // Simulate WETH rewards ONLY (no SWAP rewards)
+    uint256 wethRewardAmount = 1 ether;
+    deal(WETH, staking, wethRewardAmount);
+
+    // Accrue WETH rewards only
+    ILevrStaking_v1(staking).accrueRewards(WETH);
+
+    // Check claimable immediately after accrual (should still be 0 - streaming hasn't started)
+    uint256 claimableSwapAfterAccrue = ILevrStaking_v1(staking).claimableRewards(address(this), clankerToken);
+    uint256 claimableWethAfterAccrue = ILevrStaking_v1(staking).claimableRewards(address(this), WETH);
+
+    assertEq(claimableSwapAfterAccrue, 0, 'Should have no claimable SWAP after WETH-only accrual');
+    assertEq(claimableWethAfterAccrue, 0, 'Should have no claimable WETH immediately after accrual');
+
+    // Warp forward 1 hour to allow WETH streaming
+    vm.warp(block.timestamp + 1 hours);
+
+    // Check claimable after streaming
+    uint256 claimableSwapAfterStream = ILevrStaking_v1(staking).claimableRewards(address(this), clankerToken);
+    uint256 claimableWethAfterStream = ILevrStaking_v1(staking).claimableRewards(address(this), WETH);
+
+    assertEq(claimableSwapAfterStream, 0, 'Should STILL have no claimable SWAP after WETH streaming');
+    assertTrue(claimableWethAfterStream > 0, 'Should have claimable WETH after streaming');
+
+    // Test what happens when we try to accrue SWAP (underlying) with no rewards
+    console2.log('\n[DEBUG] Testing SWAP accrual with no rewards...');
+
+    // Check SWAP balance in staking contract
+    uint256 stakingSwapBalance = IERC20(clankerToken).balanceOf(staking);
+    uint256 escrowBalance = ILevrStaking_v1(staking).escrowBalance(clankerToken);
+    console2.log('  - Staking SWAP balance:', stakingSwapBalance);
+    console2.log('  - Escrow balance:', escrowBalance);
+    console2.log(
+      '  - Available unaccounted SWAP:',
+      stakingSwapBalance > escrowBalance ? stakingSwapBalance - escrowBalance : 0
+    );
+
+    // Try accruing SWAP (should be no-op since no rewards available)
+    ILevrStaking_v1(staking).accrueRewards(clankerToken);
+
+    // Check claimable SWAP after trying to accrue it
+    uint256 claimableSwapAfterSwapAccrue = ILevrStaking_v1(staking).claimableRewards(address(this), clankerToken);
+    console2.log('  - SWAP claimable after trying to accrue SWAP:', claimableSwapAfterSwapAccrue);
+
+    // This should still be 0!
+    assertEq(
+      claimableSwapAfterSwapAccrue,
+      0,
+      'Should STILL have no claimable SWAP after trying to accrue with no rewards'
+    );
+
+    console2.log('[OK] Claimable rewards accuracy verified:');
+    console2.log('  - SWAP claimable before accrual:', claimableSwapBefore);
+    console2.log('  - SWAP claimable after WETH accrual:', claimableSwapAfterAccrue);
+    console2.log('  - SWAP claimable after streaming:', claimableSwapAfterStream);
+    console2.log('  - WETH claimable after streaming:', claimableWethAfterStream);
+  }
+
+  /**
    * @notice Validate SwapV4Helper integration works (simplified test)
    * @dev Demonstrates that SwapV4Helper properly integrates with production contracts
    */

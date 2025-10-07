@@ -74,6 +74,12 @@ interface ILevrStaking_v1 {
   /// @return pending Rewards pending from ClankerFeeLocker that can be claimed
   function outstandingRewards(address token) external view returns (uint256 available, uint256 pending);
 
+  /// @notice Get claimable rewards for a specific user and token
+  /// @param account The user to check rewards for
+  /// @param token The reward token to check
+  /// @return claimable The amount of rewards the user can claim right now
+  function claimableRewards(address account, address token) external view returns (uint256 claimable);
+
   /// @notice View streaming parameters.
   function streamWindowSeconds() external view returns (uint32);
   function streamStart() external view returns (uint64);

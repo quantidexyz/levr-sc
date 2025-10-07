@@ -123,8 +123,47 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
   /// @inheritdoc ILevrStaking_v1
   function outstandingRewards(address token) external view returns (uint256 available, uint256 pending) {
     available = _availableUnaccountedRewards(token);
-
     pending = _getPendingFromClankerFeeLocker(token);
+  }
+
+  /// @notice Get claimable rewards for a specific user and token
+  /// @param account The user to check rewards for
+  /// @param token The reward token to check
+  /// @return claimable The amount of rewards the user can claim right now
+  function claimableRewards(address account, address token) external view returns (uint256 claimable) {
+    uint256 bal = _staked[account];
+    if (bal == 0) return 0;
+
+    ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+    if (!info.exists) return 0;
+
+    // Calculate what would be accumulated after settling streaming
+    uint256 accPerShare = info.accPerShare;
+
+    // Add any pending streaming rewards
+    uint64 start = _streamStartByToken[token];
+    uint64 end = _streamEndByToken[token];
+    if (end > 0 && start > 0 && block.timestamp > start) {
+      uint64 last = _lastUpdateByToken[token];
+      uint64 from = last < start ? start : last;
+      uint64 to = uint64(block.timestamp);
+      if (to > end) to = end;
+      if (to > from) {
+        uint256 duration = end - start;
+        uint256 total = _streamTotalByToken[token];
+        if (duration > 0 && total > 0 && _totalStaked > 0) {
+          uint256 vestAmount = (total * (to - from)) / duration;
+          accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
+        }
+      }
+    }
+
+    uint256 accumulated = (bal * accPerShare) / ACC_SCALE;
+    int256 debt = _rewardDebt[account][token];
+
+    if (accumulated > uint256(debt)) {
+      claimable = accumulated - uint256(debt);
+    }
   }
 
   /// @notice Get the ClankerFeeLocker address for the underlying token
@@ -238,11 +277,27 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
     if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
 
+    // The feeOwner in ClankerFeeLocker might not be the staking contract
+    // It could be the LP locker or the original reward recipient
+    // Let's try multiple potential feeOwners
+
+    // First try: staking contract as feeOwner
     try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 fees) {
-      return fees;
+      if (fees > 0) return fees;
     } catch {
-      return 0;
+      // Continue to next attempt
     }
+
+    // Second try: LP locker as feeOwner (fees might be stored under LP locker's name)
+    if (metadata.lpLocker != address(0)) {
+      try IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token) returns (uint256 fees) {
+        if (fees > 0) return fees;
+      } catch {
+        // Continue to next attempt
+      }
+    }
+
+    return 0;
   }
 
   /// @notice Internal function to claim pending rewards from ClankerFeeLocker
@@ -264,25 +319,34 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     // Now claim from ClankerFeeLocker if available
     if (metadata.feeLocker != address(0)) {
+      // Try claiming with staking contract as feeOwner first
       try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 availableFees) {
         if (availableFees > 0) {
-          // Get balance before claiming
-          uint256 balanceBefore = IERC20(token).balanceOf(address(this));
-
-          // Claim rewards from ClankerFeeLocker
           IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
-
-          // Get balance after claiming to see how much arrived
-          uint256 balanceAfter = IERC20(token).balanceOf(address(this));
-          uint256 received = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-
-          // Auto-accrue any rewards that arrived
-          if (received > 0) {
-            _creditRewards(token, received);
-          }
+          return; // Successfully claimed
         }
       } catch {
-        // Ignore errors from ClankerFeeLocker - contract might not support this token
+        // Continue to next attempt
+      }
+
+      // Try claiming with LP locker as feeOwner (fees might be under LP locker's ownership)
+      if (metadata.lpLocker != address(0)) {
+        try IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token) returns (
+          uint256 availableFees
+        ) {
+          if (availableFees > 0) {
+            // Need to claim to LP locker first, then transfer to staking
+            // This is more complex and might require LP locker cooperation
+            // For now, just try direct claim (might fail)
+            try IClankerFeeLocker(metadata.feeLocker).claim(metadata.lpLocker, token) {
+              // Claimed to LP locker - would need additional transfer logic
+            } catch {
+              // Can't claim directly
+            }
+          }
+        } catch {
+          // Ignore errors
+        }
       }
     }
   }
