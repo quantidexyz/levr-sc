@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+/// @notice Governance E2E tests using airdrop claim mechanism to fund treasury
+/// @dev Flow:
+///   1. prepareForDeployment() to get treasury address before token deployment
+///   2. Deploy Clanker token with treasury in airdrop merkle tree
+///   3. register() to complete Levr setup
+///   4. Claim airdrop using IClankerAirdrop.claim() to fund treasury
+
 import {BaseForkTest} from '../utils/BaseForkTest.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
@@ -9,6 +16,8 @@ import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {ClankerDeployer} from '../utils/ClankerDeployer.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {IClankerAirdrop} from '../../src/interfaces/external/IClankerAirdrop.sol';
+import {MerkleAirdropHelper} from '../utils/MerkleAirdropHelper.sol';
 
 contract LevrV1_GovernanceE2E is BaseForkTest {
   LevrFactory_v1 internal factory;
@@ -18,6 +27,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
   address internal clankerToken;
   address internal clankerFactory; // set from constant
   address constant DEFAULT_CLANKER_FACTORY = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+  address constant AIRDROP_EXTENSION = 0xf652B3610D75D81871bf96DB50825d9af28391E0;
 
   function setUp() public override {
     super.setUp();
@@ -38,23 +48,59 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
   }
 
   function _deployRegisterAndGet(
-    address fac
+    address fac,
+    uint256 airdropAmount
   ) internal returns (address governor, address treasury, address staking, address stakedToken) {
+    // Step 1: Prepare infrastructure FIRST to get the treasury address
+    (treasury, staking) = LevrFactory_v1(fac).prepareForDeployment();
+
+    // Step 2: Create merkle root with the known treasury address
+    bytes32 merkleRoot = MerkleAirdropHelper.singleLeafRoot(treasury, airdropAmount);
+
+    // Encode airdrop extension data
+    bytes memory airdropData = abi.encode(
+      address(this), // admin
+      merkleRoot,
+      1 days, // lockupDuration (minimum)
+      0 // vestingDuration (instant unlock after lockup)
+    );
+
+    // Step 3: Deploy Clanker token with treasury in the airdrop merkle tree
     ClankerDeployer d = new ClankerDeployer();
-    clankerToken = d.deployFactoryStaticFull({
+    clankerToken = d.deployFactoryStaticFullWithOptions({
       clankerFactory: clankerFactory,
       tokenAdmin: address(this),
       name: 'CLK Test',
       symbol: 'CLK',
       clankerFeeBps: 100,
-      pairedFeeBps: 100
+      pairedFeeBps: 100,
+      enableAirdrop: true,
+      airdropAdmin: address(this),
+      airdropBps: 1000, // 10% of supply to airdrop
+      airdropData: airdropData,
+      enableDevBuy: false,
+      devBuyBps: 0,
+      devBuyEthAmount: 0,
+      devBuyRecipient: address(0)
     });
 
+    // Step 4: Complete registration (will use the prepared treasury and staking)
     ILevrFactory_v1.Project memory project = LevrFactory_v1(fac).register(clankerToken);
     treasury = project.treasury;
     governor = project.governor;
     staking = project.staking;
     stakedToken = project.stakedToken;
+  }
+
+  function _claimAirdropForTreasury(address treasury, uint256 allocatedAmount) internal {
+    // Wait for lockup period to pass
+    vm.warp(block.timestamp + 1 days + 1);
+
+    // Generate empty proof for single-leaf merkle tree
+    bytes32[] memory proof = new bytes32[](0);
+
+    // Claim the airdrop directly to the treasury
+    IClankerAirdrop(AIRDROP_EXTENSION).claim(clankerToken, treasury, allocatedAmount, proof);
   }
 
   function _acquireFromLocker(address to, uint256 desired) internal returns (uint256 acquired) {
@@ -67,24 +113,23 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
   }
 
   function test_transfer_proposal_and_tier_validation() public {
-    (address governor, address treasury, , ) = _deployRegisterAndGet(address(factory));
+    uint256 airdropAmount = 1_000 ether;
 
-    // Ensure treasury has some funds (from locker or user)
+    // Deploy and register with airdrop (treasury address is included in merkle tree via prepareForDeployment)
+    (address governor, address treasury, , ) = _deployRegisterAndGet(address(factory), airdropAmount);
+
+    // Claim the airdrop directly to the treasury using the IClankerAirdrop.claim function
+    _claimAirdropForTreasury(treasury, airdropAmount);
+
+    // Verify treasury has funds from airdrop claim
     uint256 treasBal = IERC20(clankerToken).balanceOf(treasury);
-    if (treasBal == 0) {
-      uint256 got = _acquireFromLocker(address(this), 1_000 ether);
-      if (got > 0) {
-        IERC20(clankerToken).transfer(treasury, got);
-        treasBal = got;
-      }
-    }
-    assertTrue(treasBal > 0, 'treasury needs funds');
+    assertTrue(treasBal > 0, 'treasury should have funds from airdrop');
+    assertEq(treasBal, airdropAmount, 'treasury should have exactly airdrop amount');
 
     // Valid transfer (custom amount, no tiers)
     address receiver = address(0xBEEF);
     uint256 recvBefore = IERC20(clankerToken).balanceOf(receiver);
     uint256 amount = treasBal / 2; // Transfer half
-    if (amount == 0) amount = treasBal;
     uint256 pid = ILevrGovernor_v1(governor).proposeTransfer(receiver, amount, 'ops');
     ILevrGovernor_v1(governor).execute(pid);
     uint256 recvAfter = IERC20(clankerToken).balanceOf(receiver);
@@ -109,28 +154,31 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
       0xE85A59c628F7d27878ACeB4bf3b35733630083a9
     ); // Base Clanker factory
 
-    (address governor, address treasury, address staking, ) = _deployRegisterAndGet(address(strictFactory));
+    uint256 treasuryAirdropAmount = 1_000 ether;
+
+    // Deploy and register with airdrop (treasury address is included in merkle tree via prepareForDeployment)
+    (address governor, address treasury, address staking, ) = _deployRegisterAndGet(
+      address(strictFactory),
+      treasuryAirdropAmount
+    );
 
     // Without stake, proposing should revert
     vm.expectRevert(ILevrGovernor_v1.NotAuthorized.selector);
     ILevrGovernor_v1(governor).proposeBoost(100 ether);
 
-    // Get tokens and stake part to satisfy minWTokenToSubmit (set to 1 wei)
+    // Get tokens for user from locker (for staking purposes)
     uint256 userGot = _acquireFromLocker(address(this), 1_000 ether);
     assertTrue(userGot > 0, 'need tokens from locker');
     uint256 stakeAmt = userGot / 2;
-    uint256 sendAmt = userGot - stakeAmt;
     IERC20(clankerToken).approve(staking, stakeAmt);
     ILevrStaking_v1(staking).stake(stakeAmt);
 
-    // Now propose succeeds: fund treasury from user's remaining balance if needed
+    // Claim airdrop directly to the treasury using IClankerAirdrop.claim
+    _claimAirdropForTreasury(treasury, treasuryAirdropAmount);
+
     uint256 tBal = IERC20(clankerToken).balanceOf(treasury);
-    if (tBal == 0 && sendAmt > 0) {
-      IERC20(clankerToken).transfer(treasury, sendAmt);
-      tBal = sendAmt;
-    }
+    assertTrue(tBal > 0, 'treasury should have funds from airdrop');
     uint256 boostAmt = tBal / 2;
-    if (boostAmt == 0) boostAmt = tBal;
     uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt);
 
     // After deadline passes, execute should revert
