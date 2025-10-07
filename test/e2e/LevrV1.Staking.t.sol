@@ -279,9 +279,9 @@ contract LevrV1_StakingE2E is BaseForkTest {
       // Accrue the available rewards
       uint256 amountToAccrue = availableBefore > 0 ? availableBefore : stakingWethBalance;
 
-      // Simply call accrueRewards - it will automatically claim from ClankerFeeLocker and credit all available rewards
+      // Simply call accrueRewards - it will automatically collect from LP locker, claim from ClankerFeeLocker, and credit all available rewards
       ILevrStaking_v1(staking).accrueRewards(WETH);
-      // console2.log('  [OK] accrueRewards succeeded - automatically claimed and credited all available rewards');
+      // console2.log('  [OK] accrueRewards succeeded - automatically collected from LP locker, claimed from ClankerFeeLocker, and credited all available rewards');
 
       // Check rewards after accrual
       (uint256 availableAfter, uint256 pendingAfter) = ILevrStaking_v1(staking).outstandingRewards(WETH);

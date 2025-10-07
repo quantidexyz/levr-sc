@@ -10,6 +10,7 @@ import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
+import {IClankerLpLocker} from './interfaces/external/IClankerLpLocker.sol';
 
 contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase {
   using SafeERC20 for IERC20;
@@ -109,7 +110,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
   /// @inheritdoc ILevrStaking_v1
   function accrueRewards(address token) external nonReentrant {
-    // Automatically claim any pending rewards from ClankerFeeLocker first
+    // Automatically collect from LP locker and claim any pending rewards from ClankerFeeLocker
     _claimFromClankerFeeLocker(token);
 
     // Credit all available rewards after claiming
@@ -250,27 +251,39 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     // Get clanker metadata from our factory
     ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
-    if (!metadata.exists || metadata.feeLocker == address(0)) return;
+    if (!metadata.exists) return;
 
-    try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 availableFees) {
-      if (availableFees > 0) {
-        // Get balance before claiming
-        uint256 balanceBefore = IERC20(token).balanceOf(address(this));
-
-        // Claim rewards from ClankerFeeLocker
-        IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
-
-        // Get balance after claiming to see how much arrived
-        uint256 balanceAfter = IERC20(token).balanceOf(address(this));
-        uint256 received = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-
-        // Auto-accrue any rewards that arrived
-        if (received > 0) {
-          _creditRewards(token, received);
-        }
+    // First, collect rewards from LP locker to ensure ClankerFeeLocker has latest fees
+    if (metadata.lpLocker != address(0)) {
+      try IClankerLpLocker(metadata.lpLocker).collectRewards(underlying) {
+        // Successfully collected from LP locker
+      } catch {
+        // Ignore errors from LP locker - it might not have fees to collect
       }
-    } catch {
-      // Ignore errors from ClankerFeeLocker - contract might not support this token
+    }
+
+    // Now claim from ClankerFeeLocker if available
+    if (metadata.feeLocker != address(0)) {
+      try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 availableFees) {
+        if (availableFees > 0) {
+          // Get balance before claiming
+          uint256 balanceBefore = IERC20(token).balanceOf(address(this));
+
+          // Claim rewards from ClankerFeeLocker
+          IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
+
+          // Get balance after claiming to see how much arrived
+          uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+          uint256 received = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+
+          // Auto-accrue any rewards that arrived
+          if (received > 0) {
+            _creditRewards(token, received);
+          }
+        }
+      } catch {
+        // Ignore errors from ClankerFeeLocker - contract might not support this token
+      }
     }
   }
 
