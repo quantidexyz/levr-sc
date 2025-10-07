@@ -1,6 +1,7 @@
 ---
 alwaysApply: false
 ---
+
 # ⚠️ CRITICAL: RULE MAINTENANCE ⚠️
 
 **THIS RULE MUST BE KEPT UP TO DATE WITH THE CODEBASE**
@@ -17,13 +18,13 @@ When making ANY architectural changes, contract modifications, or adding new fea
 
 ---
 
-## Levr Protocol v1 — Architecture Guide
+# Levr Protocol v1 — Architecture Guide
 
-Source-of-truth for Levr Protocol v1 contracts. Modular system: Factory deploys per-project Treasury, Governor, Staking, and StakedToken.
+**Source-of-truth for Levr Protocol v1 contracts. Modular system: Factory deploys per-project Treasury, Governor, Staking, and StakedToken.**
 
 **✨ Full ERC2771 meta-transaction support** - Users can interact gaslessly via trusted forwarder.
 
-### Architecture
+## Architecture
 
 ```
 LevrFactory_v1 (deploys ERC2771Forwarder in constructor)
@@ -88,7 +89,7 @@ All contracts extend ERC2771ContextBase → support meta-transactions
 **Usage**: All user-facing contracts extend this base:
 
 ```solidity
-contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, ERC2771ContextBase {
+contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase {
   constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
 
   function stake(uint256 amount) external {
@@ -146,7 +147,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, E
 
 ### LevrStaking_v1
 
-**Role**: Stake escrow, multi-token rewards
+**Role**: Stake escrow, multi-token rewards with manual accrual
 
 **Extends**: `ERC2771ContextBase` (supports meta-transactions)
 
@@ -155,18 +156,31 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, E
 **Functions**:
 
 - `stake(amount)`, `unstake(amount, to)` → Mint/burn stakedToken 1:1 (gasless via meta-tx)
-- `accrueRewards(token, amount)` → Delta-based accrual
+- `accrueRewards(token, amount)` → **Manual reward accrual** (NEW: requires explicit call)
 - `accrueFromTreasury(token, amount, pull)` → Boost from treasury
 - `claimRewards(tokens[], to)` → Multi-token claim (gasless via meta-tx)
+- `outstandingRewards(token)` → Check available and pending rewards from ClankerFeeLocker
 - `initialize(underlying, stakedToken, treasury)` → One-time init by factory
 
-**Reward Paths**:
+**🔄 UPDATED Reward Paths** (Manual Accrual System):
 
-1. ERC-1363 auto-credit (`onTransferReceived`)
-2. Governor boost → `treasury.applyBoost` → `staking.accrueFromTreasury`
-3. Manual `accrueRewards`
+1. **Manual Accrual**: Transfer tokens to staking contract, then call `accrueRewards(token, amount)`
+2. **Treasury Boost**: `governor.proposeBoost()` → `treasury.applyBoost()` → `staking.accrueFromTreasury()`
+3. **ClankerFeeLocker Integration**: Automatically claims pending fees before manual accrual
 
-**Safety**: Reserve tracking, liquidity checks, streaming windows
+**⚠️ BREAKING CHANGE**: Removed ERC1363 auto-accrual functionality
+
+- No longer implements `IERC1363Receiver`
+- No automatic reward crediting on `transferAndCall()`
+- All reward accrual requires explicit function calls
+
+**ClankerFeeLocker Integration**:
+
+- `_claimFromClankerFeeLocker()` → Automatically claims pending rewards before accrual
+- `_getPendingFromClankerFeeLocker()` → Check pending rewards in ClankerFeeLocker
+- `getClankerFeeLocker()` → Get the associated ClankerFeeLocker address
+
+**Safety**: Reserve tracking, liquidity checks, streaming windows (3-day default)
 
 **Meta-Transaction Support**: Users can stake/unstake/claim without holding ETH
 
@@ -183,24 +197,32 @@ contract LevrStaking_v1 is ILevrStaking_v1, IERC1363Receiver, ReentrancyGuard, E
 ### Complete Workflow
 
 ```solidity
-// 1. Prepare (get addresses before Clanker exists)
+// 1. Deploy forwarder FIRST
+LevrForwarder_v1 forwarder = new LevrForwarder_v1("LevrForwarder_v1");
+
+// 2. Deploy factory with forwarder
+LevrFactory_v1 factory = new LevrFactory_v1(config, owner, address(forwarder));
+
+// 3. Prepare (get addresses before Clanker exists)
 (address treasury, address staking) = factory.prepareForDeployment();
 
-// 2. Deploy Clanker token
+// 4. Deploy Clanker token
 // - Set treasury as airdrop recipient → receives initial allocation
 // - Set staking as LP fee recipient → receives ongoing trading fees
 
-// 3. Register (as tokenAdmin)
+// 5. Register (as tokenAdmin)
 ILevrFactory_v1.Project memory project = factory.register(clankerToken);
 // Access: project.treasury, project.governor, project.staking, project.stakedToken
 ```
 
 ### Initialization Sequence
 
-1. Treasury & Staking deployed via `prepareForDeployment()`
-2. Clanker token deployed (uses treasury/staking addresses)
-3. `register()` deploys governor & stakedToken, initializes all contracts
-4. Governor set as treasury controller, staking linked to treasury
+1. Forwarder deployed independently
+2. Factory deployed with forwarder address
+3. Treasury & Staking deployed via `prepareForDeployment()`
+4. Clanker token deployed (uses treasury/staking addresses)
+5. `register()` deploys governor & stakedToken, initializes all contracts
+6. Governor set as treasury controller, staking linked to treasury
 
 ---
 
@@ -213,11 +235,12 @@ User stakes → Staking escrows underlying, mints stakedToken 1:1
 User unstakes → Staking burns stakedToken, returns underlying
 ```
 
-### Rewards
+### Rewards (Manual Accrual System)
 
 ```
-Clanker LP fees → Staking (auto-accrues via ERC-1363)
+Clanker LP fees → ClankerFeeLocker → Manual accrual via accrueRewards()
 Clanker airdrops → Treasury
+Manual rewards → Transfer to staking → accrueRewards(token, amount)
 Governor proposes boost → Treasury.applyBoost(amount)
 Treasury → Staking.accrueFromTreasury (measures delta, credits immediately)
 Users claim → Multi-token claim with reserve checks
@@ -260,6 +283,7 @@ struct PreparedContracts {
 | `treasury.transfer/applyBoost()` | Only governor                          |
 | `governor.propose*()`            | Anyone with `minWTokenToSubmit` staked |
 | `staking.stake/unstake/claim()`  | Anyone                                 |
+| `staking.accrueRewards()`        | Anyone (manual accrual)                |
 | `stakedToken.mint/burn()`        | Only staking                           |
 
 ### Protections
@@ -269,6 +293,7 @@ struct PreparedContracts {
 - **Front-running**: Only deployer can use their prepared contracts
 - **Reward Safety**: Reserve tracking prevents overdraw
 - **No Owner on Treasury**: Governor controls all operations
+- **Manual Accrual**: Explicit reward crediting prevents unexpected behavior
 
 ### Invariants
 
@@ -288,7 +313,7 @@ struct PreparedContracts {
 - `minWTokenToSubmit` — Min staked tokens to propose
 - `protocolTreasury` — Protocol treasury address
 
-**Note**: `trustedForwarder` is NOT in config - automatically deployed in constructor
+**Note**: `trustedForwarder` is NOT in config - must be deployed before factory
 
 ### Proposal Amounts
 
@@ -311,6 +336,25 @@ struct PreparedContracts {
 ---
 
 ## Code Patterns
+
+### Manual Reward Accrual
+
+```solidity
+// NEW: Manual accrual pattern
+MockERC20 rewardToken = new MockERC20("Reward", "RWD");
+rewardToken.mint(address(this), 1000 ether);
+
+// Transfer tokens to staking
+rewardToken.transfer(address(staking), 1000 ether);
+
+// Manually accrue rewards (REQUIRED step)
+staking.accrueRewards(address(rewardToken), 1000 ether);
+
+// Now users can claim the rewards
+address[] memory tokens = new address[](1);
+tokens[0] = address(rewardToken);
+staking.claimRewards(tokens, address(this));
+```
 
 ### Registration
 
@@ -416,10 +460,11 @@ contract MyContract is ERC2771ContextBase {
 **Must Cover**:
 
 - Security: Access controls, deployer tracking, meta-tx signature verification
-- Flows: Stake → Boost → Claim → Unstake (both direct and meta-tx)
+- Flows: Stake → Manual Accrue → Claim → Unstake (both direct and meta-tx)
 - Governance: Proposals, custom amounts, execution, deadlines (gasless proposals)
-- Rewards: Multi-token, reserves, streaming
+- Rewards: Multi-token, reserves, streaming, manual accrual
 - Meta-Transactions: Stake, unstake, claim, propose via forwarder
+- ClankerFeeLocker: Automatic claiming integration
 - Edge cases: Zero amounts, double registration, unauthorized calls
 - Forwarder: `isTrustedForwarder()`, signature verification, nonce management
 
@@ -431,15 +476,23 @@ contract MyContract is ERC2771ContextBase {
   - `test_MetaTx_Unstake` - Gasless unstaking
   - `test_MetaTx_Multicall_CompleteDeployment` - Full deployment via multicall (prepare → register)
 - `test/unit/LevrStakingV1.t.sol` - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
+  - `test_manual_reward_accrual_and_streaming` - Manual accrual flow testing
 
-**Test Coverage for executeTransaction**:
+**Test Coverage for Manual Accrual**:
 
-- Test basic call execution via factory
-- Test with forwarder multicall chaining (see `test_MetaTx_Multicall_CompleteDeployment`)
-- Test return values (success, returnData)
-- Test reentrancy protection
+- Test reward transfer + manual accrual
+- Test ClankerFeeLocker automatic claiming
+- Test insufficient balance scenarios
+- Test streaming after manual accrual
 
 ## Key Design Decisions
+
+### Why Manual Reward Accrual?
+
+- **Security**: Explicit control over reward crediting prevents unexpected behavior
+- **Predictability**: No surprise reward accruals from arbitrary token transfers
+- **Integration**: Better integration with ClankerFeeLocker automatic claiming
+- **Simplicity**: Removes complex ERC1363 receiver logic
 
 ### Why No CREATE2 / Deterministic Addresses?
 
@@ -497,6 +550,11 @@ contract MyContract is ERC2771ContextBase {
 
 ### Removed
 
+- ❌ **ERC1363 auto-accrual** - No automatic reward crediting on token transfers
+- ❌ `IERC1363Receiver` implementation - Staking no longer implements this interface
+- ❌ `onTransferReceived()` functionality - Manual accrual required
+- ❌ `transferAndCall()` support - Use regular transfers + manual accrual
+- ❌ `MockERC1363` test utilities - Replaced with standard ERC20 testing
 - ❌ `registerDryRun()` - unreliable prediction
 - ❌ CREATE2 salting - not needed
 - ❌ Treasury `Ownable` - redundant
@@ -506,6 +564,11 @@ contract MyContract is ERC2771ContextBase {
 
 ### Added
 
+- ✅ **Manual reward accrual system** - Explicit `accrueRewards()` calls required
+- ✅ **ClankerFeeLocker integration** - Automatic claiming before manual accrual
+- ✅ `outstandingRewards()` - Check available and pending rewards
+- ✅ `_claimFromClankerFeeLocker()` - Internal automatic claiming
+- ✅ `_getPendingFromClankerFeeLocker()` - Check pending fees
 - ✅ `prepareForDeployment()` - pre-deploy infrastructure
 - ✅ Deployer tracking - security via mapping
 - ✅ `Project` struct returns - cleaner API
@@ -514,7 +577,6 @@ contract MyContract is ERC2771ContextBase {
 - ✅ Custom proposal amounts - no tier restrictions
 - ✅ **ERC2771 meta-transaction support** - gasless transactions via forwarder
 - ✅ **ERC2771ContextBase** - base contract eliminates duplication
-- ✅ **Auto-deployed forwarder** - no manual configuration needed
 - ✅ **executeTransaction** - factory function for multicall composition
 
 ---
@@ -523,20 +585,24 @@ contract MyContract is ERC2771ContextBase {
 
 ### ✅ DO
 
+- **ALWAYS** use manual reward accrual: transfer tokens + `accrueRewards()`
 - **ALWAYS** use `_msgSender()` instead of `msg.sender` in user-facing contracts
 - **ALWAYS** extend `ERC2771ContextBase` for new contracts that need meta-tx support (except factory)
 - **ALWAYS** deploy forwarder BEFORE factory
 - **ALWAYS** pass `trustedForwarder` to contract constructors
-- **ALWAYS** update this rule when making architectural changes
+- **ALWAYS** update this documentation when making architectural changes
 - **CONSIDER** using `factory.executeTransaction()` for complex multicall sequences
 
 ### ❌ DON'T
 
+- **NEVER** expect automatic reward accrual on token transfers
+- **NEVER** use `transferAndCall()` - use transfer + `accrueRewards()`
+- **NEVER** implement `IERC1363Receiver` - manual accrual only
 - **NEVER** use `msg.sender` directly in contracts that extend ERC2771ContextBase or ERC2771Context
 - **NEVER** create custom forwarders - use OpenZeppelin's `ERC2771Forwarder`
 - **NEVER** manually override `_msgSender()/_msgData()/_contextSuffixLength()` - use base contract (except factory)
 - **NEVER** forget to pass `address(0)` for forwarder in unit tests if not testing meta-tx
-- **NEVER** let this rule become outdated
+- **NEVER** let this documentation become outdated
 - **NEVER** deploy factory before deploying forwarder
 - **AVOID** using `executeTransaction` for operations requiring specific caller identity
 
@@ -551,27 +617,32 @@ src/
   LevrFactory_v1.sol                # Factory (extends ERC2771Context directly)
   LevrTreasury_v1.sol               # Extends ERC2771ContextBase
   LevrGovernor_v1.sol               # Extends ERC2771ContextBase
-  LevrStaking_v1.sol                # Extends ERC2771ContextBase
+  LevrStaking_v1.sol                # Extends ERC2771ContextBase (NO ERC1363)
   LevrStakedToken_v1.sol            # No meta-tx (not user-facing)
+  LevrForwarder_v1.sol              # Meta-transaction forwarder
   interfaces/
     ILevrFactory_v1.sol             # Factory interface
     ILevrGovernor_v1.sol            # Governor interface
     ILevrStaking_v1.sol             # Staking interface
     ILevrTreasury_v1.sol            # Treasury interface
     ILevrStakedToken_v1.sol         # StakedToken interface
+    ILevrForwarder_v1.sol           # Forwarder interface
+    external/
+      IClankerFeeLocker.sol         # ClankerFeeLocker interface
 
 test/
   e2e/
-    LevrV1.MetaTx.t.sol             # Meta-transaction tests
     LevrV1.Governance.t.sol
     LevrV1.Registration.t.sol
     LevrV1.Treasury.t.sol
   unit/
     LevrFactoryV1.*.t.sol
     LevrGovernorV1.t.sol
-    LevrStakingV1.t.sol
+    LevrStakingV1.t.sol             # Updated for manual accrual
     LevrTreasuryV1.t.sol
     LevrStakedTokenV1.t.sol
+  mocks/
+    MockERC20.sol                   # Standard ERC20 mock (ERC1363 removed)
 ```
 
 ---
