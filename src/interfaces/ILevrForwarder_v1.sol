@@ -34,6 +34,10 @@ interface ILevrForwarder_v1 {
     /// @param call The call that failed
     error CallFailed(SingleCall call);
 
+    /// @notice Attempted to call a forbidden function selector on the forwarder itself
+    /// @param selector The forbidden function selector
+    error ForbiddenSelectorOnSelf(bytes4 selector);
+
     // ============ Functions ============
 
     /// @notice Execute multiple calls in a single transaction (ERC2771 mode)

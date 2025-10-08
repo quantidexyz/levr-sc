@@ -24,22 +24,35 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder {
 
         SingleCall calldata calli;
         bytes memory data;
+        bool success;
+        bytes memory returnData;
 
         // Execute each call in sequence
         for (uint256 i = 0; i < length; i++) {
             calli = calls[i];
 
-            // Check if the target trusts this forwarder
-            if (!_isTrustedByTarget(calli.target)) {
-                revert ERC2771UntrustfulTarget(calli.target, address(this));
+            // Special case: if target is this forwarder, execute directly without ERC2771 modifications
+            // This allows calling executeTransaction via multicall
+            if (calli.target == address(this)) {
+                // Security: Only allow executeTransaction selector to prevent recursive executeMulticall
+                bytes4 selector = bytes4(calli.callData);
+                if (selector != this.executeTransaction.selector) {
+                    revert ForbiddenSelectorOnSelf(selector);
+                }
+                (success, returnData) = calli.target.call{value: calli.value}(calli.callData);
+            } else {
+                // Check if the target trusts this forwarder
+                if (!_isTrustedByTarget(calli.target)) {
+                    revert ERC2771UntrustfulTarget(calli.target, address(this));
+                }
+
+                // Append the real caller's address to calldata
+                // This will be extracted by ERC2771Context in the target contract
+                data = abi.encodePacked(calli.callData, msg.sender);
+
+                // Execute the call with value
+                (success, returnData) = calli.target.call{value: calli.value}(data);
             }
-
-            // Append the real caller's address to calldata
-            // This will be extracted by ERC2771Context in the target contract
-            data = abi.encodePacked(calli.callData, msg.sender);
-
-            // Execute the call with value
-            (bool success, bytes memory returnData) = calli.target.call{value: calli.value}(data);
 
             // Check if failure is allowed
             if (!success && !calli.allowFailure) {
