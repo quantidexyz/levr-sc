@@ -213,15 +213,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             });
     }
 
-    /// @inheritdoc ILevrFactory_v1
-    function executeTransaction(
-        address target,
-        bytes calldata data
-    ) external payable nonReentrant returns (bool success, bytes memory returnData) {
-        // Execute the call with value - note this executes FROM the factory contract
-        (success, returnData) = target.call{value: msg.value}(data);
-    }
-
     function _applyConfig(FactoryConfig memory cfg) internal {
         protocolFeeBps = cfg.protocolFeeBps;
         submissionDeadlineSeconds = cfg.submissionDeadlineSeconds;

@@ -154,16 +154,4 @@ interface ILevrFactory_v1 {
 
     /// @notice Minimum % of sToken supply to submit proposals (basis points, e.g., 100 = 1%).
     function minSTokenBpsToSubmit() external view returns (uint16);
-
-    /// @notice Execute an arbitrary transaction (useful for chaining with forwarder multicall).
-    /// @dev Executes a call from the factory contract. Useful for composing transactions.
-    ///      Forwards any ETH sent with the call.
-    /// @param target The contract to call
-    /// @param data The calldata to send
-    /// @return success Whether the call succeeded
-    /// @return returnData The return data from the call
-    function executeTransaction(
-        address target,
-        bytes calldata data
-    ) external payable returns (bool success, bytes memory returnData);
 }
