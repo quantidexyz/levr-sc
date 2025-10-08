@@ -30,85 +30,97 @@ import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
  * The Makefile automatically funds the deployer address before deployment
  */
 contract DeployLevrFactoryDevnet is Script {
-  // Devnet configuration - deterministic values for consistent deployment
-  uint16 constant PROTOCOL_FEE_BPS = 50; // 0.5%
-  uint32 constant SUBMISSION_DEADLINE_SECONDS = 604800; // 7 days
-  uint32 constant STREAM_WINDOW_SECONDS = 2592000; // 30 days
-  uint16 constant MAX_SUBMISSION_PER_TYPE = 10;
-  uint256 constant MIN_WTOKEN_TO_SUBMIT = 100e18; // 100 tokens (assuming 18 decimals)
+    // Devnet configuration - deterministic values for consistent deployment
+    uint16 constant PROTOCOL_FEE_BPS = 50; // 0.5%
+    uint32 constant STREAM_WINDOW_SECONDS = 2592000; // 30 days
 
-  function run() external {
-    uint256 privateKey = vm.envUint('PRIVATE_KEY');
-    address deployer = vm.addr(privateKey);
+    function run() external {
+        uint256 privateKey = vm.envUint('PRIVATE_KEY');
+        address deployer = vm.addr(privateKey);
 
-    // Deployer funding is handled by the Makefile before script execution
+        // Deployer funding is handled by the Makefile before script execution
 
-    // Use deployer as protocol treasury for devnet simplicity
-    address protocolTreasury = deployer;
+        // Use deployer as protocol treasury for devnet simplicity
+        address protocolTreasury = deployer;
 
-    console.log('=== LEVR FACTORY DEVNET DEPLOYMENT ===');
-    console.log('Deployer Address:', deployer);
-    console.log('Deployer Balance:', deployer.balance / 1e18, 'ETH');
-    console.log('Protocol Treasury:', protocolTreasury);
-    console.log('Network Chain ID:', block.chainid);
-    console.log('');
+        console.log('=== LEVR FACTORY DEVNET DEPLOYMENT ===');
+        console.log('Deployer Address:', deployer);
+        console.log('Deployer Balance:', deployer.balance / 1e18, 'ETH');
+        console.log('Protocol Treasury:', protocolTreasury);
+        console.log('Network Chain ID:', block.chainid);
+        console.log('');
 
-    // Build factory configuration
-    ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
-      protocolFeeBps: PROTOCOL_FEE_BPS,
-      submissionDeadlineSeconds: SUBMISSION_DEADLINE_SECONDS,
-      maxSubmissionPerType: MAX_SUBMISSION_PER_TYPE,
-      streamWindowSeconds: STREAM_WINDOW_SECONDS,
-      minWTokenToSubmit: MIN_WTOKEN_TO_SUBMIT,
-      protocolTreasury: protocolTreasury
-    });
+        // Build factory configuration
+        ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: PROTOCOL_FEE_BPS,
+            streamWindowSeconds: STREAM_WINDOW_SECONDS,
+            protocolTreasury: protocolTreasury,
+            // Governance parameters (defaults)
+            proposalWindowSeconds: 2 days,
+            votingWindowSeconds: 5 days,
+            maxActiveProposals: 7,
+            quorumBps: 7000, // 70%
+            approvalBps: 5100, // 51%
+            minSTokenBpsToSubmit: 100 // 1%
+        });
 
-    console.log('Factory Configuration:');
-    console.log('- Protocol Fee BPS:', config.protocolFeeBps);
-    console.log('- Submission Deadline (seconds):', config.submissionDeadlineSeconds);
-    console.log('- Stream Window (seconds):', config.streamWindowSeconds);
-    console.log('- Max Submissions Per Type:', config.maxSubmissionPerType);
-    console.log('- Min WToken to Submit:', config.minWTokenToSubmit / 1e18, 'tokens');
-    console.log('');
+        console.log('Factory Configuration:');
+        console.log('- Protocol Fee BPS:', config.protocolFeeBps);
+        console.log('- Stream Window (seconds):', config.streamWindowSeconds);
+        console.log('- Proposal Window (seconds):', config.proposalWindowSeconds);
+        console.log('- Voting Window (seconds):', config.votingWindowSeconds);
+        console.log('- Max Active Proposals (per type):', config.maxActiveProposals);
+        console.log('- Quorum BPS:', config.quorumBps);
+        console.log('- Approval BPS:', config.approvalBps);
+        console.log('- Min sToken BPS to Submit:', config.minSTokenBpsToSubmit);
+        console.log('');
 
-    vm.startBroadcast(privateKey);
+        vm.startBroadcast(privateKey);
 
-    // Deploy the forwarder first (includes executeMulticall support)
-    LevrForwarder_v1 forwarder = new LevrForwarder_v1('LevrForwarder_v1');
-    console.log('Forwarder deployed at:', address(forwarder));
+        // Deploy the forwarder first (includes executeMulticall support)
+        LevrForwarder_v1 forwarder = new LevrForwarder_v1('LevrForwarder_v1');
+        console.log('Forwarder deployed at:', address(forwarder));
 
-    // Deploy the factory with forwarder
-    // Use Base mainnet Clanker factory address for deployment
-    address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
-    LevrFactory_v1 factory = new LevrFactory_v1(config, deployer, address(forwarder), clankerFactory);
+        // Deploy the factory with forwarder
+        // Use Base mainnet Clanker factory address for deployment
+        address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+        LevrFactory_v1 factory = new LevrFactory_v1(
+            config,
+            deployer,
+            address(forwarder),
+            clankerFactory
+        );
 
-    vm.stopBroadcast();
+        vm.stopBroadcast();
 
-    // Verification and logging
-    address factoryAddress = address(factory);
+        // Verification and logging
+        address factoryAddress = address(factory);
 
-    console.log('=== DEPLOYMENT SUCCESSFUL ===');
-    console.log('Factory Address:', factoryAddress);
-    console.log('Factory Owner (Admin):', deployer);
-    console.log('');
+        console.log('=== DEPLOYMENT SUCCESSFUL ===');
+        console.log('Factory Address:', factoryAddress);
+        console.log('Factory Owner (Admin):', deployer);
+        console.log('');
 
-    // Verify factory configuration
-    console.log('=== FACTORY CONFIGURATION VERIFICATION ===');
-    console.log('protocolFeeBps:', factory.protocolFeeBps());
-    console.log('submissionDeadlineSeconds:', factory.submissionDeadlineSeconds());
-    console.log('streamWindowSeconds:', factory.streamWindowSeconds());
-    console.log('maxSubmissionPerType:', factory.maxSubmissionPerType());
-    console.log('minWTokenToSubmit:', factory.minWTokenToSubmit());
-    console.log('protocolTreasury:', factory.protocolTreasury());
-    console.log('trustedForwarder:', factory.trustedForwarder());
+        // Verify factory configuration
+        console.log('=== FACTORY CONFIGURATION VERIFICATION ===');
+        console.log('protocolFeeBps:', factory.protocolFeeBps());
+        console.log('streamWindowSeconds:', factory.streamWindowSeconds());
+        console.log('proposalWindowSeconds:', factory.proposalWindowSeconds());
+        console.log('votingWindowSeconds:', factory.votingWindowSeconds());
+        console.log('maxActiveProposals:', factory.maxActiveProposals());
+        console.log('quorumBps:', factory.quorumBps());
+        console.log('approvalBps:', factory.approvalBps());
+        console.log('minSTokenBpsToSubmit:', factory.minSTokenBpsToSubmit());
+        console.log('protocolTreasury:', factory.protocolTreasury());
+        console.log('trustedForwarder:', factory.trustedForwarder());
 
-    console.log('');
-    console.log('=== NEXT STEPS ===');
-    console.log('1. Use Factory Address in your UI configuration');
-    console.log('2. Deploy Clanker tokens via UI or separate script');
-    console.log('3. Register projects using factory.register()');
-    console.log('4. Test governance and staking flows');
-    console.log('');
-    console.log('Factory deployment completed successfully!');
-  }
+        console.log('');
+        console.log('=== NEXT STEPS ===');
+        console.log('1. Use Factory Address in your UI configuration');
+        console.log('2. Deploy Clanker tokens via UI or separate script');
+        console.log('3. Register projects using factory.register()');
+        console.log('4. Test governance and staking flows');
+        console.log('');
+        console.log('Factory deployment completed successfully!');
+    }
 }

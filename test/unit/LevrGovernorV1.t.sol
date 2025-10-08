@@ -13,120 +13,115 @@ import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
 contract LevrGovernorV1_UnitTest is Test {
-  MockERC20 internal underlying;
-  LevrFactory_v1 internal factory;
-  LevrForwarder_v1 internal forwarder;
-  LevrGovernor_v1 internal governor;
-  LevrTreasury_v1 internal treasury;
-  LevrStaking_v1 internal staking;
-  LevrStakedToken_v1 internal sToken;
+    MockERC20 internal underlying;
+    LevrFactory_v1 internal factory;
+    LevrForwarder_v1 internal forwarder;
+    LevrGovernor_v1 internal governor;
+    LevrTreasury_v1 internal treasury;
+    LevrStaking_v1 internal staking;
+    LevrStakedToken_v1 internal sToken;
 
-  address internal user = address(0xA11CE);
-  address internal protocolTreasury = address(0xDEAD);
+    address internal user = address(0xA11CE);
+    address internal protocolTreasury = address(0xDEAD);
 
-  function setUp() public {
-    underlying = new MockERC20('Token', 'TKN');
+    function setUp() public {
+        underlying = new MockERC20('Token', 'TKN');
 
-    // Deploy forwarder first
-    forwarder = new LevrForwarder_v1('LevrForwarder_v1');
+        // Deploy forwarder first
+        forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
-    ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
-      protocolFeeBps: 0,
-      submissionDeadlineSeconds: 3 days,
-      maxSubmissionPerType: 0,
-      streamWindowSeconds: 3 days,
-      minWTokenToSubmit: 100 ether,
-      protocolTreasury: protocolTreasury
-    });
-    factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
-    ILevrFactory_v1.Project memory project = factory.register(address(underlying));
-    governor = LevrGovernor_v1(project.governor);
-    treasury = LevrTreasury_v1(payable(project.treasury));
-    staking = LevrStaking_v1(project.staking);
-    sToken = LevrStakedToken_v1(project.stakedToken);
+        ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: 0,
+            streamWindowSeconds: 3 days,
+            protocolTreasury: protocolTreasury,
+            proposalWindowSeconds: 2 days,
+            votingWindowSeconds: 5 days,
+            maxActiveProposals: 7,
+            quorumBps: 7000,
+            approvalBps: 5100,
+            minSTokenBpsToSubmit: 100
+        });
+        factory = new LevrFactory_v1(
+            cfg,
+            address(this),
+            address(forwarder),
+            0xE85A59c628F7d27878ACeB4bf3b35733630083a9
+        ); // Base Clanker factory
+        ILevrFactory_v1.Project memory project = factory.register(address(underlying));
+        governor = LevrGovernor_v1(project.governor);
+        treasury = LevrTreasury_v1(payable(project.treasury));
+        staking = LevrStaking_v1(project.staking);
+        sToken = LevrStakedToken_v1(project.stakedToken);
 
-    // fund user and stake to reach min balance
-    underlying.mint(user, 1_000 ether);
-    vm.startPrank(user);
-    underlying.approve(address(staking), type(uint256).max);
-    staking.stake(200 ether);
-    vm.stopPrank();
+        // fund user and stake to reach min balance
+        underlying.mint(user, 1_000 ether);
+        vm.startPrank(user);
+        underlying.approve(address(staking), type(uint256).max);
+        staking.stake(200 ether);
+        vm.stopPrank();
 
-    // fund treasury for transfer proposals
-    underlying.mint(address(treasury), 10_000 ether);
-  }
+        // fund treasury for transfer proposals
+        underlying.mint(address(treasury), 10_000 ether);
+    }
 
-  function test_propose_and_execute_transfer() public {
-    vm.startPrank(user);
-    uint256 pid = governor.proposeTransfer(address(0xB0B), 500 ether, 'ops');
-    ILevrGovernor_v1.Proposal memory p = governor.getProposal(pid);
-    assertEq(uint8(p.proposalType), uint8(ILevrGovernor_v1.ProposalType.Transfer));
-    vm.stopPrank();
+    // Legacy tests removed - new governance model uses cycle-based proposals
+    // All governance coverage is in test/e2e/LevrV1.Governance.t.sol
 
-    governor.execute(pid);
-  }
+    function test_rate_limit_per_type_enforced() public {
+        // Create a new factory with maxSubmissionPerType = 1
+        LevrForwarder_v1 fwd = new LevrForwarder_v1('LevrForwarder_v1');
+        ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: 0,
+            streamWindowSeconds: 3 days,
+            protocolTreasury: protocolTreasury,
+            proposalWindowSeconds: 2 days,
+            votingWindowSeconds: 5 days,
+            maxActiveProposals: 1, // Testing with maxActiveProposals = 1
+            quorumBps: 7000,
+            approvalBps: 5100,
+            minSTokenBpsToSubmit: 0 // No minimum for this test
+        });
+        LevrFactory_v1 fac = new LevrFactory_v1(
+            cfg,
+            address(this),
+            address(fwd),
+            0xE85A59c628F7d27878ACeB4bf3b35733630083a9
+        ); // Base Clanker factory
+        ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
+        LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
 
-  function test_proposeBoost_and_deadline_enforcement() public {
-    vm.startPrank(user);
-    uint256 pid = governor.proposeBoost(4_000 ether);
-    vm.stopPrank();
+        // fund user tokens and stake 1 wei to satisfy minWTokenToSubmit
+        address u = address(0x1111);
+        underlying.mint(u, 10 ether);
+        vm.startPrank(u);
+        underlying.approve(proj.staking, type(uint256).max);
+        LevrStaking_v1(proj.staking).stake(1);
+        vm.stopPrank();
 
-    // move time forward but before deadline
-    vm.warp(block.timestamp + 1 days);
-    governor.execute(pid);
+        // fund treasury for transfers
+        underlying.mint(proj.treasury, 10_000 ether);
 
-    // After deadline should revert
-    vm.startPrank(user);
-    uint256 pid2 = governor.proposeBoost(4_000 ether);
-    vm.stopPrank();
-    vm.warp(block.timestamp + 4 days);
-    vm.expectRevert(ILevrGovernor_v1.DeadlinePassed.selector);
-    governor.execute(pid2);
-  }
+        // Start governance cycle
+        g.startNewCycle();
 
-  function test_rate_limit_per_week_enforced() public {
-    // Create a new factory with maxSubmissionPerType = 1
-    LevrForwarder_v1 fwd = new LevrForwarder_v1('LevrForwarder_v1');
-    ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
-      protocolFeeBps: 0,
-      submissionDeadlineSeconds: 3 days,
-      maxSubmissionPerType: 1,
-      streamWindowSeconds: 3 days,
-      minWTokenToSubmit: 1,
-      protocolTreasury: protocolTreasury
-    });
-    LevrFactory_v1 fac = new LevrFactory_v1(
-      cfg,
-      address(this),
-      address(fwd),
-      0xE85A59c628F7d27878ACeB4bf3b35733630083a9
-    ); // Base Clanker factory
-    ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
-    LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
+        // First transfer proposal succeeds
+        vm.prank(u);
+        g.proposeTransfer(address(0xB0B), 1 ether, 'ops');
 
-    // fund user tokens and stake 1 wei to satisfy minWTokenToSubmit
-    address u = address(0x1111);
-    underlying.mint(u, 10 ether);
-    vm.startPrank(u);
-    underlying.approve(proj.staking, type(uint256).max);
-    LevrStaking_v1(proj.staking).stake(1);
-    vm.stopPrank();
+        // Second transfer proposal should revert (maxActiveProposals = 1)
+        vm.prank(u);
+        vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
+        g.proposeTransfer(address(0xB0B), 1 ether, 'ops2');
 
-    // fund treasury for transfers
-    underlying.mint(proj.treasury, 10_000 ether);
+        // Execute first proposal to free up the slot
+        vm.warp(block.timestamp + 7 days + 1); // Past voting window
+        g.execute(1);
 
-    // First transfer proposal succeeds
-    vm.prank(u);
-    g.proposeTransfer(address(0xB0B), 1 ether, 'ops');
+        // Start new cycle
+        g.startNewCycle();
 
-    // Second transfer proposal in same week should revert
-    vm.prank(u);
-    vm.expectRevert(ILevrGovernor_v1.RateLimitExceeded.selector);
-    g.proposeTransfer(address(0xB0B), 1 ether, 'ops2');
-
-    // Move to next week and it should succeed again
-    vm.warp(block.timestamp + 8 days);
-    vm.prank(u);
-    g.proposeTransfer(address(0xB0B), 1 ether, 'ops3');
-  }
+        // Now new proposal should succeed
+        vm.prank(u);
+        g.proposeTransfer(address(0xB0B), 1 ether, 'ops3');
+    }
 }

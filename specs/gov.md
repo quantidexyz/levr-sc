@@ -72,10 +72,11 @@ time_staked = block.timestamp - startTime (seconds)
 
 ### Snapshot
 
-Voting power is captured at proposal creation to prevent manipulation:
+Voting power is calculated on-demand when users vote to prevent manipulation:
 
-- `vpAtStart[proposalId][user]` = user's VP when proposal is created
-- `totalVPAtStart[proposalId]` = sum of all users' VP at creation
+- VP calculated at vote time: `balance × (proposal.createdAt - stakeStartTime)`
+- Returns 0 if user staked after proposal was created
+- Cached in `vpSnapshot[proposalId][user]` after first calculation
 
 ## Proposal Types
 
@@ -111,11 +112,13 @@ Transfers tokens from Treasury → specified address for any purpose.
 
 - **Timing**: After voting window closes
 - **Winner Selection**: Among proposals meeting quorum + approval:
-  - Must reach ≥ `quorumBps` participation: `(yes + no) ≥ (quorumBps / 10000) × totalVP`
-  - Must reach ≥ `approvalBps` approval: `yes ≥ (approvalBps / 10000) × (yes + no)`
-  - Pick proposal with highest YES votes
+  - Must reach ≥ `quorumBps` participation: `totalBalanceVoted ≥ (quorumBps / 10000) × totalSupply`
+  - Must reach ≥ `approvalBps` approval: `yesVotes ≥ (approvalBps / 10000) × (yesVotes + noVotes)`
+  - Pick proposal with highest YES votes (VP-weighted)
 - **Tie-break**: Lower proposalId wins (or none execute if strict)
 - **Limit**: Only 1 proposal executes per cycle
+
+**Note**: Quorum uses balance participation (fair representation), approval uses VP weighting (rewards long-term commitment)
 
 ## Data Structures
 
@@ -132,14 +135,25 @@ mapping(address => Stake) stakes;
 ### Voting State
 
 ```c++
-struct ProposalVotes {
-    uint256 yesVotes;
-    uint256 noVotes;
-    uint256 totalVPSnapshot;
+struct Proposal {
+    uint256 id;
+    ProposalType proposalType;
+    address proposer;
+    uint256 amount;
+    address recipient;
+    uint256 createdAt;
+    uint256 votingStartsAt;
+    uint256 votingEndsAt;
+    uint256 yesVotes;              // VP-weighted yes votes
+    uint256 noVotes;               // VP-weighted no votes
+    uint256 totalBalanceVoted;     // sToken balance that voted (for quorum)
+    bool executed;
+    uint256 cycleId;
 }
 
-mapping(uint256 proposalId => ProposalVotes) votes;
-mapping(uint256 proposalId => mapping(address user => uint256 vp)) vpAtStart;
+mapping(uint256 proposalId => Proposal) proposals;
+mapping(uint256 proposalId => mapping(address user => uint256 vp)) vpSnapshot;  // Calculated on-demand
+mapping(uint256 proposalId => mapping(address user => VoteReceipt)) voteReceipts;
 ```
 
 ### Governance Windows
@@ -170,29 +184,43 @@ stakes[user].startTime = 0;  // Reset timer
 burn(user, withdrawAmount);  // sToken 1:1
 ```
 
-### Snapshot VP
+### Calculate VP (On-Demand During Vote)
 
 ```c++
-For each user u:
-    if (stakes[u].startTime > 0) {
-        vpAtStart[proposalId][u] = stakes[u].amount × (now - stakes[u].startTime);
-    }
-    totalVPAtStart[proposalId] += vpAtStart[proposalId][u];
+function calculateVP(proposalId, user):
+    balance = sToken.balanceOf(user);
+    if (balance == 0) return 0;
+
+    startTime = staking.stakeStartTime(user);
+    if (startTime == 0 || startTime >= proposal.createdAt) return 0;
+
+    timeStaked = proposal.createdAt - startTime;
+    return balance × timeStaked;
 ```
+
+**Note**: VP calculated only when user votes (gas-efficient, no enumeration at proposal creation)
 
 ### Determine Winner
 
 ```c++
 eligibleProposals = [];
+totalSupply = sToken.totalSupply();
+
 for each proposal p:
-    participation = (p.yesVotes + p.noVotes);
-    if (participation >= quorumBps / 10000 × p.totalVPSnapshot) {
-        if (p.yesVotes >= approvalBps / 10000 × participation) {
+    // Check quorum: did enough token holders participate?
+    if (p.totalBalanceVoted >= quorumBps / 10000 × totalSupply) {
+        // Check approval: did yes votes win?
+        totalVotes = p.yesVotes + p.noVotes;
+        if (p.yesVotes >= approvalBps / 10000 × totalVotes) {
             eligibleProposals.push(p);
         }
     }
-winner = argmax(eligibleProposals, by: yesVotes);
+
+winner = argmax(eligibleProposals, by: yesVotes);  // Highest VP-weighted yes votes
 ```
+
+**Quorum**: Measures % of token supply that voted (balance-based)  
+**Approval**: Measures % preference strength (VP-weighted)
 
 ## Treasury Actions
 
@@ -224,9 +252,10 @@ winner = argmax(eligibleProposals, by: yesVotes);
 ### Voting UI
 
 - Show time remaining in voting window
-- Display user's VP for this proposal (from snapshot)
-- Show quorum progress: `(yes + no) / totalVPSnapshot` vs. `quorumBps / 10000`
-- Show approval progress: `yes / (yes + no)` vs. `approvalBps / 10000`
+- Display user's VP for this proposal (calculated on-demand)
+- Show quorum progress: `totalBalanceVoted / totalSupply` vs. `quorumBps / 10000`
+- Show approval progress: `yesVotes / (yesVotes + noVotes)` vs. `approvalBps / 10000`
+- Clarify: Quorum = "X% of token holders voted", Approval = "Y% voted yes (weighted by commitment)"
 
 ### Execution UI
 

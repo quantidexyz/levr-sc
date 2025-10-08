@@ -29,11 +29,14 @@ contract LevrTreasuryV1_UnitTest is Test {
 
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
-      submissionDeadlineSeconds: 7 days,
-      maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      minWTokenToSubmit: 0,
-      protocolTreasury: protocolTreasury
+      protocolTreasury: protocolTreasury,
+      proposalWindowSeconds: 2 days,
+      votingWindowSeconds: 5 days,
+      maxActiveProposals: 7,
+      quorumBps: 7000,
+      approvalBps: 5100,
+      minSTokenBpsToSubmit: 100
     });
     factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
 

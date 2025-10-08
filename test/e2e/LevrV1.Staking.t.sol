@@ -43,11 +43,14 @@ contract LevrV1_StakingE2E is BaseForkTest {
 
     ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: 0,
-      submissionDeadlineSeconds: 7 days,
-      maxSubmissionPerType: 0,
       streamWindowSeconds: 3 days,
-      minWTokenToSubmit: 0,
-      protocolTreasury: protocolTreasury
+      protocolTreasury: protocolTreasury,
+      proposalWindowSeconds: 2 days,
+      votingWindowSeconds: 5 days,
+      maxActiveProposals: 7,
+      quorumBps: 7000,
+      approvalBps: 5100,
+      minSTokenBpsToSubmit: 100
     });
     factory = new LevrFactory_v1(cfg, address(this), address(forwarder), DEFAULT_CLANKER_FACTORY);
   }

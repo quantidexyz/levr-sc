@@ -41,7 +41,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     // VP snapshots per proposal
     mapping(uint256 => mapping(address => uint256)) private _vpSnapshot;
-    mapping(uint256 => uint256) private _totalVPSnapshot;
 
     // Track active proposals per type
     mapping(ILevrGovernor_v1.ProposalType => uint256) private _activeProposalCount;
@@ -115,17 +114,23 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Calculate user's VP at proposal creation time (snapshot)
         uint256 votes = _calculateVPAtSnapshot(proposalId, voter);
 
+        // Get user's balance for quorum tracking
+        uint256 voterBalance = IERC20(stakedToken).balanceOf(voter);
+
         // Store in snapshot mapping for later queries
         if (_vpSnapshot[proposalId][voter] == 0) {
             _vpSnapshot[proposalId][voter] = votes;
         }
 
-        // Record vote
+        // Record vote (VP for yes/no tallying)
         if (support) {
             proposal.yesVotes += votes;
         } else {
             proposal.noVotes += votes;
         }
+
+        // Track balance participation for quorum
+        proposal.totalBalanceVoted += voterBalance;
 
         _voteReceipts[proposalId][voter] = VoteReceipt({
             hasVoted: true,
@@ -148,12 +153,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Check not already executed
         if (proposal.executed) {
             revert AlreadyExecuted();
-        }
-
-        // Check deadline hasn't passed
-        uint32 deadline = ILevrFactory_v1(factory).submissionDeadlineSeconds();
-        if (block.timestamp > proposal.createdAt + deadline) {
-            revert DeadlinePassed();
         }
 
         // Check quorum
@@ -318,26 +317,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
-        // Legacy check for old config
-        uint256 minWToken = ILevrFactory_v1(factory).minWTokenToSubmit();
-        if (minWToken > 0) {
-            uint256 proposerBalance = IERC20(stakedToken).balanceOf(proposer);
-            if (proposerBalance < minWToken) {
-                revert NotAuthorized();
-            }
-        }
-
         // Check max active proposals per type
         uint16 maxActive = ILevrFactory_v1(factory).maxActiveProposals();
         if (_activeProposalCount[proposalType] >= maxActive) {
             revert MaxProposalsReached();
         }
 
-        // Snapshot voting power for all current stakers
-        proposalId = ++_proposalCount;
-        _snapshotVotingPower(proposalId);
-
         // Create proposal
+        proposalId = ++_proposalCount;
+
         _proposals[proposalId] = Proposal({
             id: proposalId,
             proposalType: proposalType,
@@ -349,7 +337,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             votingEndsAt: cycle.votingWindowEnd,
             yesVotes: 0,
             noVotes: 0,
-            totalVPSnapshot: _totalVPSnapshot[proposalId],
+            totalBalanceVoted: 0,
             executed: false,
             cycleId: cycleId
         });
@@ -358,15 +346,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         _cycleProposals[cycleId].push(proposalId);
 
         emit ProposalCreated(proposalId, proposer, proposalType, amount, recipient, description);
-    }
-
-    function _snapshotVotingPower(uint256 proposalId) internal {
-        // Individual VP snapshots are calculated on-demand when users vote
-        // This avoids gas-intensive enumeration at proposal creation
-        // totalVPSnapshot will be calculated as votes come in
-        // For now, we use total supply as a proxy for max possible VP
-        uint256 totalSupply = IERC20(stakedToken).totalSupply();
-        _totalVPSnapshot[proposalId] = totalSupply;
     }
 
     function _calculateVPAtSnapshot(
@@ -415,10 +394,14 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
         uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
 
-        uint256 totalVotes = proposal.yesVotes + proposal.noVotes;
-        uint256 requiredQuorum = (proposal.totalVPSnapshot * quorumBps) / 10_000;
+        // Quorum is based on participation rate: balance that voted / total supply
+        // Not based on VP (which includes time weighting)
+        uint256 totalSupply = IERC20(stakedToken).totalSupply();
+        if (totalSupply == 0) return false;
 
-        return totalVotes >= requiredQuorum;
+        uint256 requiredQuorum = (totalSupply * quorumBps) / 10_000;
+
+        return proposal.totalBalanceVoted >= requiredQuorum;
     }
 
     function _meetsApproval(uint256 proposalId) internal view returns (bool) {

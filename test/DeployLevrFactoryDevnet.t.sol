@@ -17,19 +17,19 @@ contract DeployLevrFactoryDevnetTest is Test {
 
     // Test the same configuration values used in the deployment script
     uint16 protocolFeeBps = 50;
-    uint32 submissionDeadlineSeconds = 604800;
     uint32 streamWindowSeconds = 2592000;
-    uint16 maxSubmissionPerType = 10;
-    uint256 minWTokenToSubmit = 100e18;
     address protocolTreasury = address(this);
 
     ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
       protocolFeeBps: protocolFeeBps,
-      submissionDeadlineSeconds: submissionDeadlineSeconds,
-      maxSubmissionPerType: maxSubmissionPerType,
       streamWindowSeconds: streamWindowSeconds,
-      minWTokenToSubmit: minWTokenToSubmit,
-      protocolTreasury: protocolTreasury
+      protocolTreasury: protocolTreasury,
+      proposalWindowSeconds: 2 days,
+      votingWindowSeconds: 5 days,
+      maxActiveProposals: 7,
+      quorumBps: 7000,
+      approvalBps: 5100,
+      minSTokenBpsToSubmit: 100
     });
 
     // Deploy factory with forwarder
@@ -42,10 +42,13 @@ contract DeployLevrFactoryDevnetTest is Test {
 
     // Verify configuration
     assertEq(factory.protocolFeeBps(), protocolFeeBps);
-    assertEq(factory.submissionDeadlineSeconds(), submissionDeadlineSeconds);
     assertEq(factory.streamWindowSeconds(), streamWindowSeconds);
-    assertEq(factory.maxSubmissionPerType(), maxSubmissionPerType);
-    assertEq(factory.minWTokenToSubmit(), minWTokenToSubmit);
     assertEq(factory.protocolTreasury(), protocolTreasury);
+    assertEq(factory.proposalWindowSeconds(), 2 days);
+    assertEq(factory.votingWindowSeconds(), 5 days);
+    assertEq(factory.maxActiveProposals(), 7);
+    assertEq(factory.quorumBps(), 7000);
+    assertEq(factory.approvalBps(), 5100);
+    assertEq(factory.minSTokenBpsToSubmit(), 100);
   }
 }

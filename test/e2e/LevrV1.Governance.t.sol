@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-/// @notice Governance E2E tests using airdrop claim mechanism to fund treasury
-/// @dev Flow:
-///   1. prepareForDeployment() to get treasury address before token deployment
-///   2. Deploy Clanker token with treasury in airdrop merkle tree
-///   3. register() to complete Levr setup
-///   4. Claim airdrop using IClankerAirdrop.claim() to fund treasury
+/// @notice Comprehensive Governance E2E tests
+/// @dev Tests complete governance flow including:
+///      - Time-weighted voting power with VP snapshots
+///      - Cycle management with configurable windows
+///      - Anti-gaming protections (unstake resets, last-minute staking blocked)
+///      - Concurrency limits per proposal type
+///      - Quorum and approval thresholds
+///      - Winner selection (highest yes votes)
+///      - Treasury execution (boost & transfer)
 
 import {BaseForkTest} from '../utils/BaseForkTest.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
@@ -14,176 +17,587 @@ import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
+import {ILevrTreasury_v1} from '../../src/interfaces/ILevrTreasury_v1.sol';
 import {ClankerDeployer} from '../utils/ClankerDeployer.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IClankerAirdrop} from '../../src/interfaces/external/IClankerAirdrop.sol';
 import {MerkleAirdropHelper} from '../utils/MerkleAirdropHelper.sol';
 
 contract LevrV1_GovernanceE2E is BaseForkTest {
-  LevrFactory_v1 internal factory;
-  LevrForwarder_v1 internal forwarder;
+    LevrFactory_v1 internal factory;
+    LevrForwarder_v1 internal forwarder;
 
-  address internal protocolTreasury = address(0xFEE);
-  address internal clankerToken;
-  address internal clankerFactory; // set from constant
-  address constant DEFAULT_CLANKER_FACTORY = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
-  address constant AIRDROP_EXTENSION = 0xf652B3610D75D81871bf96DB50825d9af28391E0;
+    address internal protocolTreasury = address(0xFEE);
+    address internal clankerToken;
+    address internal governor;
+    address internal treasury;
+    address internal staking;
+    address internal stakedToken;
 
-  function setUp() public override {
-    super.setUp();
-    clankerFactory = DEFAULT_CLANKER_FACTORY;
+    address internal alice = address(0xA11CE);
+    address internal bob = address(0xB0B);
+    address internal charlie = address(0xC4A511E);
 
-    // Deploy forwarder first
-    forwarder = new LevrForwarder_v1('LevrForwarder_v1');
+    address constant CLANKER_FACTORY = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+    address constant AIRDROP_EXTENSION = 0xf652B3610D75D81871bf96DB50825d9af28391E0;
+    address constant LOCKER = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496;
 
-    ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
-      protocolFeeBps: 0,
-      submissionDeadlineSeconds: 7 days,
-      maxSubmissionPerType: 0,
-      streamWindowSeconds: 3 days,
-      minWTokenToSubmit: 0,
-      protocolTreasury: protocolTreasury
-    });
-    factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
-  }
+    function setUp() public override {
+        super.setUp();
 
-  function _deployRegisterAndGet(
-    address fac,
-    uint256 airdropAmount
-  ) internal returns (address governor, address treasury, address staking, address stakedToken) {
-    // Step 1: Prepare infrastructure FIRST to get the treasury address
-    (treasury, staking) = LevrFactory_v1(fac).prepareForDeployment();
+        // Deploy forwarder
+        forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
-    // Step 2: Create merkle root with the known treasury address
-    bytes32 merkleRoot = MerkleAirdropHelper.singleLeafRoot(treasury, airdropAmount);
+        // Create factory with governance parameters
+        ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: 0,
+            streamWindowSeconds: 3 days,
+            protocolTreasury: protocolTreasury,
+            // Governance parameters
+            proposalWindowSeconds: 2 days, // 48 hour proposal window
+            votingWindowSeconds: 5 days, // 5 day voting window
+            maxActiveProposals: 7, // Max 7 proposals per type
+            quorumBps: 7000, // 70% participation required
+            approvalBps: 5100, // 51% approval required
+            minSTokenBpsToSubmit: 100 // 1% of supply required to propose
+        });
 
-    // Encode airdrop extension data
-    bytes memory airdropData = abi.encode(
-      address(this), // admin
-      merkleRoot,
-      1 days, // lockupDuration (minimum)
-      0 // vestingDuration (instant unlock after lockup)
-    );
+        factory = new LevrFactory_v1(cfg, address(this), address(forwarder), CLANKER_FACTORY);
 
-    // Step 3: Deploy Clanker token with treasury in the airdrop merkle tree
-    ClankerDeployer d = new ClankerDeployer();
-    clankerToken = d.deployFactoryStaticFullWithOptions({
-      clankerFactory: clankerFactory,
-      tokenAdmin: address(this),
-      name: 'CLK Test',
-      symbol: 'CLK',
-      clankerFeeBps: 100,
-      pairedFeeBps: 100,
-      enableAirdrop: true,
-      airdropAdmin: address(this),
-      airdropBps: 1000, // 10% of supply to airdrop
-      airdropData: airdropData,
-      enableDevBuy: false,
-      devBuyBps: 0,
-      devBuyEthAmount: 0,
-      devBuyRecipient: address(0)
-    });
+        // Deploy complete Levr ecosystem with Clanker token + large airdrop to treasury
+        _deployCompleteEcosystem(50_000 ether); // 50k token airdrop to treasury (50% of supply)
+    }
 
-    // Step 4: Complete registration (will use the prepared treasury and staking)
-    ILevrFactory_v1.Project memory project = LevrFactory_v1(fac).register(clankerToken);
-    treasury = project.treasury;
-    governor = project.governor;
-    staking = project.staking;
-    stakedToken = project.stakedToken;
-  }
+    function _deployCompleteEcosystem(uint256 treasuryAirdropAmount) internal {
+        // Step 1: Prepare infrastructure to get treasury address
+        (treasury, staking) = factory.prepareForDeployment();
 
-  function _claimAirdropForTreasury(address treasury, uint256 allocatedAmount) internal {
-    // Wait for lockup period to pass
-    vm.warp(block.timestamp + 1 days + 1);
+        // Step 2: Create merkle root with treasury address
+        bytes32 merkleRoot = MerkleAirdropHelper.singleLeafRoot(treasury, treasuryAirdropAmount);
 
-    // Generate empty proof for single-leaf merkle tree
-    bytes32[] memory proof = new bytes32[](0);
+        bytes memory airdropData = abi.encode(
+            address(this), // admin
+            merkleRoot,
+            1 days, // lockupDuration
+            0 // vestingDuration
+        );
 
-    // Claim the airdrop directly to the treasury
-    IClankerAirdrop(AIRDROP_EXTENSION).claim(clankerToken, treasury, allocatedAmount, proof);
-  }
+        // Step 3: Deploy Clanker token with treasury in airdrop
+        ClankerDeployer d = new ClankerDeployer();
+        clankerToken = d.deployFactoryStaticFullWithOptions({
+            clankerFactory: CLANKER_FACTORY,
+            tokenAdmin: address(this),
+            name: 'Governance Test Token',
+            symbol: 'GOV',
+            clankerFeeBps: 100,
+            pairedFeeBps: 100,
+            enableAirdrop: true,
+            airdropAdmin: address(this),
+            airdropBps: 5000, // 50% to airdrop for testing
+            airdropData: airdropData,
+            enableDevBuy: false,
+            devBuyBps: 0,
+            devBuyEthAmount: 0,
+            devBuyRecipient: address(0)
+        });
 
-  function _acquireFromLocker(address to, uint256 desired) internal returns (uint256 acquired) {
-    address locker = 0x63D2DfEA64b3433F4071A98665bcD7Ca14d93496;
-    uint256 lockerBalance = IERC20(clankerToken).balanceOf(locker);
-    if (lockerBalance == 0) return 0;
-    acquired = desired <= lockerBalance ? desired : lockerBalance;
-    vm.prank(locker);
-    IERC20(clankerToken).transfer(to, acquired);
-  }
+        // Step 4: Complete registration
+        ILevrFactory_v1.Project memory project = factory.register(clankerToken);
+        treasury = project.treasury;
+        governor = project.governor;
+        staking = project.staking;
+        stakedToken = project.stakedToken;
 
-  function test_transfer_proposal_and_tier_validation() public {
-    uint256 airdropAmount = 1_000 ether;
+        // Step 5: Claim airdrop for treasury
+        vm.warp(block.timestamp + 1 days + 1);
+        bytes32[] memory proof = new bytes32[](0);
+        IClankerAirdrop(AIRDROP_EXTENSION).claim(
+            clankerToken,
+            treasury,
+            treasuryAirdropAmount,
+            proof
+        );
 
-    // Deploy and register with airdrop (treasury address is included in merkle tree via prepareForDeployment)
-    (address governor, address treasury, , ) = _deployRegisterAndGet(address(factory), airdropAmount);
+        // Verify treasury has funds
+        assertEq(
+            IERC20(clankerToken).balanceOf(treasury),
+            treasuryAirdropAmount,
+            'treasury should have airdrop'
+        );
+    }
 
-    // Claim the airdrop directly to the treasury using the IClankerAirdrop.claim function
-    _claimAirdropForTreasury(treasury, airdropAmount);
+    function _acquireTokens(address to, uint256 amount) internal {
+        // Transfer from treasury for testing (treasury has 50k from airdrop)
+        uint256 treasuryBal = IERC20(clankerToken).balanceOf(treasury);
+        uint256 amountToTransfer = amount > treasuryBal ? treasuryBal : amount;
+        require(amountToTransfer > 0, 'no tokens in treasury');
+        vm.prank(treasury);
+        IERC20(clankerToken).transfer(to, amountToTransfer);
+    }
 
-    // Verify treasury has funds from airdrop claim
-    uint256 treasBal = IERC20(clankerToken).balanceOf(treasury);
-    assertTrue(treasBal > 0, 'treasury should have funds from airdrop');
-    assertEq(treasBal, airdropAmount, 'treasury should have exactly airdrop amount');
+    function _stakeFor(address user, uint256 amount) internal {
+        _acquireTokens(user, amount);
+        // Stake whatever balance user actually has
+        uint256 actualBalance = IERC20(clankerToken).balanceOf(user);
+        vm.startPrank(user);
+        IERC20(clankerToken).approve(staking, actualBalance);
+        ILevrStaking_v1(staking).stake(actualBalance);
+        vm.stopPrank();
+    }
 
-    // Valid transfer (custom amount, no tiers)
-    address receiver = address(0xBEEF);
-    uint256 recvBefore = IERC20(clankerToken).balanceOf(receiver);
-    uint256 amount = treasBal / 2; // Transfer half
-    uint256 pid = ILevrGovernor_v1(governor).proposeTransfer(receiver, amount, 'ops');
-    ILevrGovernor_v1(governor).execute(pid);
-    uint256 recvAfter = IERC20(clankerToken).balanceOf(receiver);
-    assertEq(recvAfter - recvBefore, amount);
-  }
+    // ============ Test 1: Full Governance Cycle ============
 
-  function test_min_balance_gating_and_deadline_enforcement() public {
-    // Create stricter config
-    LevrForwarder_v1 fwd = new LevrForwarder_v1('LevrForwarder_v1');
-    ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
-      protocolFeeBps: 0,
-      submissionDeadlineSeconds: 1 days,
-      maxSubmissionPerType: 0,
-      streamWindowSeconds: 3 days,
-      minWTokenToSubmit: 1,
-      protocolTreasury: protocolTreasury
-    });
-    LevrFactory_v1 strictFactory = new LevrFactory_v1(
-      cfg,
-      address(this),
-      address(fwd),
-      0xE85A59c628F7d27878ACeB4bf3b35733630083a9
-    ); // Base Clanker factory
+    function test_FullGovernanceCycle() public {
+        // Setup: 3 users stake different amounts at different times
+        // Locker has ~22 ether, so use smaller amounts
+        _stakeFor(alice, 5 ether); // Alice stakes at T0
+        _stakeFor(bob, 10 ether); // Bob stakes at T0
+        vm.warp(block.timestamp + 1 hours);
+        _stakeFor(charlie, 2 ether); // Charlie stakes at T+1hr
 
-    uint256 treasuryAirdropAmount = 1_000 ether;
+        // Wait for some time to accrue VP
+        vm.warp(block.timestamp + 10 days);
 
-    // Deploy and register with airdrop (treasury address is included in merkle tree via prepareForDeployment)
-    (address governor, address treasury, address staking, ) = _deployRegisterAndGet(
-      address(strictFactory),
-      treasuryAirdropAmount
-    );
+        // Start governance cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+        uint256 cycleId = ILevrGovernor_v1(governor).currentCycleId();
+        assertEq(cycleId, 1, 'cycle should be 1');
 
-    // Without stake, proposing should revert
-    vm.expectRevert(ILevrGovernor_v1.NotAuthorized.selector);
-    ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        // Create 3 proposals during proposal window
+        vm.prank(alice);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
 
-    // Get tokens for user from locker (for staking purposes)
-    uint256 userGot = _acquireFromLocker(address(this), 1_000 ether);
-    assertTrue(userGot > 0, 'need tokens from locker');
-    uint256 stakeAmt = userGot / 2;
-    IERC20(clankerToken).approve(staking, stakeAmt);
-    ILevrStaking_v1(staking).stake(stakeAmt);
+        vm.prank(bob);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            address(0xBEEF),
+            50 ether,
+            'Team allocation'
+        );
 
-    // Claim airdrop directly to the treasury using IClankerAirdrop.claim
-    _claimAirdropForTreasury(treasury, treasuryAirdropAmount);
+        vm.prank(charlie);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
 
-    uint256 tBal = IERC20(clankerToken).balanceOf(treasury);
-    assertTrue(tBal > 0, 'treasury should have funds from airdrop');
-    uint256 boostAmt = tBal / 2;
-    uint256 pid = ILevrGovernor_v1(governor).proposeBoost(boostAmt);
+        // Verify proposals created
+        assertEq(pid1, 1);
+        assertEq(pid2, 2);
+        assertEq(pid3, 3);
 
-    // After deadline passes, execute should revert
-    vm.warp(block.timestamp + 2 days);
-    vm.expectRevert(ILevrGovernor_v1.DeadlinePassed.selector);
-    ILevrGovernor_v1(governor).execute(pid);
-  }
+        // Warp to voting window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // All users vote
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid1, true); // Alice votes YES on proposal 1
+
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid2, false); // Alice votes NO on proposal 2
+
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid3, true); // Alice votes YES on proposal 3
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid1, true); // Bob votes YES on proposal 1
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid2, true); // Bob votes YES on proposal 2
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid3, false); // Bob votes NO on proposal 3
+
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid1, true); // Charlie votes YES on proposal 1
+
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid2, true); // Charlie votes YES on proposal 2
+
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid3, true); // Charlie votes YES on proposal 3
+
+        // Warp to end of voting window
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Check which proposal won (should be pid1 with most yes votes from alice + bob + charlie)
+        uint256 winner = ILevrGovernor_v1(governor).getWinner(cycleId);
+        assertTrue(winner > 0, 'should have a winner');
+
+        // Execute winner
+        ILevrGovernor_v1(governor).execute(winner);
+
+        // Verify execution
+        ILevrGovernor_v1.Proposal memory proposal = ILevrGovernor_v1(governor).getProposal(winner);
+        assertTrue(proposal.executed, 'winner should be executed');
+
+        // Verify only one proposal executed
+        assertEq(
+            ILevrGovernor_v1(governor).state(pid1) == ILevrGovernor_v1.ProposalState.Executed
+                ? 1
+                : 0,
+            winner == pid1 ? 1 : 0
+        );
+    }
+
+    // ============ Test 2: Anti-Gaming - Staking Reset ============
+
+    function test_AntiGaming_StakingReset() public {
+        // Alice stakes 5 tokens
+        _stakeFor(alice, 5 ether);
+
+        // Wait 30 days to accumulate VP
+        vm.warp(block.timestamp + 30 days);
+
+        // Check Alice's VP (should be balance × time)
+        uint256 vpBefore = ILevrStaking_v1(staking).getVotingPower(alice);
+        assertGt(vpBefore, 0, 'alice should have VP');
+
+        // Alice unstakes 1 token (timer resets)
+        vm.prank(alice);
+        ILevrStaking_v1(staking).unstake(1 ether, alice);
+
+        // Check Alice's VP after unstake (should be 0)
+        uint256 vpAfter = ILevrStaking_v1(staking).getVotingPower(alice);
+        assertEq(vpAfter, 0, 'alice VP should reset to 0 after unstake');
+
+        // Alice stakes again
+        vm.prank(alice);
+        IERC20(clankerToken).approve(staking, 1 ether);
+        vm.prank(alice);
+        ILevrStaking_v1(staking).stake(1 ether);
+
+        // Wait a bit and check VP is much lower
+        vm.warp(block.timestamp + 1 days);
+        uint256 vpNew = ILevrStaking_v1(staking).getVotingPower(alice);
+        assertLt(vpNew, vpBefore / 10, 'new VP should be much lower after reset');
+    }
+
+    // ============ Test 3: Anti-Gaming - Last Minute Staking ============
+
+    function test_AntiGaming_LastMinuteStaking() public {
+        // Alice stakes early
+        _stakeFor(alice, 5 ether);
+
+        // Wait some time
+        vm.warp(block.timestamp + 10 days);
+
+        // Start cycle and create proposal
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Bob tries to stake AFTER proposal is created
+        _stakeFor(bob, 10 ether); // Bob stakes 2x more than Alice
+
+        // Warp to voting window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Check VP snapshots
+        uint256 aliceVP = ILevrGovernor_v1(governor).getVotingPowerSnapshot(pid, alice);
+        uint256 bobVP = ILevrGovernor_v1(governor).getVotingPowerSnapshot(pid, bob);
+
+        assertGt(aliceVP, 0, 'alice should have VP (staked before proposal)');
+        assertEq(bobVP, 0, 'bob should have 0 VP (staked after proposal)');
+
+        // Alice votes
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Bob tries to vote but has 0 VP
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check vote receipts
+        ILevrGovernor_v1.VoteReceipt memory aliceReceipt = ILevrGovernor_v1(governor)
+            .getVoteReceipt(pid, alice);
+        ILevrGovernor_v1.VoteReceipt memory bobReceipt = ILevrGovernor_v1(governor).getVoteReceipt(
+            pid,
+            bob
+        );
+
+        assertGt(aliceReceipt.votes, 0, 'alice votes should be counted');
+        assertEq(bobReceipt.votes, 0, 'bob votes should be 0');
+    }
+
+    // ============ Test 4: Concurrency Limits ============
+
+    function test_ConcurrencyLimits() public {
+        // Give alice enough tokens to meet minStake requirement
+        _stakeFor(alice, 15 ether); // Use most of locker balance
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Start cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Create maxActiveProposals (7) BoostStakingPool proposals
+        vm.startPrank(alice);
+        for (uint256 i = 0; i < 7; i++) {
+            ILevrGovernor_v1(governor).proposeBoost(10 ether);
+        }
+
+        // Try to create one more BoostStakingPool (should revert)
+        vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
+        ILevrGovernor_v1(governor).proposeBoost(10 ether);
+
+        // But TransferToAddress should still work (separate limit)
+        uint256 pidTransfer = ILevrGovernor_v1(governor).proposeTransfer(
+            address(0xBEEF),
+            10 ether,
+            'test'
+        );
+        assertGt(pidTransfer, 0, 'should create transfer proposal');
+
+        // Create 6 more TransferToAddress proposals (total 7)
+        for (uint256 i = 0; i < 6; i++) {
+            ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 10 ether, 'test');
+        }
+
+        // Try one more TransferToAddress (should revert)
+        vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
+        ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 10 ether, 'test');
+
+        vm.stopPrank();
+    }
+
+    // ============ Test 5: Quorum Not Met ============
+
+    function test_QuorumNotMet() public {
+        // Setup initial supply
+        _stakeFor(bob, 10 ether);
+
+        // Alice stakes (1% of supply to meet minStake)
+        uint256 totalSupply = IERC20(stakedToken).totalSupply();
+        uint256 minStake = (totalSupply * 100) / 10_000; // 1%
+        _stakeFor(alice, minStake + 0.1 ether);
+
+        // Charlie stakes a small amount
+        _stakeFor(charlie, 0.5 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Start cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Create proposal
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Warp to voting
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Only Alice votes (not enough for 70% quorum)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Warp to end
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Check if meets quorum (should be false)
+        bool meetsQuorum = ILevrGovernor_v1(governor).meetsQuorum(pid);
+        assertFalse(meetsQuorum, 'should not meet quorum');
+
+        // Try to execute (should revert)
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        ILevrGovernor_v1(governor).execute(pid);
+
+        // Check state is Defeated
+        assertEq(
+            uint256(ILevrGovernor_v1(governor).state(pid)),
+            uint256(ILevrGovernor_v1.ProposalState.Defeated)
+        );
+    }
+
+    // ============ Test 6: Approval Not Met ============
+
+    function test_ApprovalNotMet() public {
+        // Stake for alice, bob, charlie with equal amounts
+        _stakeFor(alice, 5 ether);
+        _stakeFor(bob, 5 ether);
+        _stakeFor(charlie, 5 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Start cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Create proposal
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Warp to voting
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // All vote but majority vote NO
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, false); // NO
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid, false); // NO
+
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid, true); // YES
+
+        // Warp to end
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Check if meets approval (should be false)
+        bool meetsApproval = ILevrGovernor_v1(governor).meetsApproval(pid);
+        assertFalse(meetsApproval, 'should not meet approval threshold');
+
+        // Try to execute (should revert)
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        ILevrGovernor_v1(governor).execute(pid);
+    }
+
+    // ============ Test 7: Only Winner Executes ============
+
+    function test_OnlyWinnerExecutes() public {
+        // Stake for users
+        _stakeFor(alice, 4 ether);
+        _stakeFor(bob, 6 ether);
+        _stakeFor(charlie, 5 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Start cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Create 3 proposals
+        vm.prank(alice);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        vm.prank(bob);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+
+        vm.prank(charlie);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(150 ether);
+
+        // Warp to voting
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Voting pattern: pid2 gets most yes votes
+        // pid1: Alice YES, Bob NO, Charlie NO -> low yes
+        // pid2: Alice YES, Bob YES, Charlie YES -> highest yes
+        // pid3: Alice YES, Bob YES, Charlie NO -> medium yes
+
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid1, false);
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid1, false);
+
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid3, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid3, true);
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid3, false);
+
+        // Warp to end
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Get winner (should be pid2)
+        uint256 winner = ILevrGovernor_v1(governor).getWinner(1);
+        assertEq(winner, pid2, 'pid2 should be winner');
+
+        // Execute winner (should succeed)
+        ILevrGovernor_v1(governor).execute(pid2);
+
+        // Try to execute pid3 (should revert - not winner)
+        vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
+        ILevrGovernor_v1(governor).execute(pid3);
+    }
+
+    // ============ Test 8: Minimum Stake To Propose ============
+
+    function test_MinimumStakeToPropose() public {
+        // First, create some supply by having bob stake
+        _stakeFor(bob, 10 ether);
+
+        // minSTokenBpsToSubmit = 100 (1% of total supply)
+        uint256 totalSupply = IERC20(stakedToken).totalSupply();
+        uint256 minStake = (totalSupply * 100) / 10_000; // 1%
+
+        // Alice has less than 1%
+        uint256 aliceAmount = minStake > 0.01 ether ? minStake - 0.01 ether : 0.01 ether;
+        _stakeFor(alice, aliceAmount);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Start cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Alice tries to propose (should revert)
+        vm.prank(alice);
+        vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
+        ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Alice stakes more to meet threshold
+        uint256 additionalStake = (minStake - aliceAmount) + 0.01 ether;
+        _acquireTokens(alice, additionalStake);
+        vm.prank(alice);
+        IERC20(clankerToken).approve(staking, additionalStake);
+        vm.prank(alice);
+        ILevrStaking_v1(staking).stake(additionalStake);
+
+        // Now Alice can propose
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        assertGt(pid, 0, 'proposal should be created');
+    }
+
+    // ============ Test 9: Proposal Window Timing ============
+
+    function test_ProposalWindowTiming() public {
+        // Alice has enough stake
+        _stakeFor(alice, 15 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Try to propose before cycle starts (should revert)
+        vm.prank(alice);
+        vm.expectRevert(ILevrGovernor_v1.NoActiveCycle.selector);
+        ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Start cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Propose during proposal window (should succeed)
+        vm.prank(alice);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        assertEq(pid1, 1);
+
+        // Warp to end of proposal window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Try to propose after proposal window closed (should revert)
+        vm.prank(alice);
+        vm.expectRevert(ILevrGovernor_v1.ProposalWindowClosed.selector);
+        ILevrGovernor_v1(governor).proposeBoost(200 ether);
+
+        // But we can still vote
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+
+        // Warp past voting window
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Try to vote after voting window (should revert)
+        vm.expectRevert(ILevrGovernor_v1.VotingNotActive.selector);
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid1, true); // Will fail because already voted, but let's test with bob
+
+        // Give bob tokens
+        _stakeFor(bob, 5 ether);
+        vm.prank(bob);
+        vm.expectRevert(ILevrGovernor_v1.VotingNotActive.selector);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+    }
 }

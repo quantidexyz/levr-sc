@@ -36,7 +36,7 @@ interface ILevrGovernor_v1 {
         uint256 votingEndsAt; // Timestamp when voting ends
         uint256 yesVotes; // Total yes votes (VP)
         uint256 noVotes; // Total no votes (VP)
-        uint256 totalVPSnapshot; // Total VP available at creation
+        uint256 totalBalanceVoted; // Total sToken balance that voted (for quorum)
         bool executed; // Whether proposal has been executed
         uint256 cycleId; // Governance cycle ID
     }
@@ -76,9 +76,6 @@ interface ILevrGovernor_v1 {
 
     /// @notice Caller is not authorized
     error NotAuthorized();
-
-    /// @notice Execution deadline has passed
-    error DeadlinePassed();
 
     /// @notice Invalid proposal type
     error InvalidProposalType();

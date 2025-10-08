@@ -9,10 +9,7 @@ interface ILevrFactory_v1 {
     /// @notice Global protocol configuration stored in the factory.
     struct FactoryConfig {
         uint16 protocolFeeBps;
-        uint32 submissionDeadlineSeconds;
-        uint16 maxSubmissionPerType;
         uint32 streamWindowSeconds;
-        uint256 minWTokenToSubmit;
         address protocolTreasury;
         // Governance parameters
         uint32 proposalWindowSeconds; // Duration of proposal submission window
@@ -112,17 +109,8 @@ interface ILevrFactory_v1 {
     ) external view returns (ClankerMetadata memory metadata);
 
     // Config getters for periphery contracts
-    /// @notice Protocol fee in basis points applied to wrap/unwrap.
+    /// @notice Protocol fee in basis points.
     function protocolFeeBps() external view returns (uint16);
-
-    /// @notice Proposal execution deadline (seconds).
-    function submissionDeadlineSeconds() external view returns (uint32);
-
-    /// @notice Maximum proposals per type per window (reserved).
-    function maxSubmissionPerType() external view returns (uint16);
-
-    /// @notice Minimum staked token balance required to submit proposals (legacy, use minSTokenBpsToSubmit for governance).
-    function minWTokenToSubmit() external view returns (uint256);
 
     /// @notice Protocol treasury address for fee receipts.
     function protocolTreasury() external view returns (address);
