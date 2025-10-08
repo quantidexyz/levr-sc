@@ -1,0 +1,452 @@
+---
+description: Levr V1 Governance Implementation Guide & Progress Tracker
+globs:
+  - src/LevrGovernor_v1.sol
+  - src/interfaces/ILevrGovernor_v1.sol
+  - src/interfaces/ILevrFactory_v1.sol
+  - src/interfaces/ILevrTreasury_v1.sol
+  - src/interfaces/ILevrStaking_v1.sol
+  - src/LevrStaking_v1.sol
+  - src/LevrTreasury_v1.sol
+  - src/LevrFactory_v1.sol
+  - test/e2e/LevrV1.Governance.t.sol
+alwaysApply: false
+---
+
+# Levr V1 Governance Implementation
+
+## Quick Summary
+
+Implement a time-weighted voting governance system for Levr v1. Key features:
+
+- **Voting Power**: VP = staked amount × time staked (resets on unstake)
+- **Proposal Types**: Boost staking pool or transfer to address
+- **Proposal Limits**: Per-type concurrency (maxActiveProposals)
+- **Thresholds**: Configurable quorum & approval (basis points)
+- **Winner Selection**: One proposal executes per cycle (highest yes votes)
+- **Testing**: Comprehensive E2E suite using real Clanker token deployment with airdrop claims
+
+## Reference Documentation
+
+- Primary spec: `specs/gov.md` - Governance glossary with all parameters and mechanics
+- Factory interface: `src/interfaces/ILevrFactory_v1.sol` - Configuration source
+
+## Implementation Status
+
+### ✅ Completed Components
+
+- [ ] ILevrGovernor_v1 interface definition
+- [ ] LevrGovernor_v1 contract implementation
+- [ ] Factory config extensions (add governance params)
+- [ ] Staking time tracking in LevrStaking_v1
+- [ ] Comprehensive E2E test suite (test/e2e/LevrV1.Governance.t.sol)
+
+### 🚧 Current Phase
+
+**Phase**: Planning
+**Last Updated**: 2025-10-08
+
+## Required Factory Config Parameters
+
+Add these to `ILevrFactory_v1.FactoryConfig`:
+
+```solidity
+struct FactoryConfig {
+  // ... existing fields ...
+
+  // Governance parameters
+  uint32 proposalWindowSeconds;   // Duration of proposal submission window
+  uint32 votingWindowSeconds;     // Duration of voting window
+  uint16 maxActiveProposals;      // Max concurrent proposals per type
+  uint16 quorumBps;               // Minimum participation (e.g., 7000 = 70%)
+  uint16 approvalBps;             // Minimum approval (e.g., 5100 = 51%)
+  uint16 minSTokenBpsToSubmit;    // Min % of sToken supply to submit (e.g., 100 = 1%)
+}
+```
+
+## Implementation Guide
+
+**Testing Philosophy**: All test coverage is consolidated in `test/e2e/LevrV1.Governance.t.sol`. No separate unit tests needed. The E2E suite covers all scenarios, edge cases, and anti-gaming mechanisms using real Clanker token deployment with airdrop claims to fund the treasury.
+
+### Phase 1: Interface Design
+
+**File**: `src/interfaces/ILevrGovernor_v1.sol`
+
+**Key Requirements**:
+
+1. **Proposal Types** (enum):
+   - BoostStakingPool (Treasury → Staking)
+   - TransferToAddress (Treasury → arbitrary address)
+
+2. **Proposal State** (enum):
+   - Pending (created, voting not started)
+   - Active (voting in progress)
+   - Defeated (quorum/approval not met)
+   - Succeeded (eligible for execution)
+   - Executed (winner executed on-chain)
+
+3. **Core Structs**:
+
+   ```solidity
+   struct Proposal {
+     uint256 id;
+     ProposalType proposalType;
+     address proposer;
+     uint256 amount;
+     address recipient;              // For TransferToAddress type
+     uint256 createdAt;
+     uint256 votingStartsAt;
+     uint256 votingEndsAt;
+     uint256 yesVotes;
+     uint256 noVotes;
+     uint256 totalVPSnapshot;        // Total VP at creation
+     bool executed;
+     ProposalState state;
+   }
+
+   struct VoteReceipt {
+     bool hasVoted;
+     bool support;                   // true = yes, false = no
+     uint256 votes;                  // VP used
+   }
+   ```
+
+4. **Key Functions**:
+   - `propose(ProposalType, uint256 amount, address recipient)` → proposalId
+   - `vote(uint256 proposalId, bool support)` → void
+   - `execute(uint256 proposalId)` → void (calls treasury)
+   - `getProposal(uint256 proposalId)` → Proposal
+   - `getVoteReceipt(uint256 proposalId, address voter)` → VoteReceipt
+   - `state(uint256 proposalId)` → ProposalState
+
+5. **Events**:
+   - ProposalCreated
+   - VoteCast
+   - ProposalExecuted
+   - ProposalDefeated
+
+6. **Errors**:
+   - ProposalWindowClosed
+   - InsufficientStake
+   - MaxProposalsReached
+   - AlreadyVoted
+   - VotingNotActive
+   - ProposalNotSucceeded
+   - NotWinner
+   - AlreadyExecuted
+
+### Phase 2: Staking Time Tracking
+
+**File**: `src/LevrStaking_v1.sol`
+
+**Requirements**:
+
+1. Add `mapping(address => uint256) public stakeStartTime`
+2. **On first stake** (amount was 0): Set `stakeStartTime[user] = block.timestamp`
+3. **On top-up**: Keep existing `stakeStartTime`
+4. **On unstake** (any amount): Reset `stakeStartTime[user] = 0`
+5. **On claim**: Keep existing `stakeStartTime`
+6. Add view function: `getVotingPower(address user) → uint256`
+   - Formula: `balance × (block.timestamp - stakeStartTime)`
+   - Return 0 if `stakeStartTime == 0`
+
+### Phase 3: Governor Implementation
+
+**File**: `src/LevrGovernor_v1.sol`
+
+**Architecture**:
+
+1. Store reference to Factory (config source)
+2. Store reference to StakedToken (for VP queries)
+3. Store reference to Treasury (for execution)
+4. Track active proposals per type: `mapping(ProposalType => uint256) activeProposalCount`
+5. Store VP snapshots: `mapping(uint256 proposalId => mapping(address => uint256)) vpSnapshot`
+
+**Key Logic**:
+
+**propose()**:
+
+```solidity
+1. Query config from factory (proposalWindowSeconds, votingWindowSeconds, etc.)
+2. Check proposal window is open (timing logic TBD - cycle management)
+3. Check user's sToken balance ≥ (minSTokenBpsToSubmit / 10000) × totalSupply
+4. Check activeProposalCount[proposalType] < maxActiveProposals
+5. Snapshot all current stakers' VP (query staking contract)
+6. Create proposal with votingStartsAt = proposalEnd, votingEndsAt = votingStartsAt + votingWindowSeconds
+7. Increment activeProposalCount[proposalType]
+8. Emit ProposalCreated
+```
+
+**vote()**:
+
+```solidity
+1. Check proposal is in Active state (block.timestamp in [votingStartsAt, votingEndsAt])
+2. Check user hasn't voted (voteReceipts[proposalId][msg.sender].hasVoted == false)
+3. Get user's VP from snapshot (vpSnapshot[proposalId][msg.sender])
+4. Add VP to yesVotes or noVotes
+5. Mark hasVoted = true
+6. Emit VoteCast
+```
+
+**execute()**:
+
+```solidity
+1. Check voting window ended
+2. Check proposal meets quorum: (yes + no) ≥ (quorumBps / 10000) × totalVPSnapshot
+3. Check proposal meets approval: yes ≥ (approvalBps / 10000) × (yes + no)
+4. Check this proposal is winner (highest yes votes among eligible in same cycle)
+5. If BoostStakingPool: treasury.boostStakingPool(amount)
+6. If TransferToAddress: treasury.transfer(recipient, amount)
+7. Mark executed = true
+8. Decrement activeProposalCount[proposalType]
+9. Emit ProposalExecuted
+```
+
+**state()**:
+
+```solidity
+if (executed) return Executed;
+if (block.timestamp < votingStartsAt) return Pending;
+if (block.timestamp <= votingEndsAt) return Active;
+// After voting ends
+if (!meetsQuorum || !meetsApproval) return Defeated;
+return Succeeded;
+```
+
+### Phase 4: E2E Testing (All Coverage in One File)
+
+**File**: `test/e2e/LevrV1.Governance.t.sol`
+
+**Approach**: Comprehensive E2E tests covering all governance scenarios, anti-gaming mechanisms, and edge cases. No separate unit tests needed - all coverage in E2E suite.
+
+**Test Flow**:
+
+```solidity
+contract LevrV1GovernanceTest is Test {
+  // Setup: Deploy full Levr ecosystem + Clanker token with airdrop
+  function setUp() public {
+    // 1. Fork Base mainnet
+    // 2. Deploy LevrFactory_v1 with governance config
+    // 3. Deploy Clanker token using ClankerDeployer with:
+    //    - Airdrop enabled (airdropBps = 2000 = 20%)
+    //    - Airdrop recipient = Treasury (not yet deployed)
+    // 4. Register with factory (deploys Treasury, Governor, Staking, StakedToken)
+    // 5. Update airdrop recipient to actual Treasury address
+  }
+
+  test_FullGovernanceCycle() {
+    // 1. Warp 1 day (airdrop lockup)
+    // 2. Treasury claims airdrop using IClankerAirdrop.claim()
+    // 3. Setup 3 users: alice, bob, charlie
+    // 4. Users stake tokens (different amounts, different times)
+    //    - alice: 1000 tokens at T+0
+    //    - bob: 2000 tokens at T+0
+    //    - charlie: 500 tokens at T+1 hour
+    // 5. Warp to proposal window start
+    // 6. Alice creates BoostStakingPool proposal (100 tokens)
+    // 7. Bob creates TransferToAddress proposal (50 tokens to address(0xBEEF))
+    // 8. Charlie creates another BoostStakingPool proposal (200 tokens)
+    // 9. Warp to voting window
+    // 10. All users vote on all proposals
+    // 11. Warp to voting window end
+    // 12. Execute winner (should be proposal with most yes VP)
+    // 13. Verify treasury balance changed
+    // 14. Verify only one proposal executed
+  }
+
+  test_AntiGaming_StakingReset() {
+    // 1. Alice stakes 1000 tokens
+    // 2. Warp 30 days (VP accumulates)
+    // 3. Proposal created (alice has high VP)
+    // 4. Alice unstakes 100 tokens
+    // 5. Alice stakes 100 tokens back
+    // 6. Next proposal created
+    // 7. Assert: Alice's VP in proposal 2 is much lower (time reset)
+  }
+
+  test_AntiGaming_LastMinuteStaking() {
+    // 1. Proposal created (VP snapshot taken)
+    // 2. Bob stakes large amount AFTER proposal created
+    // 3. Bob tries to vote
+    // 4. Assert: Bob's vote uses VP from snapshot (should be 0)
+  }
+
+  test_ConcurrencyLimits() {
+    // 1. Create maxActiveProposals BoostStakingPool proposals
+    // 2. Try to create one more BoostStakingPool
+    // 3. Assert: Reverts with MaxProposalsReached
+    // 4. Create maxActiveProposals TransferToAddress proposals (should work)
+    // 5. Try to create one more TransferToAddress
+    // 6. Assert: Reverts with MaxProposalsReached
+  }
+
+  test_QuorumNotMet() {
+    // 1. Create proposal
+    // 2. Only alice votes (< quorumBps participation)
+    // 3. Warp to end
+    // 4. Try execute
+    // 5. Assert: Reverts or state is Defeated
+  }
+
+  test_ApprovalNotMet() {
+    // 1. Create proposal
+    // 2. Majority vote NO (quorum met but approval not met)
+    // 3. Warp to end
+    // 4. Try execute
+    // 5. Assert: Reverts or state is Defeated
+  }
+
+  test_OnlyWinnerExecutes() {
+    // 1. Create 3 proposals, all with different yes vote counts
+    // 2. All meet quorum + approval
+    // 3. Execute highest yes votes proposal (should succeed)
+    // 4. Try execute second highest (should revert - not winner)
+  }
+
+  test_MinimumStakeToPropose() {
+    // 1. Alice has (minSTokenBpsToSubmit - 1) % of supply
+    // 2. Alice tries to propose
+    // 3. Assert: Reverts with InsufficientStake
+    // 4. Alice stakes more to meet threshold
+    // 5. Alice proposes (should succeed)
+  }
+
+  test_ProposalWindowTiming() {
+    // 1. Warp to before proposal window
+    // 2. Try propose
+    // 3. Assert: Reverts
+    // 4. Warp to during proposal window
+    // 5. Propose (should succeed)
+    // 6. Warp to after proposal window
+    // 7. Try propose
+    // 8. Assert: Reverts
+  }
+}
+```
+
+## Anti-Gaming Checklist
+
+Ensure the following attack vectors are prevented:
+
+- [ ] **Last-minute staking**: VP snapshot at proposal creation blocks this
+- [ ] **Unstake-restake timing**: Unstake resets timer to 0
+- [ ] **Sybil attacks**: minSTokenBpsToSubmit creates barrier
+- [ ] **Spam proposals**: maxActiveProposals per type limits spam
+- [ ] **Multiple executions**: Only winner executes, one per cycle
+- [ ] **Double voting**: voteReceipts tracks hasVoted
+- [ ] **Vote after deadline**: State checks prevent late votes
+- [ ] **Execute before vote ends**: State checks prevent early execution
+- [ ] **Top-up gaming**: Top-up doesn't reset time (fair for honest stakers)
+- [ ] **Claim gaming**: Claim doesn't reset time (fair for honest stakers)
+
+## Integration Notes
+
+### Treasury Interface Updates
+
+`ILevrTreasury_v1` must expose:
+
+- `boostStakingPool(uint256 amount)` - Transfer tokens to staking contract
+- `transfer(address recipient, uint256 amount)` - Transfer tokens to arbitrary address
+- `setGovernor(address governor)` - Only governor can call treasury actions
+
+### Staking Interface Updates
+
+`ILevrStaking_v1` must expose:
+
+- `stakeStartTime(address user)` - Public getter
+- `getVotingPower(address user)` - Calculate VP on-demand
+
+### StakedToken Interface Updates
+
+`ILevrStakedToken_v1` must expose:
+
+- `totalSupply()` - For minSTokenBpsToSubmit calculation
+
+## Cycle Management (TBD)
+
+**Open Question**: How to manage proposal/voting windows?
+
+Options:
+
+1. **Fixed weekly cycles** (Monday proposal, rest of week voting)
+2. **Rolling cycles** (new cycle starts after previous ends)
+3. **Manual start** (admin/multi-sig kicks off new cycle)
+
+**Recommendation**: Start with manual start for v1, add automation in v2.
+
+**Manual approach**:
+
+- Governor has `startNewCycle()` function (only callable by factory owner or specific admin)
+- Sets `currentCycleStartTime = block.timestamp`
+- Proposal window: [currentCycleStartTime, currentCycleStartTime + proposalWindowSeconds]
+- Voting window: [proposalEnd, proposalEnd + votingWindowSeconds]
+
+## Test Results
+
+### E2E Test Suite (test/e2e/LevrV1.Governance.t.sol)
+
+Status: Not Run
+Last Run: N/A
+
+**Test Cases:**
+
+- [ ] test_FullGovernanceCycle (0/14 steps)
+- [ ] test_AntiGaming_StakingReset (0/7 steps)
+- [ ] test_AntiGaming_LastMinuteStaking (0/4 steps)
+- [ ] test_ConcurrencyLimits (0/6 steps)
+- [ ] test_QuorumNotMet (0/5 steps)
+- [ ] test_ApprovalNotMet (0/5 steps)
+- [ ] test_OnlyWinnerExecutes (0/4 steps)
+- [ ] test_MinimumStakeToPropose (0/5 steps)
+- [ ] test_ProposalWindowTiming (0/8 steps)
+
+**Total**: 0/9 tests passing
+
+**Coverage Areas:**
+
+- [ ] Proposal creation flow with airdrop claim
+- [ ] Staking time tracking mechanics
+- [ ] VP snapshot mechanism
+- [ ] Voting flow (yes/no)
+- [ ] Quorum calculations (quorumBps)
+- [ ] Approval threshold checks (approvalBps)
+- [ ] Winner selection logic (highest yes votes)
+- [ ] Treasury execution (boost & transfer)
+- [ ] Anti-gaming: stake/unstake timing reset
+- [ ] Anti-gaming: last-minute staking blocked by snapshot
+- [ ] Concurrency limits per proposal type
+- [ ] Minimum stake requirement (minSTokenBpsToSubmit)
+- [ ] Proposal window timing enforcement
+
+### Known Issues
+
+- None yet
+
+## Next Steps
+
+1. [ ] Define ILevrGovernor_v1 interface with all required structs, enums, events, errors, and functions
+2. [ ] Extend ILevrFactory_v1.FactoryConfig with governance parameters (proposalWindowSeconds, votingWindowSeconds, maxActiveProposals, quorumBps, approvalBps, minSTokenBpsToSubmit)
+3. [ ] Update ILevrTreasury_v1 interface to add governor-callable functions (boostStakingPool, transfer, setGovernor)
+4. [ ] Update ILevrStaking_v1 interface to add stakeStartTime getter and getVotingPower function
+5. [ ] Add time tracking to LevrStaking_v1 implementation (stakeStartTime mapping and logic)
+6. [ ] Update LevrTreasury_v1 implementation to support governor execution
+7. [ ] Implement LevrGovernor_v1 core logic (propose, vote, execute, state, cycle management)
+8. [ ] Update LevrFactory_v1 to deploy governor with new config parameters
+9. [ ] Decide on cycle management approach (recommend: manual start for v1)
+10. [ ] Implement all 9 E2E test cases in test/e2e/LevrV1.Governance.t.sol
+11. [ ] Run E2E suite with -vvv and document results in this rule
+12. [ ] Fix any issues found and re-test
+13. [ ] Mark all anti-gaming checklist items as verified
+14. [ ] Update this rule with final status and mark phase as Complete
+
+## Updates Log
+
+### 2025-10-08
+
+- Initial rule created
+- Defined implementation phases
+- Outlined comprehensive E2E test strategy (no separate unit tests needed)
+- Documented anti-gaming requirements
+- Test file exists at test/e2e/LevrV1.Governance.t.sol with partial implementation
+- Removed unit test references - all coverage in E2E suite
+- Status: Planning phase
