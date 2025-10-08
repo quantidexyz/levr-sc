@@ -21,7 +21,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     address public stakedToken;
     address public treasury; // for future integrations
     address public factory; // Levr factory instance
-    uint32 private _streamWindowSeconds;
     uint64 private _streamStart;
     uint64 private _streamEnd;
     // Per-token streaming state for UI/APR
@@ -244,7 +243,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function streamWindowSeconds() external view returns (uint32) {
-        return _streamWindowSeconds;
+        return ILevrFactory_v1(factory).streamWindowSeconds();
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -287,11 +286,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     function _resetStreamForToken(address token, uint256 amount) internal {
-        uint32 window = _streamWindowSeconds;
-        if (window == 0) {
-            window = 3 days;
-        }
-        _streamWindowSeconds = window;
+        // Query stream window from factory config
+        uint32 window = ILevrFactory_v1(factory).streamWindowSeconds();
+
         _streamStart = uint64(block.timestamp);
         _streamEnd = uint64(block.timestamp + window);
         emit StreamReset(window, _streamStart, _streamEnd);

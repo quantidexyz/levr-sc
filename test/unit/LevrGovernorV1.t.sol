@@ -77,8 +77,8 @@ contract LevrGovernorV1_UnitTest is Test {
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 1, // Testing with maxActiveProposals = 1
-            quorumBps: 7000,
-            approvalBps: 5100,
+            quorumBps: 0, // No quorum requirement for this unit test
+            approvalBps: 0, // No approval requirement for this unit test
             minSTokenBpsToSubmit: 0 // No minimum for this test
         });
         LevrFactory_v1 fac = new LevrFactory_v1(
@@ -101,6 +101,9 @@ contract LevrGovernorV1_UnitTest is Test {
         // fund treasury for transfers
         underlying.mint(proj.treasury, 10_000 ether);
 
+        // Wait for VP to accumulate
+        vm.warp(block.timestamp + 1 days);
+
         // Start governance cycle
         g.startNewCycle();
 
@@ -113,8 +116,13 @@ contract LevrGovernorV1_UnitTest is Test {
         vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
         g.proposeTransfer(address(0xB0B), 1 ether, 'ops2');
 
-        // Execute first proposal to free up the slot
-        vm.warp(block.timestamp + 7 days + 1); // Past voting window
+        // Vote on first proposal to make it winner
+        vm.warp(block.timestamp + 2 days + 1); // In voting window
+        vm.prank(u);
+        g.vote(1, true);
+
+        // Execute first proposal to free up the slot (quorum/approval = 0 for this test)
+        vm.warp(block.timestamp + 5 days + 1); // Past voting window
         g.execute(1);
 
         // Start new cycle

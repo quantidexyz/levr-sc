@@ -211,6 +211,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     }
 
     function _applyConfig(FactoryConfig memory cfg) internal {
+        // Validate stream window is at least 1 day
+        require(cfg.streamWindowSeconds >= 1 days, 'STREAM_WINDOW_TOO_SHORT');
+
         protocolFeeBps = cfg.protocolFeeBps;
         streamWindowSeconds = cfg.streamWindowSeconds;
         protocolTreasury = cfg.protocolTreasury;

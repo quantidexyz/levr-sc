@@ -16,6 +16,8 @@ When making ANY architectural changes, contract modifications, or adding new fea
 
 **Outdated rules lead to incorrect agent behavior and hallucinated code.**
 
+**Last Major Update**: 2025-10-08 - Added complete governance system with time-weighted voting
+
 ---
 
 # Levr Protocol v1 — Architecture Guide
@@ -24,12 +26,18 @@ When making ANY architectural changes, contract modifications, or adding new fea
 
 **✨ Full ERC2771 meta-transaction support** - Users can interact gaslessly via trusted forwarder.
 
+**✨ Time-weighted governance** - Rewards long-term stakers with higher voting power while ensuring broad participation.
+
 ## Architecture
 
 ```
-LevrFactory_v1 (deploys ERC2771Forwarder in constructor)
+LevrFactory_v1 (uses pre-deployed ERC2771Forwarder)
   ↓ prepareForDeployment() → (treasury, staking)
   ↓ register(clankerToken) → Project{treasury, governor, staking, stakedToken}
+    ├─ Treasury: Holds project funds, controlled by governor
+    ├─ Governor: Time-weighted governance with cycle-based proposals
+    ├─ Staking: Escrows tokens, tracks time for VP, manages rewards
+    └─ StakedToken: 1:1 receipt token, governance weight source
 
 All contracts extend ERC2771ContextBase → support meta-transactions
 ```
@@ -125,29 +133,51 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
 ### LevrGovernor_v1
 
-**Role**: Governance and proposals
+**Role**: Time-weighted governance with cycle-based proposal management
 
 **Extends**: `ERC2771ContextBase` (supports meta-transactions)
 
-**Constructor**: `constructor(address factory_, address treasury_, address stakedToken_, address trustedForwarder)`
+**Constructor**: `constructor(address factory_, address treasury_, address staking_, address stakedToken_, address underlying_, address trustedForwarder)`
+
+**Governance Model**:
+
+- **Voting Power**: VP = staked balance × time staked (resets on unstake)
+- **Proposal Types**: BoostStakingPool (treasury → staking), TransferToAddress (treasury → recipient)
+- **Cycle Management**: Manual start via `startNewCycle()` (factory owner only)
+- **Quorum**: Balance-based participation (% of token supply that voted)
+- **Approval**: VP-weighted voting (rewards long-term stakers)
+- **Winner Selection**: One proposal executes per cycle (highest VP yes votes)
 
 **Functions**:
 
-- `proposeTransfer(receiver, amount, reason)` → Custom amounts (gasless via meta-tx)
-- `proposeBoost(amount)` → Custom amounts (gasless via meta-tx)
-- `execute(proposalId)` → Anyone can execute
-- `getProposal(proposalId)` → View proposal
-- `canSubmit(proposer)` → Check eligibility
+- `startNewCycle()` → Starts new governance cycle (factory owner only)
+- `proposeBoost(amount)` → Boost staking rewards (gasless via meta-tx)
+- `proposeTransfer(recipient, amount, description)` → Transfer to address (gasless via meta-tx)
+- `vote(proposalId, support)` → Vote yes/no with time-weighted VP (gasless via meta-tx)
+- `execute(proposalId)` → Execute winning proposal (anyone can call)
+- `getProposal(proposalId)` → View proposal details
+- `getVotingPowerSnapshot(proposalId, user)` → Get user's VP for proposal
+- `state(proposalId)` → Pending/Active/Defeated/Succeeded/Executed
+- `getWinner(cycleId)` → Get winning proposal for cycle
+- `meetsQuorum(proposalId)` → Check quorum (balance participation)
+- `meetsApproval(proposalId)` → Check approval (VP voting)
 
-**Validation**: Min staked balance, rolling windows, deadlines
+**Validation**:
 
-**Meta-Transaction Support**: Users can submit proposals without holding ETH
+- Min staked balance (minSTokenBpsToSubmit % of supply)
+- Proposal window timing
+- Voting window timing
+- Max concurrent proposals per type
+- Quorum threshold (quorumBps)
+- Approval threshold (approvalBps)
+
+**Meta-Transaction Support**: Users can propose and vote without holding ETH
 
 ---
 
 ### LevrStaking_v1
 
-**Role**: Stake escrow, multi-token rewards with manual accrual
+**Role**: Stake escrow, multi-token rewards with manual accrual, governance time tracking
 
 **Extends**: `ERC2771ContextBase` (supports meta-transactions)
 
@@ -156,11 +186,23 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 **Functions**:
 
 - `stake(amount)`, `unstake(amount, to)` → Mint/burn stakedToken 1:1 (gasless via meta-tx)
-- `accrueRewards(token, amount)` → **Manual reward accrual** (NEW: requires explicit call)
+- `accrueRewards(token)` → **Manual reward accrual** (requires explicit call)
 - `accrueFromTreasury(token, amount, pull)` → Boost from treasury
 - `claimRewards(tokens[], to)` → Multi-token claim (gasless via meta-tx)
 - `outstandingRewards(token)` → Check available and pending rewards from ClankerFeeLocker
-- `initialize(underlying, stakedToken, treasury)` → One-time init by factory
+- `initialize(underlying, stakedToken, treasury, factory)` → One-time init by factory
+
+**Governance Functions**:
+
+- `stakeStartTime(user)` → Public getter for when user started staking
+- `getVotingPower(user)` → Returns VP = balance × (block.timestamp - stakeStartTime)
+
+**Time Tracking Logic**:
+
+- **First stake** (balance was 0): Sets `stakeStartTime = block.timestamp`
+- **Top-up**: Preserves existing stakeStartTime (doesn't reset)
+- **Claim rewards**: Preserves stakeStartTime (doesn't reset)
+- **Unstake** (any amount): Resets `stakeStartTime = 0`
 
 **🔄 UPDATED Reward Paths** (Manual Accrual System):
 
@@ -246,12 +288,72 @@ Treasury → Staking.accrueFromTreasury (measures delta, credits immediately)
 Users claim → Multi-token claim with reserve checks
 ```
 
-### Governance
+### Governance (Time-Weighted Voting)
 
 ```
-User (with minWTokenToSubmit) → proposeTransfer or proposeBoost (custom amounts)
-Validates: rolling windows, deadlines
-Execute → Treasury performs action (transfer or boost)
+1. Factory owner starts cycle → governor.startNewCycle()
+   ├─ Proposal window: proposalWindowSeconds (e.g., 2 days)
+   └─ Voting window: votingWindowSeconds (e.g., 5 days)
+
+2. Users stake → Accumulate time-weighted VP
+   VP = staked balance × time staked (seconds)
+
+3. Proposal window (users with ≥ minSTokenBpsToSubmit can propose)
+   ├─ proposeBoost(amount) → Treasury → Staking reward pool
+   └─ proposeTransfer(recipient, amount, description) → Treasury → Recipient
+
+4. Voting window (all stakers can vote)
+   ├─ vote(proposalId, support=true/false)
+   ├─ VP calculated at proposal.createdAt (blocks last-minute staking)
+   └─ Tracks totalBalanceVoted for quorum
+
+5. Execution (after voting ends)
+   ├─ Check quorum: totalBalanceVoted ≥ (quorumBps / 10000) × totalSupply
+   ├─ Check approval: yesVotes ≥ (approvalBps / 10000) × (yesVotes + noVotes)
+   ├─ Select winner: Highest VP yes votes among eligible proposals
+   └─ Execute: Only ONE proposal per cycle
+
+6. Treasury performs action
+   ├─ BoostStakingPool: treasury.applyBoost(amount) → staking
+   └─ TransferToAddress: treasury.transfer(recipient, amount)
+```
+
+**Anti-Gaming**: VP snapshot at proposal creation, unstake resets timer, per-type concurrency limits
+
+### Governance Deep Dive
+
+**Quorum vs Approval (Dual Threshold System)**:
+
+- **Quorum**: Measures participation using **balance** (not VP)
+  - Formula: `totalBalanceVoted ≥ (quorumBps / 10000) × totalSupply`
+  - Purpose: Ensures broad community engagement
+  - Example: 70% quorum = at least 70% of token supply must vote
+- **Approval**: Measures preference using **VP** (time-weighted)
+  - Formula: `yesVotes ≥ (approvalBps / 10000) × (yesVotes + noVotes)`
+  - Purpose: Rewards long-term commitment
+  - Example: 51% approval = yes votes must be ≥ 51% of total VP cast
+
+**Why Two Different Metrics?**
+
+- Prevents minority with high VP from passing proposals alone (quorum ensures broad participation)
+- Rewards long-term stakers with more influence on what passes (approval uses VP weighting)
+
+**VP Calculation** (On-Demand):
+
+- Calculated when user votes: `balance × (proposal.createdAt - stakeStartTime)`
+- Returns 0 if user staked after proposal was created
+- Cached in `vpSnapshot` mapping for later queries
+- No gas-intensive enumeration at proposal creation
+
+**Cycle State Management**:
+
+```solidity
+struct Cycle {
+  uint256 proposalWindowStart;
+  uint256 proposalWindowEnd;  // proposalWindowStart + proposalWindowSeconds
+  uint256 votingWindowEnd;    // proposalWindowEnd + votingWindowSeconds
+  bool executed;              // Prevents multiple executions
+}
 ```
 
 ## Data Structures
@@ -276,15 +378,20 @@ struct PreparedContracts {
 
 ### Access Controls
 
-| Function                         | Who Can Call                           |
-| -------------------------------- | -------------------------------------- |
-| `factory.prepareForDeployment()` | Anyone (tracked by deployer)           |
-| `factory.register()`             | Only `clankerToken.tokenAdmin()`       |
-| `treasury.transfer/applyBoost()` | Only governor                          |
-| `governor.propose*()`            | Anyone with `minWTokenToSubmit` staked |
-| `staking.stake/unstake/claim()`  | Anyone                                 |
-| `staking.accrueRewards()`        | Anyone (manual accrual)                |
-| `stakedToken.mint/burn()`        | Only staking                           |
+| Function                           | Who Can Call                                   |
+| ---------------------------------- | ---------------------------------------------- |
+| `factory.prepareForDeployment()`   | Anyone (tracked by deployer)                   |
+| `factory.register()`               | Only `clankerToken.tokenAdmin()`               |
+| `factory.updateConfig()`           | Only factory owner                             |
+| `treasury.transfer/applyBoost()`   | Only governor                                  |
+| `governor.startNewCycle()`         | Only factory owner (TODO: improve)             |
+| `governor.proposeBoost/Transfer()` | Anyone with `minSTokenBpsToSubmit` % of supply |
+| `governor.vote()`                  | Anyone (uses VP from snapshot)                 |
+| `governor.execute()`               | Anyone (if proposal is winner)                 |
+| `staking.stake/unstake/claim()`    | Anyone                                         |
+| `staking.accrueRewards()`          | Anyone (manual accrual)                        |
+| `staking.accrueFromTreasury()`     | Only treasury (during applyBoost)              |
+| `stakedToken.mint/burn()`          | Only staking                                   |
 
 ### Protections
 
@@ -306,18 +413,49 @@ struct PreparedContracts {
 
 ### Factory Config
 
-- `protocolFeeBps` — Protocol fee (basis points)
-- `submissionDeadlineSeconds` — Proposal deadline (7 days default)
-- `streamWindowSeconds` — Reward streaming (3 days default)
-- `maxSubmissionPerType` — Rate limit per proposal type (0 = unlimited)
-- `minWTokenToSubmit` — Min staked tokens to propose
-- `protocolTreasury` — Protocol treasury address
+```solidity
+struct FactoryConfig {
+  uint16 protocolFeeBps;           // Protocol fee (basis points)
+  uint32 streamWindowSeconds;      // Reward streaming window (≥ 1 day required)
+  address protocolTreasury;        // Protocol treasury address
+  // Governance parameters
+  uint32 proposalWindowSeconds;    // Duration of proposal submission window
+  uint32 votingWindowSeconds;      // Duration of voting window after proposals close
+  uint16 maxActiveProposals;       // Max concurrent proposals per type (e.g., 7)
+  uint16 quorumBps;                // Min participation threshold (e.g., 7000 = 70%)
+  uint16 approvalBps;              // Min approval threshold (e.g., 5100 = 51%)
+  uint16 minSTokenBpsToSubmit;     // Min % of sToken supply to propose (e.g., 100 = 1%)
+}
+```
+
+**Validation**:
+
+- `streamWindowSeconds` must be ≥ 1 day (enforced in `_applyConfig`)
+- All parameters configurable via `updateConfig()` (owner only)
+
+**Defaults (Recommended)**:
+
+- `proposalWindowSeconds`: 2 days (48 hours)
+- `votingWindowSeconds`: 5 days
+- `maxActiveProposals`: 7 per type
+- `quorumBps`: 7000 (70%)
+- `approvalBps`: 5100 (51%)
+- `minSTokenBpsToSubmit`: 100 (1%)
+- `streamWindowSeconds`: 3 days
 
 **Note**: `trustedForwarder` is NOT in config - must be deployed before factory
 
-### Proposal Amounts
+### Proposal System
 
-**Custom amounts**: No tiers - proposers specify exact amounts for transfers and boosts
+**Governance Cycles**: Manual start via `governor.startNewCycle()`
+
+- Proposal window: Users can create proposals
+- Voting window: Users vote with time-weighted VP
+- Execution: Only the winning proposal executes
+
+**Proposal Amounts**: No tiers - proposers specify exact amounts for transfers and boosts
+
+**Per-Type Limits**: BoostStakingPool and TransferToAddress have separate `maxActiveProposals` counts
 
 ### Meta-Transaction Forwarder
 
@@ -470,13 +608,20 @@ contract MyContract is ERC2771ContextBase {
 
 **Test Files**:
 
-- `test/e2e/LevrV1.MetaTx.t.sol` - Meta-transaction tests
-  - `test_MetaTx_Stake` - Gasless staking
-  - `test_MetaTx_ProposeTransfer` - Gasless proposals
-  - `test_MetaTx_Unstake` - Gasless unstaking
-  - `test_MetaTx_Multicall_CompleteDeployment` - Full deployment via multicall (prepare → register)
-- `test/unit/LevrStakingV1.t.sol` - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
+- `test/e2e/LevrV1.Governance.t.sol` - **Comprehensive governance E2E tests** (9 tests, all passing)
+  - Full governance cycle with time-weighted voting
+  - Anti-gaming protections (VP snapshots, timer resets)
+  - Concurrency limits, quorum, approval thresholds
+  - Winner selection and execution
+- `test/e2e/LevrV1.Staking.t.sol` - Staking with real Clanker integration (5 tests)
+- `test/e2e/LevrV1.Registration.t.sol` - Registration flow tests (4 tests)
+- `test/unit/LevrStakingV1.t.sol` - Staking unit tests (8 tests)
+  - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
   - `test_manual_reward_accrual_and_streaming` - Manual accrual flow testing
+- `test/unit/LevrGovernorV1.t.sol` - Governor unit tests (1 test)
+- `test/unit/LevrTreasuryV1.t.sol` - Treasury unit tests (2 tests)
+- `test/unit/LevrStakedTokenV1.t.sol` - StakedToken unit tests (2 tests)
+- `test/unit/LevrFactoryV1.*.t.sol` - Factory security and deployment tests (4 tests)
 
 **Test Coverage for Manual Accrual**:
 
@@ -561,9 +706,29 @@ contract MyContract is ERC2771ContextBase {
 - ❌ Multiple return values - now returns struct
 - ❌ Treasury/staking params in register - auto-lookup
 - ❌ Tier system - replaced with custom amounts
+- ❌ **Deprecated FactoryConfig fields**:
+  - `submissionDeadlineSeconds` - Removed (governance uses voting window instead)
+  - `maxSubmissionPerType` - Replaced by `maxActiveProposals` (per-type concurrency)
+  - `minWTokenToSubmit` - Replaced by `minSTokenBpsToSubmit` (percentage-based)
+- ❌ Wrapper token system - Never implemented in v1
+- ❌ `test/e2e/LevrV1.Treasury.t.sol` - Redundant (covered by treasury unit + governance E2E)
 
 ### Added
 
+- ✅ **Time-weighted governance system** (LevrGovernor_v1)
+  - Voting power = staked balance × time staked
+  - VP snapshot at proposal creation (prevents last-minute gaming)
+  - Dual threshold: quorum (balance participation) + approval (VP voting)
+  - Cycle-based proposal management
+  - Per-type concurrency limits
+  - Winner selection (highest VP yes votes)
+- ✅ **Governance parameters in FactoryConfig** (6 new params)
+  - proposalWindowSeconds, votingWindowSeconds
+  - maxActiveProposals, quorumBps, approvalBps, minSTokenBpsToSubmit
+- ✅ **Staking time tracking** for governance
+  - stakeStartTime mapping
+  - getVotingPower() function
+  - Timer resets on unstake (anti-gaming)
 - ✅ **Manual reward accrual system** - Explicit `accrueRewards()` calls required
 - ✅ **ClankerFeeLocker integration** - Automatic claiming before manual accrual
 - ✅ `outstandingRewards()` - Check available and pending rewards
@@ -578,6 +743,7 @@ contract MyContract is ERC2771ContextBase {
 - ✅ **ERC2771 meta-transaction support** - gasless transactions via forwarder
 - ✅ **ERC2771ContextBase** - base contract eliminates duplication
 - ✅ **executeTransaction** - factory function for multicall composition
+- ✅ **streamWindowSeconds validation** - Must be ≥ 1 day
 
 ---
 
@@ -632,17 +798,24 @@ src/
 
 test/
   e2e/
-    LevrV1.Governance.t.sol
-    LevrV1.Registration.t.sol
-    LevrV1.Treasury.t.sol
+    LevrV1.Governance.t.sol         # 9 governance E2E tests (all passing)
+    LevrV1.Staking.t.sol            # 5 staking E2E tests with Clanker integration
+    LevrV1.Registration.t.sol       # 4 registration flow tests
   unit/
-    LevrFactoryV1.*.t.sol
-    LevrGovernorV1.t.sol
-    LevrStakingV1.t.sol             # Updated for manual accrual
-    LevrTreasuryV1.t.sol
-    LevrStakedTokenV1.t.sol
+    LevrFactoryV1.PrepareForDeployment.t.sol  # 2 tests
+    LevrFactoryV1.Security.t.sol              # 2 tests
+    LevrGovernorV1.t.sol            # 1 governor unit test
+    LevrStakingV1.t.sol             # 8 staking unit tests (manual accrual)
+    LevrTreasuryV1.t.sol            # 2 treasury unit tests
+    LevrStakedTokenV1.t.sol         # 2 staked token unit tests
+  utils/
+    BaseForkTest.sol                # Base test with fork management
+    ClankerDeployer.sol             # Clanker token deployment helper
+    MerkleAirdropHelper.sol         # Merkle tree helper for airdrop tests
+    SwapV4Helper.sol                # Uniswap V4 swap helper
   mocks/
     MockERC20.sol                   # Standard ERC20 mock (ERC1363 removed)
+  DeployLevrFactoryDevnet.t.sol    # Deployment script test
 ```
 
 ---

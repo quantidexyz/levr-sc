@@ -394,6 +394,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
         uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
 
+        // If quorum is 0, no participation requirement
+        if (quorumBps == 0) return true;
+
         // Quorum is based on participation rate: balance that voted / total supply
         // Not based on VP (which includes time weighting)
         uint256 totalSupply = IERC20(stakedToken).totalSupply();
@@ -407,6 +410,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     function _meetsApproval(uint256 proposalId) internal view returns (bool) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
         uint16 approvalBps = ILevrFactory_v1(factory).approvalBps();
+
+        // If approval is 0, no approval requirement
+        if (approvalBps == 0) return true;
 
         uint256 totalVotes = proposal.yesVotes + proposal.noVotes;
         if (totalVotes == 0) return false;
