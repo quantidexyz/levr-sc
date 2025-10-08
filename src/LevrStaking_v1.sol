@@ -13,451 +13,507 @@ import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
 import {IClankerLpLocker} from './interfaces/external/IClankerLpLocker.sol';
 
 contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase {
-  using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20;
 
-  constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
+    constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
 
-  address public underlying;
-  address public stakedToken;
-  address public treasury; // for future integrations
-  address public factory; // Levr factory instance
-  uint32 private _streamWindowSeconds;
-  uint64 private _streamStart;
-  uint64 private _streamEnd;
-  // Per-token streaming state for UI/APR
-  mapping(address => uint64) private _streamStartByToken;
-  mapping(address => uint64) private _streamEndByToken;
-  mapping(address => uint256) private _streamTotalByToken;
-  // Track last settlement timestamp per reward token to vest linearly
-  mapping(address => uint64) private _lastUpdateByToken;
+    address public underlying;
+    address public stakedToken;
+    address public treasury; // for future integrations
+    address public factory; // Levr factory instance
+    uint32 private _streamWindowSeconds;
+    uint64 private _streamStart;
+    uint64 private _streamEnd;
+    // Per-token streaming state for UI/APR
+    mapping(address => uint64) private _streamStartByToken;
+    mapping(address => uint64) private _streamEndByToken;
+    mapping(address => uint256) private _streamTotalByToken;
+    // Track last settlement timestamp per reward token to vest linearly
+    mapping(address => uint64) private _lastUpdateByToken;
 
-  uint256 private _totalStaked;
-  mapping(address => uint256) private _staked;
+    uint256 private _totalStaked;
+    mapping(address => uint256) private _staked;
 
-  // use ILevrStaking_v1.RewardInfo
-  address[] private _rewardTokens;
-  mapping(address => ILevrStaking_v1.RewardInfo) private _rewardInfo;
-  mapping(address => mapping(address => int256)) private _rewardDebt;
-  uint256 private constant ACC_SCALE = 1e18;
+    // Governance: track when each user started staking for time-weighted voting power
+    mapping(address => uint256) public stakeStartTime;
 
-  // Track escrowed principal per token to separate it from reward liquidity
-  mapping(address => uint256) private _escrowBalance;
+    // use ILevrStaking_v1.RewardInfo
+    address[] private _rewardTokens;
+    mapping(address => ILevrStaking_v1.RewardInfo) private _rewardInfo;
+    mapping(address => mapping(address => int256)) private _rewardDebt;
+    uint256 private constant ACC_SCALE = 1e18;
 
-  // Track rewards that have been accounted (credited) but not yet claimed
-  // for each reward token. Prevents double-accrual and enables liquidity checks.
-  mapping(address => uint256) private _rewardReserve;
+    // Track escrowed principal per token to separate it from reward liquidity
+    mapping(address => uint256) private _escrowBalance;
 
-  function initialize(address underlying_, address stakedToken_, address treasury_, address factory_) external {
-    if (underlying != address(0)) revert();
-    if (underlying_ == address(0) || stakedToken_ == address(0) || treasury_ == address(0) || factory_ == address(0))
-      revert ZeroAddress();
-    underlying = underlying_;
-    stakedToken = stakedToken_;
-    treasury = treasury_;
-    factory = factory_;
-    _rewardInfo[underlying_] = ILevrStaking_v1.RewardInfo({accPerShare: 0, exists: true});
-    _rewardTokens.push(underlying_);
-  }
+    // Track rewards that have been accounted (credited) but not yet claimed
+    // for each reward token. Prevents double-accrual and enables liquidity checks.
+    mapping(address => uint256) private _rewardReserve;
 
-  /// @inheritdoc ILevrStaking_v1
-  function stake(uint256 amount) external nonReentrant {
-    if (amount == 0) revert InvalidAmount();
-    address staker = _msgSender();
-    // Settle streaming for all reward tokens before balance changes
-    _settleStreamingAll();
-    IERC20(underlying).safeTransferFrom(staker, address(this), amount);
-    _escrowBalance[underlying] += amount;
-    _increaseDebtForAll(staker, amount);
-    _staked[staker] += amount;
-    _totalStaked += amount;
-    ILevrStakedToken_v1(stakedToken).mint(staker, amount);
-    emit Staked(staker, amount);
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function unstake(uint256 amount, address to) external nonReentrant {
-    if (amount == 0) revert InvalidAmount();
-    if (to == address(0)) revert ZeroAddress();
-    address staker = _msgSender();
-    uint256 bal = _staked[staker];
-    if (bal < amount) revert InsufficientStake();
-    // Settle streaming before changing balances
-    _settleStreamingAll();
-    _settleAll(staker, to, bal);
-    _staked[staker] = bal - amount;
-    _updateDebtAll(staker, _staked[staker]);
-    _totalStaked -= amount;
-    ILevrStakedToken_v1(stakedToken).burn(staker, amount);
-    uint256 esc = _escrowBalance[underlying];
-    if (esc < amount) revert InsufficientEscrow();
-    _escrowBalance[underlying] = esc - amount;
-    IERC20(underlying).safeTransfer(to, amount);
-    emit Unstaked(staker, to, amount);
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function claimRewards(address[] calldata tokens, address to) external nonReentrant {
-    if (to == address(0)) revert ZeroAddress();
-    address claimer = _msgSender();
-    uint256 bal = _staked[claimer];
-    for (uint256 i = 0; i < tokens.length; i++) {
-      _settleStreamingForToken(tokens[i]);
-      _settle(tokens[i], claimer, to, bal);
-      uint256 acc = _rewardInfo[tokens[i]].accPerShare;
-      _rewardDebt[claimer][tokens[i]] = int256((bal * acc) / ACC_SCALE);
+    function initialize(
+        address underlying_,
+        address stakedToken_,
+        address treasury_,
+        address factory_
+    ) external {
+        if (underlying != address(0)) revert();
+        if (
+            underlying_ == address(0) ||
+            stakedToken_ == address(0) ||
+            treasury_ == address(0) ||
+            factory_ == address(0)
+        ) revert ZeroAddress();
+        underlying = underlying_;
+        stakedToken = stakedToken_;
+        treasury = treasury_;
+        factory = factory_;
+        _rewardInfo[underlying_] = ILevrStaking_v1.RewardInfo({accPerShare: 0, exists: true});
+        _rewardTokens.push(underlying_);
     }
-  }
 
-  /// @inheritdoc ILevrStaking_v1
-  function accrueRewards(address token) external nonReentrant {
-    // Automatically collect from LP locker and claim any pending rewards from ClankerFeeLocker
-    _claimFromClankerFeeLocker(token);
+    /// @inheritdoc ILevrStaking_v1
+    function stake(uint256 amount) external nonReentrant {
+        if (amount == 0) revert InvalidAmount();
+        address staker = _msgSender();
+        // Settle streaming for all reward tokens before balance changes
+        _settleStreamingAll();
 
-    // Credit all available rewards after claiming
-    uint256 available = _availableUnaccountedRewards(token);
-    if (available > 0) {
-      _creditRewards(token, available);
+        // Governance: Set stake start time on first stake (when balance was 0)
+        if (_staked[staker] == 0) {
+            stakeStartTime[staker] = block.timestamp;
+        }
+
+        IERC20(underlying).safeTransferFrom(staker, address(this), amount);
+        _escrowBalance[underlying] += amount;
+        _increaseDebtForAll(staker, amount);
+        _staked[staker] += amount;
+        _totalStaked += amount;
+        ILevrStakedToken_v1(stakedToken).mint(staker, amount);
+        emit Staked(staker, amount);
     }
-  }
 
-  /// @inheritdoc ILevrStaking_v1
-  function outstandingRewards(address token) external view returns (uint256 available, uint256 pending) {
-    available = _availableUnaccountedRewards(token);
-    pending = _getPendingFromClankerFeeLocker(token);
-  }
+    /// @inheritdoc ILevrStaking_v1
+    function unstake(uint256 amount, address to) external nonReentrant {
+        if (amount == 0) revert InvalidAmount();
+        if (to == address(0)) revert ZeroAddress();
+        address staker = _msgSender();
+        uint256 bal = _staked[staker];
+        if (bal < amount) revert InsufficientStake();
+        // Settle streaming before changing balances
+        _settleStreamingAll();
+        _settleAll(staker, to, bal);
+        _staked[staker] = bal - amount;
+        _updateDebtAll(staker, _staked[staker]);
+        _totalStaked -= amount;
+        ILevrStakedToken_v1(stakedToken).burn(staker, amount);
+        uint256 esc = _escrowBalance[underlying];
+        if (esc < amount) revert InsufficientEscrow();
+        _escrowBalance[underlying] = esc - amount;
+        IERC20(underlying).safeTransfer(to, amount);
 
-  /// @notice Get claimable rewards for a specific user and token
-  /// @param account The user to check rewards for
-  /// @param token The reward token to check
-  /// @return claimable The amount of rewards the user can claim right now
-  function claimableRewards(address account, address token) external view returns (uint256 claimable) {
-    uint256 bal = _staked[account];
-    if (bal == 0) return 0;
+        // Governance: Reset stake start time on any unstake (partial or full)
+        stakeStartTime[staker] = 0;
 
-    ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-    if (!info.exists) return 0;
+        emit Unstaked(staker, to, amount);
+    }
 
-    // Calculate what would be accumulated after settling streaming
-    uint256 accPerShare = info.accPerShare;
+    /// @inheritdoc ILevrStaking_v1
+    function claimRewards(address[] calldata tokens, address to) external nonReentrant {
+        if (to == address(0)) revert ZeroAddress();
+        address claimer = _msgSender();
+        uint256 bal = _staked[claimer];
+        for (uint256 i = 0; i < tokens.length; i++) {
+            _settleStreamingForToken(tokens[i]);
+            _settle(tokens[i], claimer, to, bal);
+            uint256 acc = _rewardInfo[tokens[i]].accPerShare;
+            _rewardDebt[claimer][tokens[i]] = int256((bal * acc) / ACC_SCALE);
+        }
+    }
 
-    // Add any pending streaming rewards
-    uint64 start = _streamStartByToken[token];
-    uint64 end = _streamEndByToken[token];
-    if (end > 0 && start > 0 && block.timestamp > start) {
-      uint64 last = _lastUpdateByToken[token];
-      uint64 from = last < start ? start : last;
-      uint64 to = uint64(block.timestamp);
-      if (to > end) to = end;
-      if (to > from) {
+    /// @inheritdoc ILevrStaking_v1
+    function accrueRewards(address token) external nonReentrant {
+        // Automatically collect from LP locker and claim any pending rewards from ClankerFeeLocker
+        _claimFromClankerFeeLocker(token);
+
+        // Credit all available rewards after claiming
+        uint256 available = _availableUnaccountedRewards(token);
+        if (available > 0) {
+            _creditRewards(token, available);
+        }
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function outstandingRewards(
+        address token
+    ) external view returns (uint256 available, uint256 pending) {
+        available = _availableUnaccountedRewards(token);
+        pending = _getPendingFromClankerFeeLocker(token);
+    }
+
+    /// @notice Get claimable rewards for a specific user and token
+    /// @param account The user to check rewards for
+    /// @param token The reward token to check
+    /// @return claimable The amount of rewards the user can claim right now
+    function claimableRewards(
+        address account,
+        address token
+    ) external view returns (uint256 claimable) {
+        uint256 bal = _staked[account];
+        if (bal == 0) return 0;
+
+        ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+        if (!info.exists) return 0;
+
+        // Calculate what would be accumulated after settling streaming
+        uint256 accPerShare = info.accPerShare;
+
+        // Add any pending streaming rewards
+        uint64 start = _streamStartByToken[token];
+        uint64 end = _streamEndByToken[token];
+        if (end > 0 && start > 0 && block.timestamp > start) {
+            uint64 last = _lastUpdateByToken[token];
+            uint64 from = last < start ? start : last;
+            uint64 to = uint64(block.timestamp);
+            if (to > end) to = end;
+            if (to > from) {
+                uint256 duration = end - start;
+                uint256 total = _streamTotalByToken[token];
+                if (duration > 0 && total > 0 && _totalStaked > 0) {
+                    uint256 vestAmount = (total * (to - from)) / duration;
+                    accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
+                }
+            }
+        }
+
+        uint256 accumulated = (bal * accPerShare) / ACC_SCALE;
+        int256 debt = _rewardDebt[account][token];
+
+        if (accumulated > uint256(debt)) {
+            claimable = accumulated - uint256(debt);
+        }
+    }
+
+    /// @notice Get the ClankerFeeLocker address for the underlying token
+    function getClankerFeeLocker() external view returns (address) {
+        if (factory == address(0)) return address(0);
+
+        // Get clanker metadata from our factory
+        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
+            .getClankerMetadata(underlying);
+        return metadata.feeLocker;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function accrueFromTreasury(
+        address token,
+        uint256 amount,
+        bool pullFromTreasury
+    ) external nonReentrant {
+        if (amount == 0) revert InvalidAmount();
+        if (pullFromTreasury) {
+            // Only treasury is allowed to initiate a pull from treasury funds
+            require(_msgSender() == treasury, 'ONLY_TREASURY');
+            uint256 beforeAvail = _availableUnaccountedRewards(token);
+            IERC20(token).safeTransferFrom(treasury, address(this), amount);
+            uint256 afterAvail = _availableUnaccountedRewards(token);
+            uint256 delta = afterAvail > beforeAvail ? afterAvail - beforeAvail : 0;
+            if (delta > 0) {
+                _creditRewards(token, delta);
+            }
+        } else {
+            uint256 available = _availableUnaccountedRewards(token);
+            require(available >= amount, 'INSUFFICIENT_AVAILABLE');
+            _creditRewards(token, amount);
+        }
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function stakedBalanceOf(address account) external view returns (uint256) {
+        return _staked[account];
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function totalStaked() external view returns (uint256) {
+        return _totalStaked;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function escrowBalance(address token) external view returns (uint256) {
+        return _escrowBalance[token];
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function streamWindowSeconds() external view returns (uint32) {
+        return _streamWindowSeconds;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function streamStart() external view returns (uint64) {
+        return _streamStart;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function streamEnd() external view returns (uint64) {
+        return _streamEnd;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function rewardRatePerSecond(address token) external view returns (uint256) {
+        uint64 start = _streamStartByToken[token];
+        uint64 end = _streamEndByToken[token];
+        if (end == 0 || end <= start) return 0;
+        if (block.timestamp >= end) return 0;
+        uint256 window = end - start;
+        uint256 total = _streamTotalByToken[token];
+        return total / window;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function aprBps(address /* account */) external view returns (uint256) {
+        if (_totalStaked == 0) return 0;
+        // Use underlying stream for APR in native units
+        uint64 start = _streamStartByToken[underlying];
+        uint64 end = _streamEndByToken[underlying];
+        if (end == 0 || end <= start) return 0;
+        if (block.timestamp >= end) return 0;
+        uint256 window = end - start;
+        uint256 total = _streamTotalByToken[underlying];
+        if (total == 0) return 0;
+        // rate per second in underlying units
+        uint256 rate = total / window;
+        uint256 annual = rate * 365 days;
+        // APR bps = annual / totalStaked * 10_000
+        return (annual * 10_000) / _totalStaked;
+    }
+
+    function _resetStreamForToken(address token, uint256 amount) internal {
+        uint32 window = _streamWindowSeconds;
+        if (window == 0) {
+            window = 3 days;
+        }
+        _streamWindowSeconds = window;
+        _streamStart = uint64(block.timestamp);
+        _streamEnd = uint64(block.timestamp + window);
+        emit StreamReset(window, _streamStart, _streamEnd);
+        _streamStartByToken[token] = uint64(block.timestamp);
+        _streamEndByToken[token] = uint64(block.timestamp + window);
+        _streamTotalByToken[token] = amount;
+        _lastUpdateByToken[token] = uint64(block.timestamp);
+    }
+
+    /// @notice Internal function to get pending rewards from ClankerFeeLocker
+    function _getPendingFromClankerFeeLocker(address token) internal view returns (uint256) {
+        if (factory == address(0)) return 0;
+
+        // Get clanker metadata from our factory
+        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
+            .getClankerMetadata(underlying);
+        if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
+
+        // The feeOwner in ClankerFeeLocker might not be the staking contract
+        // It could be the LP locker or the original reward recipient
+        // Let's try multiple potential feeOwners
+
+        // First try: staking contract as feeOwner
+        try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
+            uint256 fees
+        ) {
+            if (fees > 0) return fees;
+        } catch {
+            // Continue to next attempt
+        }
+
+        // Second try: LP locker as feeOwner (fees might be stored under LP locker's name)
+        if (metadata.lpLocker != address(0)) {
+            try
+                IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token)
+            returns (uint256 fees) {
+                if (fees > 0) return fees;
+            } catch {
+                // Continue to next attempt
+            }
+        }
+
+        return 0;
+    }
+
+    /// @notice Internal function to claim pending rewards from ClankerFeeLocker
+    function _claimFromClankerFeeLocker(address token) internal {
+        if (factory == address(0)) return;
+
+        // Get clanker metadata from our factory
+        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
+            .getClankerMetadata(underlying);
+        if (!metadata.exists) return;
+
+        // First, collect rewards from LP locker to ensure ClankerFeeLocker has latest fees
+        if (metadata.lpLocker != address(0)) {
+            try IClankerLpLocker(metadata.lpLocker).collectRewards(underlying) {
+                // Successfully collected from LP locker
+            } catch {
+                // Ignore errors from LP locker - it might not have fees to collect
+            }
+        }
+
+        // Now claim from ClankerFeeLocker if available
+        if (metadata.feeLocker != address(0)) {
+            // Try claiming with staking contract as feeOwner first
+            try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
+                uint256 availableFees
+            ) {
+                if (availableFees > 0) {
+                    IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
+                    return; // Successfully claimed
+                }
+            } catch {
+                // Continue to next attempt
+            }
+
+            // Try claiming with LP locker as feeOwner (fees might be under LP locker's ownership)
+            if (metadata.lpLocker != address(0)) {
+                try
+                    IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token)
+                returns (uint256 availableFees) {
+                    if (availableFees > 0) {
+                        // Need to claim to LP locker first, then transfer to staking
+                        // This is more complex and might require LP locker cooperation
+                        // For now, just try direct claim (might fail)
+                        try IClankerFeeLocker(metadata.feeLocker).claim(metadata.lpLocker, token) {
+                            // Claimed to LP locker - would need additional transfer logic
+                        } catch {
+                            // Can't claim directly
+                        }
+                    }
+                } catch {
+                    // Ignore errors
+                }
+            }
+        }
+    }
+
+    function _creditRewards(address token, uint256 amount) internal {
+        ILevrStaking_v1.RewardInfo storage info = _ensureRewardToken(token);
+        // Settle current stream up to now before resetting
+        _settleStreamingForToken(token);
+        // Reset stream window with new amount only (no remaining carry-over)
+        _resetStreamForToken(token, amount);
+        // Increase reserve by newly provided amount only
+        _rewardReserve[token] += amount;
+        emit RewardsAccrued(token, amount, info.accPerShare);
+    }
+
+    function _ensureRewardToken(
+        address token
+    ) internal returns (ILevrStaking_v1.RewardInfo storage info) {
+        info = _rewardInfo[token];
+        if (!info.exists) {
+            _rewardInfo[token] = ILevrStaking_v1.RewardInfo({accPerShare: 0, exists: true});
+            _rewardTokens.push(token);
+            info = _rewardInfo[token];
+        }
+    }
+
+    function _availableUnaccountedRewards(address token) internal view returns (uint256) {
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        if (token == underlying) {
+            // exclude escrowed principal when token is the underlying
+            if (bal > _escrowBalance[underlying]) {
+                bal -= _escrowBalance[underlying];
+            } else {
+                bal = 0;
+            }
+        }
+        uint256 accounted = _rewardReserve[token];
+        return bal > accounted ? bal - accounted : 0;
+    }
+
+    function _increaseDebtForAll(address account, uint256 amount) internal {
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address rt = _rewardTokens[i];
+            uint256 acc = _rewardInfo[rt].accPerShare;
+            if (acc > 0) {
+                _rewardDebt[account][rt] += int256((amount * acc) / ACC_SCALE);
+            }
+        }
+    }
+
+    function _updateDebtAll(address account, uint256 newBal) internal {
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address rt = _rewardTokens[i];
+            uint256 acc = _rewardInfo[rt].accPerShare;
+            _rewardDebt[account][rt] = int256((newBal * acc) / ACC_SCALE);
+        }
+    }
+
+    function _settle(address token, address account, address to, uint256 bal) internal {
+        _settleStreamingForToken(token);
+        ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+        if (!info.exists) return;
+        uint256 accumulated = (bal * info.accPerShare) / ACC_SCALE;
+        int256 debt = _rewardDebt[account][token];
+        if (accumulated > uint256(debt)) {
+            uint256 pending = accumulated - uint256(debt);
+            if (pending > 0) {
+                uint256 reserve = _rewardReserve[token];
+                if (reserve < pending) revert InsufficientRewardLiquidity();
+                _rewardReserve[token] = reserve - pending;
+                IERC20(token).safeTransfer(to, pending);
+                emit RewardsClaimed(account, to, token, pending);
+            }
+        }
+    }
+
+    function _settleAll(address account, address to, uint256 bal) internal {
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            _settle(_rewardTokens[i], account, to, bal);
+        }
+    }
+
+    function _settleStreamingAll() internal {
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            _settleStreamingForToken(_rewardTokens[i]);
+        }
+    }
+
+    function _settleStreamingForToken(address token) internal {
+        uint64 start = _streamStartByToken[token];
+        uint64 end = _streamEndByToken[token];
+        if (end == 0 || start == 0) return;
+        uint64 last = _lastUpdateByToken[token];
+        uint64 from = last < start ? start : last;
+        uint64 to = uint64(block.timestamp);
+        if (to > end) to = end;
+        if (to <= from) return;
         uint256 duration = end - start;
         uint256 total = _streamTotalByToken[token];
-        if (duration > 0 && total > 0 && _totalStaked > 0) {
-          uint256 vestAmount = (total * (to - from)) / duration;
-          accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
+        if (duration == 0 || total == 0) {
+            _lastUpdateByToken[token] = to;
+            return;
         }
-      }
-    }
-
-    uint256 accumulated = (bal * accPerShare) / ACC_SCALE;
-    int256 debt = _rewardDebt[account][token];
-
-    if (accumulated > uint256(debt)) {
-      claimable = accumulated - uint256(debt);
-    }
-  }
-
-  /// @notice Get the ClankerFeeLocker address for the underlying token
-  function getClankerFeeLocker() external view returns (address) {
-    if (factory == address(0)) return address(0);
-
-    // Get clanker metadata from our factory
-    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
-    return metadata.feeLocker;
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function accrueFromTreasury(address token, uint256 amount, bool pullFromTreasury) external nonReentrant {
-    if (amount == 0) revert InvalidAmount();
-    if (pullFromTreasury) {
-      // Only treasury is allowed to initiate a pull from treasury funds
-      require(_msgSender() == treasury, 'ONLY_TREASURY');
-      uint256 beforeAvail = _availableUnaccountedRewards(token);
-      IERC20(token).safeTransferFrom(treasury, address(this), amount);
-      uint256 afterAvail = _availableUnaccountedRewards(token);
-      uint256 delta = afterAvail > beforeAvail ? afterAvail - beforeAvail : 0;
-      if (delta > 0) {
-        _creditRewards(token, delta);
-      }
-    } else {
-      uint256 available = _availableUnaccountedRewards(token);
-      require(available >= amount, 'INSUFFICIENT_AVAILABLE');
-      _creditRewards(token, amount);
-    }
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function stakedBalanceOf(address account) external view returns (uint256) {
-    return _staked[account];
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function totalStaked() external view returns (uint256) {
-    return _totalStaked;
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function escrowBalance(address token) external view returns (uint256) {
-    return _escrowBalance[token];
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function streamWindowSeconds() external view returns (uint32) {
-    return _streamWindowSeconds;
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function streamStart() external view returns (uint64) {
-    return _streamStart;
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function streamEnd() external view returns (uint64) {
-    return _streamEnd;
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function rewardRatePerSecond(address token) external view returns (uint256) {
-    uint64 start = _streamStartByToken[token];
-    uint64 end = _streamEndByToken[token];
-    if (end == 0 || end <= start) return 0;
-    if (block.timestamp >= end) return 0;
-    uint256 window = end - start;
-    uint256 total = _streamTotalByToken[token];
-    return total / window;
-  }
-
-  /// @inheritdoc ILevrStaking_v1
-  function aprBps(address /* account */) external view returns (uint256) {
-    if (_totalStaked == 0) return 0;
-    // Use underlying stream for APR in native units
-    uint64 start = _streamStartByToken[underlying];
-    uint64 end = _streamEndByToken[underlying];
-    if (end == 0 || end <= start) return 0;
-    if (block.timestamp >= end) return 0;
-    uint256 window = end - start;
-    uint256 total = _streamTotalByToken[underlying];
-    if (total == 0) return 0;
-    // rate per second in underlying units
-    uint256 rate = total / window;
-    uint256 annual = rate * 365 days;
-    // APR bps = annual / totalStaked * 10_000
-    return (annual * 10_000) / _totalStaked;
-  }
-
-  function _resetStreamForToken(address token, uint256 amount) internal {
-    uint32 window = _streamWindowSeconds;
-    if (window == 0) {
-      window = 3 days;
-    }
-    _streamWindowSeconds = window;
-    _streamStart = uint64(block.timestamp);
-    _streamEnd = uint64(block.timestamp + window);
-    emit StreamReset(window, _streamStart, _streamEnd);
-    _streamStartByToken[token] = uint64(block.timestamp);
-    _streamEndByToken[token] = uint64(block.timestamp + window);
-    _streamTotalByToken[token] = amount;
-    _lastUpdateByToken[token] = uint64(block.timestamp);
-  }
-
-  /// @notice Internal function to get pending rewards from ClankerFeeLocker
-  function _getPendingFromClankerFeeLocker(address token) internal view returns (uint256) {
-    if (factory == address(0)) return 0;
-
-    // Get clanker metadata from our factory
-    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
-    if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
-
-    // The feeOwner in ClankerFeeLocker might not be the staking contract
-    // It could be the LP locker or the original reward recipient
-    // Let's try multiple potential feeOwners
-
-    // First try: staking contract as feeOwner
-    try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 fees) {
-      if (fees > 0) return fees;
-    } catch {
-      // Continue to next attempt
-    }
-
-    // Second try: LP locker as feeOwner (fees might be stored under LP locker's name)
-    if (metadata.lpLocker != address(0)) {
-      try IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token) returns (uint256 fees) {
-        if (fees > 0) return fees;
-      } catch {
-        // Continue to next attempt
-      }
-    }
-
-    return 0;
-  }
-
-  /// @notice Internal function to claim pending rewards from ClankerFeeLocker
-  function _claimFromClankerFeeLocker(address token) internal {
-    if (factory == address(0)) return;
-
-    // Get clanker metadata from our factory
-    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory).getClankerMetadata(underlying);
-    if (!metadata.exists) return;
-
-    // First, collect rewards from LP locker to ensure ClankerFeeLocker has latest fees
-    if (metadata.lpLocker != address(0)) {
-      try IClankerLpLocker(metadata.lpLocker).collectRewards(underlying) {
-        // Successfully collected from LP locker
-      } catch {
-        // Ignore errors from LP locker - it might not have fees to collect
-      }
-    }
-
-    // Now claim from ClankerFeeLocker if available
-    if (metadata.feeLocker != address(0)) {
-      // Try claiming with staking contract as feeOwner first
-      try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (uint256 availableFees) {
-        if (availableFees > 0) {
-          IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
-          return; // Successfully claimed
+        uint256 vestAmount = (total * (to - from)) / duration;
+        if (_totalStaked > 0 && vestAmount > 0) {
+            ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
+            info.accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
         }
-      } catch {
-        // Continue to next attempt
-      }
-
-      // Try claiming with LP locker as feeOwner (fees might be under LP locker's ownership)
-      if (metadata.lpLocker != address(0)) {
-        try IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token) returns (
-          uint256 availableFees
-        ) {
-          if (availableFees > 0) {
-            // Need to claim to LP locker first, then transfer to staking
-            // This is more complex and might require LP locker cooperation
-            // For now, just try direct claim (might fail)
-            try IClankerFeeLocker(metadata.feeLocker).claim(metadata.lpLocker, token) {
-              // Claimed to LP locker - would need additional transfer logic
-            } catch {
-              // Can't claim directly
-            }
-          }
-        } catch {
-          // Ignore errors
-        }
-      }
+        // Advance last update regardless; if no stakers, the stream time is consumed
+        _lastUpdateByToken[token] = to;
     }
-  }
 
-  function _creditRewards(address token, uint256 amount) internal {
-    ILevrStaking_v1.RewardInfo storage info = _ensureRewardToken(token);
-    // Settle current stream up to now before resetting
-    _settleStreamingForToken(token);
-    // Reset stream window with new amount only (no remaining carry-over)
-    _resetStreamForToken(token, amount);
-    // Increase reserve by newly provided amount only
-    _rewardReserve[token] += amount;
-    emit RewardsAccrued(token, amount, info.accPerShare);
-  }
+    // ============ Governance Functions ============
 
-  function _ensureRewardToken(address token) internal returns (ILevrStaking_v1.RewardInfo storage info) {
-    info = _rewardInfo[token];
-    if (!info.exists) {
-      _rewardInfo[token] = ILevrStaking_v1.RewardInfo({accPerShare: 0, exists: true});
-      _rewardTokens.push(token);
-      info = _rewardInfo[token];
-    }
-  }
+    /// @inheritdoc ILevrStaking_v1
+    function getVotingPower(address user) external view returns (uint256 votingPower) {
+        uint256 startTime = stakeStartTime[user];
+        if (startTime == 0) return 0; // User never staked or has unstaked
 
-  function _availableUnaccountedRewards(address token) internal view returns (uint256) {
-    uint256 bal = IERC20(token).balanceOf(address(this));
-    if (token == underlying) {
-      // exclude escrowed principal when token is the underlying
-      if (bal > _escrowBalance[underlying]) {
-        bal -= _escrowBalance[underlying];
-      } else {
-        bal = 0;
-      }
-    }
-    uint256 accounted = _rewardReserve[token];
-    return bal > accounted ? bal - accounted : 0;
-  }
+        uint256 balance = _staked[user];
+        if (balance == 0) return 0; // No staked balance
 
-  function _increaseDebtForAll(address account, uint256 amount) internal {
-    uint256 len = _rewardTokens.length;
-    for (uint256 i = 0; i < len; i++) {
-      address rt = _rewardTokens[i];
-      uint256 acc = _rewardInfo[rt].accPerShare;
-      if (acc > 0) {
-        _rewardDebt[account][rt] += int256((amount * acc) / ACC_SCALE);
-      }
+        uint256 timeStaked = block.timestamp - startTime;
+        return balance * timeStaked;
     }
-  }
-
-  function _updateDebtAll(address account, uint256 newBal) internal {
-    uint256 len = _rewardTokens.length;
-    for (uint256 i = 0; i < len; i++) {
-      address rt = _rewardTokens[i];
-      uint256 acc = _rewardInfo[rt].accPerShare;
-      _rewardDebt[account][rt] = int256((newBal * acc) / ACC_SCALE);
-    }
-  }
-
-  function _settle(address token, address account, address to, uint256 bal) internal {
-    _settleStreamingForToken(token);
-    ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-    if (!info.exists) return;
-    uint256 accumulated = (bal * info.accPerShare) / ACC_SCALE;
-    int256 debt = _rewardDebt[account][token];
-    if (accumulated > uint256(debt)) {
-      uint256 pending = accumulated - uint256(debt);
-      if (pending > 0) {
-        uint256 reserve = _rewardReserve[token];
-        if (reserve < pending) revert InsufficientRewardLiquidity();
-        _rewardReserve[token] = reserve - pending;
-        IERC20(token).safeTransfer(to, pending);
-        emit RewardsClaimed(account, to, token, pending);
-      }
-    }
-  }
-
-  function _settleAll(address account, address to, uint256 bal) internal {
-    uint256 len = _rewardTokens.length;
-    for (uint256 i = 0; i < len; i++) {
-      _settle(_rewardTokens[i], account, to, bal);
-    }
-  }
-
-  function _settleStreamingAll() internal {
-    uint256 len = _rewardTokens.length;
-    for (uint256 i = 0; i < len; i++) {
-      _settleStreamingForToken(_rewardTokens[i]);
-    }
-  }
-
-  function _settleStreamingForToken(address token) internal {
-    uint64 start = _streamStartByToken[token];
-    uint64 end = _streamEndByToken[token];
-    if (end == 0 || start == 0) return;
-    uint64 last = _lastUpdateByToken[token];
-    uint64 from = last < start ? start : last;
-    uint64 to = uint64(block.timestamp);
-    if (to > end) to = end;
-    if (to <= from) return;
-    uint256 duration = end - start;
-    uint256 total = _streamTotalByToken[token];
-    if (duration == 0 || total == 0) {
-      _lastUpdateByToken[token] = to;
-      return;
-    }
-    uint256 vestAmount = (total * (to - from)) / duration;
-    if (_totalStaked > 0 && vestAmount > 0) {
-      ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-      info.accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
-    }
-    // Advance last update regardless; if no stakers, the stream time is consumed
-    _lastUpdateByToken[token] = to;
-  }
 }

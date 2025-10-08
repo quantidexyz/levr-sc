@@ -98,4 +98,18 @@ interface ILevrStaking_v1 {
 
   /// @notice Escrow balance per token (non-reward reserves held for users).
   function escrowBalance(address token) external view returns (uint256);
+
+  // ============ Governance Functions ============
+
+  /// @notice Get the timestamp when user started staking (0 if not staking)
+  /// @param user The user address
+  /// @return timestamp The timestamp when staking started
+  function stakeStartTime(address user) external view returns (uint256 timestamp);
+
+  /// @notice Calculate voting power for a user
+  /// @dev VP = staked balance × time staked (in seconds)
+  ///      Returns 0 if user has never staked or has unstaked completely
+  /// @param user The user address
+  /// @return votingPower The user's voting power
+  function getVotingPower(address user) external view returns (uint256 votingPower);
 }

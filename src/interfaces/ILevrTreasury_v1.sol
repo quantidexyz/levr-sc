@@ -2,15 +2,12 @@
 pragma solidity ^0.8.30;
 
 /// @title Levr Treasury v1 Interface
-/// @notice Per-project treasury handling wrap/unwrap and governance execution.
+/// @notice Per-project treasury handling governance execution.
 interface ILevrTreasury_v1 {
     // ============ Errors ============
 
     /// @notice Revert if caller is not the project governor.
     error OnlyGovernor();
-
-    /// @notice Revert if caller is not the project wrapper.
-    error OnlyWrapper();
 
     /// @notice Revert if zero address is provided.
     error ZeroAddress();
@@ -26,12 +23,7 @@ interface ILevrTreasury_v1 {
     /// @notice Emitted when the treasury is initialized by the factory.
     /// @param underlying Underlying token address
     /// @param governor Project governor address
-    /// @param wrapper Project wrapper token address
-    event Initialized(
-        address indexed underlying,
-        address indexed governor,
-        address indexed wrapper
-    );
+    event Initialized(address indexed underlying, address indexed governor);
 
     // ============ Functions ============
 
@@ -44,10 +36,6 @@ interface ILevrTreasury_v1 {
     /// @param amount Amount of underlying to allocate to stakers
     function applyBoost(uint256 amount) external;
 
-    // boosts/rewards accrue via staking module, not treasury
-
-    // rewards accrual moved to staking module
-
     /// @notice Current underlying balance held by the treasury.
     /// @return balance Underlying token balance
     function getUnderlyingBalance() external view returns (uint256 balance);
@@ -55,5 +43,9 @@ interface ILevrTreasury_v1 {
     /// @notice Address of the underlying token this treasury manages.
     function underlying() external view returns (address);
 
-    // no staking functions in treasury in the new model
+    /// @notice Address of the governor contract that can authorize transfers.
+    function governor() external view returns (address);
+
+    /// @notice Address of the staking contract for boost operations.
+    function staking() external view returns (address);
 }
