@@ -5,7 +5,7 @@ import {Script, console} from 'forge-std/Script.sol';
 import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
 import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
-import {LevrFactoryDeployer_v1} from '../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
 
 /**
  * @title DeployLevrFactoryDevnet
@@ -92,9 +92,9 @@ contract DeployLevrFactoryDevnet is Script {
 
         // Deploy the deployer logic contract with predicted factory address
         // This ensures only the predicted factory can use this deployer logic
-        LevrFactoryDeployer_v1 deployerDelegate = new LevrFactoryDeployer_v1(predictedFactory);
-        console.log('Deployer Logic deployed at:', address(deployerDelegate));
-        console.log('Authorized Factory:', deployerDelegate.authorizedFactory());
+        LevrDeployer_v1 levrDeployer = new LevrDeployer_v1(predictedFactory);
+        console.log('Deployer Logic deployed at:', address(levrDeployer));
+        console.log('Authorized Factory:', levrDeployer.authorizedFactory());
 
         // Deploy the factory with forwarder and deployer logic
         // Use Base mainnet Clanker factory address for deployment
@@ -104,7 +104,7 @@ contract DeployLevrFactoryDevnet is Script {
             deployer,
             address(forwarder),
             clankerFactory,
-            address(deployerDelegate)
+            address(levrDeployer)
         );
 
         // Verify the factory was deployed at the predicted address

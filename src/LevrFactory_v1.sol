@@ -12,15 +12,12 @@ import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 import {IClanker} from './interfaces/external/IClanker.sol';
 import {IClankerLpLockerFeeConversion} from './interfaces/external/IClankerLpLockerFeeConversion.sol';
 
-import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
-import {LevrStaking_v1} from './LevrStaking_v1.sol';
-
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Context {
     uint16 public override protocolFeeBps;
     uint32 public override streamWindowSeconds;
     address public override protocolTreasury;
     address public immutable clankerFactory;
-    address public immutable deployerDelegate; // LevrFactoryDeployer_v1 for delegatecall
+    address public immutable levrDeployer; // LevrDeployer_v1 for delegatecall
 
     // Governance parameters
     uint32 public override proposalWindowSeconds;
@@ -40,20 +37,28 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         address owner_,
         address trustedForwarder_,
         address clankerFactory_,
-        address deployerDelegate_
+        address levrDeployer_
     ) Ownable(owner_) ERC2771Context(trustedForwarder_) {
         _applyConfig(cfg);
         clankerFactory = clankerFactory_;
-        deployerDelegate = deployerDelegate_;
+        levrDeployer = levrDeployer_;
     }
 
     /// @inheritdoc ILevrFactory_v1
     function prepareForDeployment() external override returns (address treasury, address staking) {
         address deployer = _msgSender();
 
-        // Deploy directly (simple enough to keep in factory)
-        treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
-        staking = address(new LevrStaking_v1(trustedForwarder()));
+        // Deploy via delegatecall to keep factory size small
+        bytes memory data = abi.encodeWithSignature(
+            'deployInfrastructure(address,address)',
+            address(this),
+            trustedForwarder()
+        );
+
+        (bool success, bytes memory returnData) = levrDeployer.delegatecall(data);
+        require(success, 'INFRASTRUCTURE_DEPLOY_FAILED');
+
+        (treasury, staking) = abi.decode(returnData, (address, address));
 
         // Store prepared contracts for this deployer
         _preparedContracts[deployer] = ILevrFactory_v1.PreparedContracts({
@@ -100,7 +105,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             trustedForwarder()
         );
 
-        (bool success, bytes memory returnData) = deployerDelegate.delegatecall(data);
+        (bool success, bytes memory returnData) = levrDeployer.delegatecall(data);
         require(success, 'DEPLOY_FAILED');
 
         project = abi.decode(returnData, (ILevrFactory_v1.Project));

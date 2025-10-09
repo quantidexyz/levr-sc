@@ -8,16 +8,16 @@ import {LevrStaking_v1} from './LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from './LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 
-/// @title Levr Factory Deployer Logic
-/// @notice Standalone contract to reduce LevrFactory_v1 size via delegatecall
+/// @title Levr Deployer v1
+/// @notice Centralized deployment logic for all Levr contracts via delegatecall
 /// @dev This contract MUST only be called via delegatecall from the authorized LevrFactory_v1
-///      The factory address is set at construction and enforced in deployProject
-contract LevrFactoryDeployer_v1 {
+///      The factory address is set at construction and enforced in all functions
+contract LevrDeployer_v1 {
     /// @notice The factory address that is authorized to delegatecall this logic
     /// @dev Set once at construction time. During delegatecall, address(this) equals the factory.
     address public immutable authorizedFactory;
 
-    /// @notice Thrown when deployProject is called from an unauthorized context
+    /// @notice Thrown when a function is called from an unauthorized context
     error UnauthorizedFactory();
 
     /// @param factory_ The factory address authorized to use this deployer logic
@@ -26,8 +26,32 @@ contract LevrFactoryDeployer_v1 {
         authorizedFactory = factory_;
     }
 
-    /// @notice Deploy all project contracts
-    /// @dev Called via delegatecall from factory, uses factory's storage
+    /// @notice Deploy treasury and staking contracts for preparation
+    /// @dev Called via delegatecall from factory during prepareForDeployment()
+    ///      During delegatecall, address(this) is the calling contract's address
+    ///      This function reverts if address(this) != authorizedFactory
+    /// @param factory_ The factory address (for treasury initialization)
+    /// @param trustedForwarder The ERC2771 forwarder address
+    /// @return treasury The deployed treasury address
+    /// @return staking The deployed staking address
+    function deployInfrastructure(
+        address factory_,
+        address trustedForwarder
+    ) external returns (address treasury, address staking) {
+        // When called via delegatecall, address(this) is the caller's address
+        // Only the authorized factory can use this deployer logic
+        if (address(this) != authorizedFactory) {
+            revert UnauthorizedFactory();
+        }
+
+        treasury = address(new LevrTreasury_v1(factory_, trustedForwarder));
+        staking = address(new LevrStaking_v1(trustedForwarder));
+
+        return (treasury, staking);
+    }
+
+    /// @notice Deploy all project contracts (governor and stakedToken)
+    /// @dev Called via delegatecall from factory during register()
     ///      During delegatecall, address(this) is the calling contract's address
     ///      This function reverts if address(this) != authorizedFactory
     /// @param clankerToken The underlying Clanker token address
@@ -48,6 +72,7 @@ contract LevrFactoryDeployer_v1 {
         if (address(this) != authorizedFactory) {
             revert UnauthorizedFactory();
         }
+
         // Use provided treasury or deploy new one
         if (treasury_ != address(0)) {
             project.treasury = treasury_;

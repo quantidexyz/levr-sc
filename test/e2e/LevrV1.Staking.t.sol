@@ -5,7 +5,7 @@ import {BaseForkTest} from '../utils/BaseForkTest.sol';
 import {console2} from 'forge-std/console2.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
-import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
@@ -24,7 +24,7 @@ import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
-    LevrFactoryDeployer_v1 internal deployerDelegate;
+    LevrDeployer_v1 internal levrDeployer;
     SwapV4Helper internal swapHelper;
 
     address internal protocolTreasury = address(0xFEE);
@@ -52,7 +52,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             approvalBps: 0, // No governance requirements for staking tests
             minSTokenBpsToSubmit: 0
         });
-        (factory, forwarder, deployerDelegate) = deployFactory(
+        (factory, forwarder, levrDeployer) = deployFactory(
             cfg,
             address(this),
             DEFAULT_CLANKER_FACTORY

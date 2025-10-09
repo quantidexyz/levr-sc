@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {BaseForkTest} from '../utils/BaseForkTest.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
-import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
@@ -20,7 +20,7 @@ import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 contract LevrV1_RegistrationE2E is BaseForkTest, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
-    LevrFactoryDeployer_v1 internal deployerDelegate;
+    LevrDeployer_v1 internal levrDeployer;
 
     address internal protocolTreasury = address(0xFEE);
     address internal clankerToken;
@@ -32,7 +32,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest, LevrFactoryDeployHelper {
         clankerFactory = CLANKER_FACTORY;
 
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
-        (factory, forwarder, deployerDelegate) = deployFactory(cfg, address(this), CLANKER_FACTORY);
+        (factory, forwarder, levrDeployer) = deployFactory(cfg, address(this), CLANKER_FACTORY);
     }
 
     /**

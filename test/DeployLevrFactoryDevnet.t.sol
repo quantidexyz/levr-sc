@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
 import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
-import {LevrFactoryDeployer_v1} from '../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
 import {LevrFactoryDeployHelper} from './utils/LevrFactoryDeployHelper.sol';
@@ -35,7 +35,7 @@ contract DeployLevrFactoryDevnetTest is Test, LevrFactoryDeployHelper {
         (
             LevrFactory_v1 factory,
             LevrForwarder_v1 forwarder,
-            LevrFactoryDeployer_v1 deployerDelegate
+            LevrDeployer_v1 levrDeployer
         ) = deployFactory(config, address(this), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9);
 
         // Verify configuration

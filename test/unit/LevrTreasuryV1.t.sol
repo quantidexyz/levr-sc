@@ -7,7 +7,7 @@ import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
-import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
@@ -16,7 +16,7 @@ contract LevrTreasuryV1_UnitTest is Test, LevrFactoryDeployHelper {
     MockERC20 internal underlying;
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
-    LevrFactoryDeployer_v1 internal deployerDelegate;
+    LevrDeployer_v1 internal levrDeployer;
     LevrTreasury_v1 internal treasury;
     LevrStaking_v1 internal staking;
     LevrStakedToken_v1 internal sToken;
@@ -28,7 +28,7 @@ contract LevrTreasuryV1_UnitTest is Test, LevrFactoryDeployHelper {
         underlying = new MockERC20('Token', 'TKN');
 
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
-        (factory, forwarder, deployerDelegate) = deployFactoryWithDefaultClanker(
+        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(
             cfg,
             address(this)
         );

@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from 'forge-std/Test.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
-import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
@@ -18,7 +18,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     MockERC20 internal underlying;
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
-    LevrFactoryDeployer_v1 internal deployerDelegate;
+    LevrDeployer_v1 internal levrDeployer;
     LevrGovernor_v1 internal governor;
     LevrTreasury_v1 internal treasury;
     LevrStaking_v1 internal staking;
@@ -31,7 +31,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         underlying = new MockERC20('Token', 'TKN');
 
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
-        (factory, forwarder, deployerDelegate) = deployFactoryWithDefaultClanker(
+        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(
             cfg,
             address(this)
         );

@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from 'forge-std/Test.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
-import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
@@ -12,14 +12,14 @@ import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
-    LevrFactoryDeployer_v1 internal deployerDelegate;
+    LevrDeployer_v1 internal levrDeployer;
     address internal protocolTreasury = address(0xFEE);
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
 
     function setUp() public {
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
-        (factory, forwarder, deployerDelegate) = deployFactoryWithDefaultClanker(
+        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(
             cfg,
             address(this)
         );

@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from 'forge-std/Test.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
-import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 
 /// @title Levr Factory Deployment Helper
@@ -18,7 +18,7 @@ contract LevrFactoryDeployHelper is Test {
     /// @param clankerFactory Clanker factory address (use 0xE85A59c628F7d27878ACeB4bf3b35733630083a9 for Base)
     /// @return factory The deployed factory
     /// @return forwarder The deployed forwarder
-    /// @return deployerDelegate The deployed deployer logic
+    /// @return levrDeployer The deployed deployer logic
     function deployFactory(
         ILevrFactory_v1.FactoryConfig memory cfg,
         address owner,
@@ -28,7 +28,7 @@ contract LevrFactoryDeployHelper is Test {
         returns (
             LevrFactory_v1 factory,
             LevrForwarder_v1 forwarder,
-            LevrFactoryDeployer_v1 deployerDelegate
+            LevrDeployer_v1 levrDeployer
         )
     {
         // Step 1: Deploy forwarder
@@ -40,7 +40,7 @@ contract LevrFactoryDeployHelper is Test {
         address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 1);
 
         // Step 3: Deploy deployer logic with predicted factory address
-        deployerDelegate = new LevrFactoryDeployer_v1(predictedFactory);
+        levrDeployer = new LevrDeployer_v1(predictedFactory);
 
         // Step 4: Deploy factory
         factory = new LevrFactory_v1(
@@ -48,7 +48,7 @@ contract LevrFactoryDeployHelper is Test {
             owner,
             address(forwarder),
             clankerFactory,
-            address(deployerDelegate)
+            address(levrDeployer)
         );
 
         // Step 5: Verify factory was deployed at predicted address
@@ -57,7 +57,7 @@ contract LevrFactoryDeployHelper is Test {
             'LevrFactoryDeployHelper: Factory address mismatch'
         );
         require(
-            deployerDelegate.authorizedFactory() == address(factory),
+            levrDeployer.authorizedFactory() == address(factory),
             'LevrFactoryDeployHelper: Deployer authorization failed'
         );
     }
@@ -67,7 +67,7 @@ contract LevrFactoryDeployHelper is Test {
     /// @param owner Factory owner address
     /// @return factory The deployed factory
     /// @return forwarder The deployed forwarder
-    /// @return deployerDelegate The deployed deployer logic
+    /// @return levrDeployer The deployed deployer logic
     function deployFactoryWithDefaultClanker(
         ILevrFactory_v1.FactoryConfig memory cfg,
         address owner
@@ -76,7 +76,7 @@ contract LevrFactoryDeployHelper is Test {
         returns (
             LevrFactory_v1 factory,
             LevrForwarder_v1 forwarder,
-            LevrFactoryDeployer_v1 deployerDelegate
+            LevrDeployer_v1 levrDeployer
         )
     {
         // Base mainnet Clanker factory
