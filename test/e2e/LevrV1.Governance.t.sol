@@ -14,6 +14,7 @@ pragma solidity ^0.8.30;
 import {BaseForkTest} from '../utils/BaseForkTest.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
@@ -22,10 +23,12 @@ import {ClankerDeployer} from '../utils/ClankerDeployer.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IClankerAirdrop} from '../../src/interfaces/external/IClankerAirdrop.sol';
 import {MerkleAirdropHelper} from '../utils/MerkleAirdropHelper.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
-contract LevrV1_GovernanceE2E is BaseForkTest {
+contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
+    LevrFactoryDeployer_v1 internal deployerDelegate;
 
     address internal protocolTreasury = address(0xFEE);
     address internal clankerToken;
@@ -45,9 +48,6 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
     function setUp() public override {
         super.setUp();
 
-        // Deploy forwarder
-        forwarder = new LevrForwarder_v1('LevrForwarder_v1');
-
         // Create factory with governance parameters
         ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 0,
@@ -62,7 +62,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest {
             minSTokenBpsToSubmit: 100 // 1% of supply required to propose
         });
 
-        factory = new LevrFactory_v1(cfg, address(this), address(forwarder), CLANKER_FACTORY);
+        (factory, forwarder, deployerDelegate) = deployFactory(cfg, address(this), CLANKER_FACTORY);
 
         // Deploy complete Levr ecosystem with Clanker token + large airdrop to treasury
         _deployCompleteEcosystem(50_000 ether); // 50k token airdrop to treasury (50% of supply)

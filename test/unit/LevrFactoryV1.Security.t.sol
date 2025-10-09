@@ -4,124 +4,117 @@ pragma solidity ^0.8.30;
 import {Test} from 'forge-std/Test.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
-contract LevrFactoryV1_SecurityTest is Test {
-  LevrFactory_v1 internal factory;
-  LevrForwarder_v1 internal forwarder;
-  address internal protocolTreasury = address(0xFEE);
-  address internal alice = address(0xA11CE);
-  address internal bob = address(0xB0B);
+contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
+    LevrFactory_v1 internal factory;
+    LevrForwarder_v1 internal forwarder;
+    LevrFactoryDeployer_v1 internal deployerDelegate;
+    address internal protocolTreasury = address(0xFEE);
+    address internal alice = address(0xA11CE);
+    address internal bob = address(0xB0B);
 
-  function setUp() public {
-    // Deploy forwarder first
-    forwarder = new LevrForwarder_v1('LevrForwarder_v1');
+    function setUp() public {
+        ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
+        (factory, forwarder, deployerDelegate) = deployFactoryWithDefaultClanker(
+            cfg,
+            address(this)
+        );
+    }
 
-    ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
-      protocolFeeBps: 0,
-      streamWindowSeconds: 3 days,
-      protocolTreasury: protocolTreasury,
-      proposalWindowSeconds: 2 days,
-      votingWindowSeconds: 5 days,
-      maxActiveProposals: 7,
-      quorumBps: 7000,
-      approvalBps: 5100,
-      minSTokenBpsToSubmit: 100
-    });
-    factory = new LevrFactory_v1(cfg, address(this), address(forwarder), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9); // Base Clanker factory
-  }
+    function test_cannot_register_with_someone_elses_treasury() public {
+        // Alice prepares her infrastructure
+        vm.prank(alice);
+        (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
 
-  function test_cannot_register_with_someone_elses_treasury() public {
-    // Alice prepares her infrastructure
-    vm.prank(alice);
-    (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
+        // Alice creates token (she's the admin since she deployed it)
+        vm.prank(alice);
+        MockERC20 aliceToken = new MockERC20('Alice Token', 'ALICE');
 
-    // Alice creates token (she's the admin since she deployed it)
-    vm.prank(alice);
-    MockERC20 aliceToken = new MockERC20('Alice Token', 'ALICE');
+        // Alice tries to register using her own treasury she prepared - this should FAIL
+        // because register() checks msg.sender == deployer, but with vm.prank the actual
+        // transaction sender is not alice in the test context. We need to ensure the
+        // check works.
 
-    // Alice tries to register using her own treasury she prepared - this should FAIL
-    // because register() checks msg.sender == deployer, but with vm.prank the actual
-    // transaction sender is not alice in the test context. We need to ensure the
-    // check works.
+        // Actually, let's test the opposite: Bob prepares, then tries to use his own contracts
+        // but with a token that alice owns - should fail on tokenAdmin check first
+        vm.prank(bob);
+        vm.expectRevert(ILevrFactory_v1.UnauthorizedCaller.selector);
+        factory.register(address(aliceToken));
+    }
 
-    // Actually, let's test the opposite: Bob prepares, then tries to use his own contracts
-    // but with a token that alice owns - should fail on tokenAdmin check first
-    vm.prank(bob);
-    vm.expectRevert(ILevrFactory_v1.UnauthorizedCaller.selector);
-    factory.register(address(aliceToken));
-  }
+    function test_cannot_register_with_someone_elses_staking() public {
+        // Alice prepares her infrastructure
+        vm.prank(alice);
+        (, address aliceStaking) = factory.prepareForDeployment();
 
-  function test_cannot_register_with_someone_elses_staking() public {
-    // Alice prepares her infrastructure
-    vm.prank(alice);
-    (, address aliceStaking) = factory.prepareForDeployment();
+        // Bob prepares his own treasury but tries to use Alice's staking
+        vm.prank(bob);
+        (address bobTreasury, ) = factory.prepareForDeployment();
 
-    // Bob prepares his own treasury but tries to use Alice's staking
-    vm.prank(bob);
-    (address bobTreasury, ) = factory.prepareForDeployment();
+        // Bob creates token (he's the admin)
+        vm.prank(bob);
+        MockERC20 bobToken = new MockERC20('Bob Token', 'BOB');
 
-    // Bob creates token (he's the admin)
-    vm.prank(bob);
-    MockERC20 bobToken = new MockERC20('Bob Token', 'BOB');
+        // Bob tries to register - since Bob called prepareForDeployment,
+        // it should work with his prepared contracts
+        vm.prank(bob);
+        ILevrFactory_v1.Project memory project = factory.register(address(bobToken));
 
-    // Bob tries to register - since Bob called prepareForDeployment,
-    // it should work with his prepared contracts
-    vm.prank(bob);
-    ILevrFactory_v1.Project memory project = factory.register(address(bobToken));
+        // Should use Bob's prepared contracts
+        assertEq(project.treasury, bobTreasury, 'Should use Bob treasury');
+        assertTrue(project.staking != address(0), 'Should have staking');
+    }
 
-    // Should use Bob's prepared contracts
-    assertEq(project.treasury, bobTreasury, 'Should use Bob treasury');
-    assertTrue(project.staking != address(0), 'Should have staking');
-  }
+    function test_can_register_with_own_prepared_contracts() public {
+        // Alice prepares her infrastructure
+        vm.prank(alice);
+        (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
 
-  function test_can_register_with_own_prepared_contracts() public {
-    // Alice prepares her infrastructure
-    vm.prank(alice);
-    (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
+        // Alice creates token (she's the admin)
+        vm.prank(alice);
+        MockERC20 aliceToken = new MockERC20('Alice Token', 'ALICE');
 
-    // Alice creates token (she's the admin)
-    vm.prank(alice);
-    MockERC20 aliceToken = new MockERC20('Alice Token', 'ALICE');
+        // Alice registers with her own prepared contracts - should succeed
+        vm.prank(alice);
+        ILevrFactory_v1.Project memory project = factory.register(address(aliceToken));
 
-    // Alice registers with her own prepared contracts - should succeed
-    vm.prank(alice);
-    ILevrFactory_v1.Project memory project = factory.register(address(aliceToken));
+        assertEq(project.treasury, aliceTreasury, 'Should use Alice treasury');
+        assertEq(project.staking, aliceStaking, 'Should use Alice staking');
+        assertTrue(project.governor != address(0), 'Governor deployed');
+        assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
+    }
 
-    assertEq(project.treasury, aliceTreasury, 'Should use Alice treasury');
-    assertEq(project.staking, aliceStaking, 'Should use Alice staking');
-    assertTrue(project.governor != address(0), 'Governor deployed');
-    assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
-  }
+    function test_can_register_without_preparation() public {
+        // Bob creates token (he's the admin)
+        vm.prank(bob);
+        MockERC20 bobToken = new MockERC20('Bob Token', 'BOB');
 
-  function test_can_register_without_preparation() public {
-    // Bob creates token (he's the admin)
-    vm.prank(bob);
-    MockERC20 bobToken = new MockERC20('Bob Token', 'BOB');
+        // Bob registers without preparation - should succeed
+        vm.prank(bob);
+        ILevrFactory_v1.Project memory project = factory.register(address(bobToken));
 
-    // Bob registers without preparation - should succeed
-    vm.prank(bob);
-    ILevrFactory_v1.Project memory project = factory.register(address(bobToken));
+        assertTrue(project.treasury != address(0), 'Treasury deployed');
+        assertTrue(project.governor != address(0), 'Governor deployed');
+        assertTrue(project.staking != address(0), 'Staking deployed');
+        assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
+    }
 
-    assertTrue(project.treasury != address(0), 'Treasury deployed');
-    assertTrue(project.governor != address(0), 'Governor deployed');
-    assertTrue(project.staking != address(0), 'Staking deployed');
-    assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
-  }
+    function test_tokenAdmin_gate_still_enforced() public {
+        // Alice prepares infrastructure
+        vm.prank(alice);
+        (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
 
-  function test_tokenAdmin_gate_still_enforced() public {
-    // Alice prepares infrastructure
-    vm.prank(alice);
-    (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
+        // Alice creates token (she's the admin)
+        vm.prank(alice);
+        MockERC20 aliceToken = new MockERC20('Alice Token', 'ALICE');
 
-    // Alice creates token (she's the admin)
-    vm.prank(alice);
-    MockERC20 aliceToken = new MockERC20('Alice Token', 'ALICE');
-
-    // Bob (not tokenAdmin) tries to register - should fail with UnauthorizedCaller
-    vm.prank(bob);
-    vm.expectRevert(ILevrFactory_v1.UnauthorizedCaller.selector);
-    factory.register(address(aliceToken));
-  }
+        // Bob (not tokenAdmin) tries to register - should fail with UnauthorizedCaller
+        vm.prank(bob);
+        vm.expectRevert(ILevrFactory_v1.UnauthorizedCaller.selector);
+        factory.register(address(aliceToken));
+    }
 }

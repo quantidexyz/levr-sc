@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from 'forge-std/Test.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
@@ -11,11 +12,13 @@ import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
-contract LevrGovernorV1_UnitTest is Test {
+contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     MockERC20 internal underlying;
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
+    LevrFactoryDeployer_v1 internal deployerDelegate;
     LevrGovernor_v1 internal governor;
     LevrTreasury_v1 internal treasury;
     LevrStaking_v1 internal staking;
@@ -27,26 +30,11 @@ contract LevrGovernorV1_UnitTest is Test {
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
 
-        // Deploy forwarder first
-        forwarder = new LevrForwarder_v1('LevrForwarder_v1');
-
-        ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 0,
-            streamWindowSeconds: 3 days,
-            protocolTreasury: protocolTreasury,
-            proposalWindowSeconds: 2 days,
-            votingWindowSeconds: 5 days,
-            maxActiveProposals: 7,
-            quorumBps: 7000,
-            approvalBps: 5100,
-            minSTokenBpsToSubmit: 100
-        });
-        factory = new LevrFactory_v1(
+        ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
+        (factory, forwarder, deployerDelegate) = deployFactoryWithDefaultClanker(
             cfg,
-            address(this),
-            address(forwarder),
-            0xE85A59c628F7d27878ACeB4bf3b35733630083a9
-        ); // Base Clanker factory
+            address(this)
+        );
         ILevrFactory_v1.Project memory project = factory.register(address(underlying));
         governor = LevrGovernor_v1(project.governor);
         treasury = LevrTreasury_v1(payable(project.treasury));
@@ -68,8 +56,7 @@ contract LevrGovernorV1_UnitTest is Test {
     // All governance coverage is in test/e2e/LevrV1.Governance.t.sol
 
     function test_rate_limit_per_type_enforced() public {
-        // Create a new factory with maxSubmissionPerType = 1
-        LevrForwarder_v1 fwd = new LevrForwarder_v1('LevrForwarder_v1');
+        // Create a new factory with maxActiveProposals = 1
         ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
@@ -81,12 +68,10 @@ contract LevrGovernorV1_UnitTest is Test {
             approvalBps: 0, // No approval requirement for this unit test
             minSTokenBpsToSubmit: 0 // No minimum for this test
         });
-        LevrFactory_v1 fac = new LevrFactory_v1(
+        (LevrFactory_v1 fac, LevrForwarder_v1 fwd, ) = deployFactoryWithDefaultClanker(
             cfg,
-            address(this),
-            address(fwd),
-            0xE85A59c628F7d27878ACeB4bf3b35733630083a9
-        ); // Base Clanker factory
+            address(this)
+        );
         ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
         LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
 

@@ -5,6 +5,7 @@ import {Script, console} from 'forge-std/Script.sol';
 import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
 import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
+import {LevrFactoryDeployer_v1} from '../src/LevrFactoryDeployer_v1.sol';
 
 /**
  * @title DeployLevrFactoryDevnet
@@ -81,15 +82,37 @@ contract DeployLevrFactoryDevnet is Script {
         LevrForwarder_v1 forwarder = new LevrForwarder_v1('LevrForwarder_v1');
         console.log('Forwarder deployed at:', address(forwarder));
 
-        // Deploy the factory with forwarder
+        // Calculate the factory address before deploying deployer logic
+        // The factory will be deployed at nonce = vm.getNonce(deployer) + 1
+        // (current nonce is after forwarder, +1 for deployer logic, +1 for factory)
+        uint64 currentNonce = vm.getNonce(deployer);
+        address predictedFactory = vm.computeCreateAddress(deployer, currentNonce + 1);
+        console.log('Predicted Factory Address:', predictedFactory);
+        console.log('Current Deployer Nonce:', currentNonce);
+
+        // Deploy the deployer logic contract with predicted factory address
+        // This ensures only the predicted factory can use this deployer logic
+        LevrFactoryDeployer_v1 deployerDelegate = new LevrFactoryDeployer_v1(predictedFactory);
+        console.log('Deployer Logic deployed at:', address(deployerDelegate));
+        console.log('Authorized Factory:', deployerDelegate.authorizedFactory());
+
+        // Deploy the factory with forwarder and deployer logic
         // Use Base mainnet Clanker factory address for deployment
         address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
             deployer,
             address(forwarder),
-            clankerFactory
+            clankerFactory,
+            address(deployerDelegate)
         );
+
+        // Verify the factory was deployed at the predicted address
+        require(
+            address(factory) == predictedFactory,
+            'Factory address mismatch - deployment order changed'
+        );
+        console.log('Factory address verified:', address(factory));
 
         vm.stopBroadcast();
 

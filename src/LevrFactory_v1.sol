@@ -13,15 +13,14 @@ import {IClanker} from './interfaces/external/IClanker.sol';
 import {IClankerLpLockerFeeConversion} from './interfaces/external/IClankerLpLockerFeeConversion.sol';
 
 import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
-import {LevrGovernor_v1} from './LevrGovernor_v1.sol';
 import {LevrStaking_v1} from './LevrStaking_v1.sol';
-import {LevrStakedToken_v1} from './LevrStakedToken_v1.sol';
 
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Context {
     uint16 public override protocolFeeBps;
     uint32 public override streamWindowSeconds;
     address public override protocolTreasury;
-    address public clankerFactory;
+    address public immutable clankerFactory;
+    address public immutable deployerDelegate; // LevrFactoryDeployer_v1 for delegatecall
 
     // Governance parameters
     uint32 public override proposalWindowSeconds;
@@ -40,22 +39,23 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         FactoryConfig memory cfg,
         address owner_,
         address trustedForwarder_,
-        address clankerFactory_
+        address clankerFactory_,
+        address deployerDelegate_
     ) Ownable(owner_) ERC2771Context(trustedForwarder_) {
         _applyConfig(cfg);
         clankerFactory = clankerFactory_;
+        deployerDelegate = deployerDelegate_;
     }
 
     /// @inheritdoc ILevrFactory_v1
     function prepareForDeployment() external override returns (address treasury, address staking) {
         address deployer = _msgSender();
-        // Deploy treasury and staking without salt - each call creates independent contracts
-        treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
 
-        // Deploy staking (will be initialized later during register)
+        // Deploy directly (simple enough to keep in factory)
+        treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
         staking = address(new LevrStaking_v1(trustedForwarder()));
 
-        // Store prepared contracts for this deployer (overwrites previous if called again)
+        // Store prepared contracts for this deployer
         _preparedContracts[deployer] = ILevrFactory_v1.PreparedContracts({
             treasury: treasury,
             staking: staking
@@ -90,54 +90,20 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         address treasury_,
         address staking_
     ) internal returns (ILevrFactory_v1.Project memory project) {
-        // Use provided treasury or deploy new one
-        if (treasury_ != address(0)) {
-            project.treasury = treasury_;
-        } else {
-            project.treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
-        }
-
-        // Use provided staking or deploy new one
-        if (staking_ != address(0)) {
-            project.staking = staking_;
-        } else {
-            project.staking = address(new LevrStaking_v1(trustedForwarder()));
-        }
-
-        // Deploy stakedToken
-        uint8 uDec = IERC20Metadata(clankerToken).decimals();
-        string memory name_ = string(
-            abi.encodePacked('Levr Staked ', IERC20Metadata(clankerToken).name())
-        );
-        string memory symbol_ = string(
-            abi.encodePacked('s', IERC20Metadata(clankerToken).symbol())
-        );
-        project.stakedToken = address(
-            new LevrStakedToken_v1(name_, symbol_, uDec, clankerToken, project.staking)
-        );
-
-        // Initialize staking with this factory (enables automatic ClankerFeeLocker integration via factory.clankerFactory)
-        LevrStaking_v1(project.staking).initialize(
+        // Deploy all contracts via delegatecall to deployer logic
+        bytes memory data = abi.encodeWithSignature(
+            'deployProject(address,address,address,address,address)',
             clankerToken,
-            project.stakedToken,
-            project.treasury,
-            address(this)
+            treasury_,
+            staking_,
+            address(this),
+            trustedForwarder()
         );
 
-        // Deploy governor with all required parameters
-        project.governor = address(
-            new LevrGovernor_v1(
-                address(this), // factory
-                project.treasury, // treasury
-                project.staking, // staking
-                project.stakedToken, // stakedToken
-                clankerToken, // underlying
-                trustedForwarder()
-            )
-        );
+        (bool success, bytes memory returnData) = deployerDelegate.delegatecall(data);
+        require(success, 'DEPLOY_FAILED');
 
-        // Initialize treasury now that governor and underlying are known
-        LevrTreasury_v1(project.treasury).initialize(project.governor, clankerToken);
+        project = abi.decode(returnData, (ILevrFactory_v1.Project));
 
         // Store in registry
         _projects[clankerToken] = project;
@@ -211,13 +177,10 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     }
 
     function _applyConfig(FactoryConfig memory cfg) internal {
-        // Validate stream window is at least 1 day
         require(cfg.streamWindowSeconds >= 1 days, 'STREAM_WINDOW_TOO_SHORT');
-
         protocolFeeBps = cfg.protocolFeeBps;
         streamWindowSeconds = cfg.streamWindowSeconds;
         protocolTreasury = cfg.protocolTreasury;
-        // Governance parameters
         proposalWindowSeconds = cfg.proposalWindowSeconds;
         votingWindowSeconds = cfg.votingWindowSeconds;
         maxActiveProposals = cfg.maxActiveProposals;

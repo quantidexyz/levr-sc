@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 import {BaseForkTest} from '../utils/BaseForkTest.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrFactoryDeployer_v1} from '../../src/LevrFactoryDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
@@ -14,10 +15,12 @@ import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IClankerLpLocker} from '../../src/interfaces/external/IClankerLPLocker.sol';
 import {IClankerLpLockerMultiple} from '../../src/interfaces/external/IClankerLpLockerMultiple.sol';
 import {IClankerFeeLocker} from '../../src/interfaces/external/IClankerFeeLocker.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
-contract LevrV1_RegistrationE2E is BaseForkTest {
+contract LevrV1_RegistrationE2E is BaseForkTest, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
+    LevrFactoryDeployer_v1 internal deployerDelegate;
 
     address internal protocolTreasury = address(0xFEE);
     address internal clankerToken;
@@ -28,26 +31,8 @@ contract LevrV1_RegistrationE2E is BaseForkTest {
         super.setUp();
         clankerFactory = CLANKER_FACTORY;
 
-        // Deploy forwarder first
-        forwarder = new LevrForwarder_v1('LevrForwarder_v1');
-
-        ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 0,
-            streamWindowSeconds: 3 days,
-            protocolTreasury: protocolTreasury,
-            proposalWindowSeconds: 2 days,
-            votingWindowSeconds: 5 days,
-            maxActiveProposals: 7,
-            quorumBps: 7000,
-            approvalBps: 5100,
-            minSTokenBpsToSubmit: 100
-        });
-        factory = new LevrFactory_v1(
-            cfg,
-            address(this),
-            address(forwarder),
-            0xE85A59c628F7d27878ACeB4bf3b35733630083a9
-        ); // Base Clanker factory
+        ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
+        (factory, forwarder, deployerDelegate) = deployFactory(cfg, address(this), CLANKER_FACTORY);
     }
 
     /**
