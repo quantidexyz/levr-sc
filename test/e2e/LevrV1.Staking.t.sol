@@ -137,7 +137,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         assertTrue(rewardRate > 0, 'Reward rate should be > 0 after boost');
 
         // Check APR calculation
-        uint256 aprBps = ILevrStaking_v1(staking).aprBps(address(this));
+        uint256 aprBps = ILevrStaking_v1(staking).aprBps();
         assertTrue(aprBps > 0, 'APR should be > 0 after boost');
 
         // Warp forward and claim rewards

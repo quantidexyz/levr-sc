@@ -103,10 +103,8 @@ interface ILevrStaking_v1 {
     /// @notice Current reward emission rate per second for a token, based on remaining stream.
     function rewardRatePerSecond(address token) external view returns (uint256);
 
-    /// @notice Pool APR in basis points for a specific token, annualized from current stream.
-    /// @dev This is pool-level APR; user-level APY equals APR if compounding off-chain.
-    /// @param token The token address to calculate APR for (underlying or WETH)
-    function aprBps(address token) external view returns (uint256);
+    /// @notice Pool APR in basis points for the underlying token, annualized from current stream.
+    function aprBps() external view returns (uint256);
 
     /// @notice View functions.
     function stakedBalanceOf(address account) external view returns (uint256);

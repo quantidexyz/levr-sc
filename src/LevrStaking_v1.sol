@@ -268,22 +268,17 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function aprBps(address token) external view returns (uint256) {
+    function aprBps() external view returns (uint256) {
         if (_totalStaked == 0) return 0;
-        // Calculate APR for the specified token
-        uint64 start = _streamStartByToken[token];
-        uint64 end = _streamEndByToken[token];
+        uint64 start = _streamStartByToken[underlying];
+        uint64 end = _streamEndByToken[underlying];
         if (end == 0 || end <= start) return 0;
         if (block.timestamp >= end) return 0;
         uint256 window = end - start;
-        uint256 total = _streamTotalByToken[token];
+        uint256 total = _streamTotalByToken[underlying];
         if (total == 0) return 0;
-        // rate per second in token units
         uint256 rate = total / window;
         uint256 annual = rate * 365 days;
-        // APR bps = annual / totalStaked * 10_000
-        // Note: This assumes token has same value as underlying for simplicity
-        // For accurate APR in $ terms, need price oracle
         return (annual * 10_000) / _totalStaked;
     }
 

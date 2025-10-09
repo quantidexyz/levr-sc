@@ -25,11 +25,7 @@ contract LevrFactoryDeployHelper is Test {
         address clankerFactory
     )
         internal
-        returns (
-            LevrFactory_v1 factory,
-            LevrForwarder_v1 forwarder,
-            LevrDeployer_v1 levrDeployer
-        )
+        returns (LevrFactory_v1 factory, LevrForwarder_v1 forwarder, LevrDeployer_v1 levrDeployer)
     {
         // Step 1: Deploy forwarder
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
@@ -73,11 +69,7 @@ contract LevrFactoryDeployHelper is Test {
         address owner
     )
         internal
-        returns (
-            LevrFactory_v1 factory,
-            LevrForwarder_v1 forwarder,
-            LevrDeployer_v1 levrDeployer
-        )
+        returns (LevrFactory_v1 factory, LevrForwarder_v1 forwarder, LevrDeployer_v1 levrDeployer)
     {
         // Base mainnet Clanker factory
         address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
