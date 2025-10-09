@@ -59,11 +59,13 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Underlying Clanker token address
     /// @param treasury Project treasury address
     /// @param governor Project governor address
+    /// @param staking Project staking address
     /// @param stakedToken Project staked token address
     event Registered(
         address indexed clankerToken,
         address indexed treasury,
         address governor,
+        address staking,
         address stakedToken
     );
 

@@ -98,7 +98,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         // Store in registry
         _projects[clankerToken] = project;
 
-        emit Registered(clankerToken, project.treasury, project.governor, project.stakedToken);
+        emit Registered(clankerToken, project.treasury, project.governor, project.staking, project.stakedToken);
     }
 
     /// @inheritdoc ILevrFactory_v1
