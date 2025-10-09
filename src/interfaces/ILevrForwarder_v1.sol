@@ -38,12 +38,32 @@ interface ILevrForwarder_v1 {
     /// @param selector The forbidden function selector
     error ForbiddenSelectorOnSelf(bytes4 selector);
 
+    /// @notice Attempted to call executeTransaction directly instead of via executeMulticall
+    /// @dev executeTransaction can only be called from the forwarder itself (via multicall)
+    ///      to prevent address impersonation attacks on ERC2771Context contracts
+    error OnlyMulticallCanExecuteTransaction();
+
+    /// @notice msg.value does not match the sum of all call values
+    /// @param provided The msg.value provided
+    /// @param required The total value required by all calls
+    error ValueMismatch(uint256 provided, uint256 required);
+
+    /// @notice No ETH available to withdraw
+    error NoETHToWithdraw();
+
+    /// @notice ETH transfer failed
+    error ETHTransferFailed();
+
+    /// @notice Caller is not the deployer
+    error OnlyDeployer();
+
     // ============ Functions ============
 
     /// @notice Execute multiple calls in a single transaction (ERC2771 mode)
     /// @dev Each call is executed with the caller's address appended (ERC2771)
     ///      Only calls to contracts that trust this forwarder will succeed
-    ///      Forwards all msg.value to the calls
+    ///      msg.value MUST exactly match sum of all call values (ValueMismatch otherwise)
+    ///      Protected by nonReentrant modifier to prevent reentrancy attacks
     /// @param calls Array of calls to execute
     /// @return results Array of results for each call
     function executeMulticall(
@@ -51,9 +71,11 @@ interface ILevrForwarder_v1 {
     ) external payable returns (Result[] memory results);
 
     /// @notice Execute a single transaction to any external contract
-    /// @dev Executes call FROM the forwarder without appending sender (non-ERC2771)
-    ///      Useful for calling external contracts that don't use ERC2771
+    /// @dev SECURITY: Can only be called via executeMulticall (msg.sender == address(this))
+    ///      Executes call FROM the forwarder without appending sender (non-ERC2771)
+    ///      Useful for calling external contracts that don't use ERC2771 in multicall sequences
     ///      Does NOT require target to trust this forwarder
+    ///      Direct calls will revert with OnlyMulticallCanExecuteTransaction
     /// @param target The contract to call
     /// @param data The calldata to send
     /// @return success Whether the call succeeded
@@ -69,4 +91,16 @@ interface ILevrForwarder_v1 {
     function createDigest(
         ERC2771Forwarder.ForwardRequestData memory req
     ) external view returns (bytes32 digest);
+
+    /// @notice Withdraw any ETH accidentally trapped in the forwarder
+    /// @dev Only deployer can call this function - forwarder should never hold ETH
+    ///      Protected by nonReentrant modifier
+    ///      Reverts with OnlyDeployer if caller is not deployer
+    ///      Reverts with NoETHToWithdraw if balance is zero
+    ///      Reverts with ETHTransferFailed if transfer fails
+    function withdrawTrappedETH() external;
+
+    /// @notice Get the address of the forwarder deployer
+    /// @return The deployer address (immutable, set at construction)
+    function deployer() external view returns (address);
 }

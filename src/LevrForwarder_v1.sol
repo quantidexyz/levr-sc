@@ -4,23 +4,38 @@ pragma solidity ^0.8.30;
 import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {ERC2771Context} from '@openzeppelin/contracts/metatx/ERC2771Context.sol';
 import {Context} from '@openzeppelin/contracts/utils/Context.sol';
+import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 import {ILevrForwarder_v1} from './interfaces/ILevrForwarder_v1.sol';
 
 /**
  * @title LevrForwarder_v1
  * @notice Meta-transaction forwarder with multicall support for Levr Protocol
  * @dev Extends OpenZeppelin's ERC2771Forwarder and adds executeMulticall functionality
- *      Based on Inverter's TransactionForwarder_v1 pattern
+ *      Also adds executeTransaction functionality for direct contract calls
+ *      Protected against reentrancy and validates ETH amounts
  */
-contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder {
-    constructor(string memory name) ERC2771Forwarder(name) {}
+contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuard {
+    address public immutable deployer;
+
+    constructor(string memory name) ERC2771Forwarder(name) {
+        deployer = msg.sender;
+    }
 
     /// @inheritdoc ILevrForwarder_v1
     function executeMulticall(
         SingleCall[] calldata calls
-    ) external payable returns (Result[] memory results) {
+    ) external payable nonReentrant returns (Result[] memory results) {
         uint256 length = calls.length;
         results = new Result[](length);
+
+        // SECURITY FIX #1: Validate msg.value matches total required
+        uint256 totalValue = 0;
+        for (uint256 i = 0; i < length; i++) {
+            totalValue += calls[i].value;
+        }
+        if (msg.value != totalValue) {
+            revert ValueMismatch(msg.value, totalValue);
+        }
 
         SingleCall calldata calli;
         bytes memory data;
@@ -69,8 +84,15 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder {
         address target,
         bytes calldata data
     ) external payable returns (bool success, bytes memory returnData) {
+        // SECURITY: Only allow calls from the forwarder itself (via executeMulticall)
+        // This prevents anyone from impersonating addresses by crafting malicious calldata
+        // when calling ERC2771Context contracts
+        if (msg.sender != address(this)) {
+            revert OnlyMulticallCanExecuteTransaction();
+        }
+
         // Execute call directly without appending sender (non-ERC2771)
-        // This allows calling any external contract from the forwarder
+        // This allows calling external contracts that don't use ERC2771 in multicall sequences
         (success, returnData) = target.call{value: msg.value}(data);
     }
 
@@ -79,6 +101,19 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder {
         ERC2771Forwarder.ForwardRequestData memory req
     ) external view returns (bytes32 digest) {
         return _hashTypedDataV4(_getStructHash(req));
+    }
+
+    /// @inheritdoc ILevrForwarder_v1
+    function withdrawTrappedETH() external nonReentrant {
+        // Only deployer can withdraw trapped ETH
+        if (msg.sender != deployer) revert OnlyDeployer();
+
+        uint256 balance = address(this).balance;
+        if (balance == 0) revert NoETHToWithdraw();
+
+        // Send ETH to deployer
+        (bool success, ) = payable(deployer).call{value: balance}('');
+        if (!success) revert ETHTransferFailed();
     }
 
     // ============ Internal Functions ============
