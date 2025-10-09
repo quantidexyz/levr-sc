@@ -60,6 +60,9 @@ interface ILevrGovernor_v1 {
     /// @notice Maximum active proposals per type reached
     error MaxProposalsReached();
 
+    /// @notice User has already proposed this type in the current cycle
+    error AlreadyProposedInCycle();
+
     /// @notice User has already voted on this proposal
     error AlreadyVoted();
 

@@ -48,6 +48,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     // Proposals per cycle for winner determination
     mapping(uint256 => uint256[]) private _cycleProposals;
 
+    // Track if user has proposed a type in a cycle: cycleId => proposalType => user => hasProposed
+    mapping(uint256 => mapping(ILevrGovernor_v1.ProposalType => mapping(address => bool)))
+        private _hasProposedInCycle;
+
     // ============ Constructor ============
 
     constructor(
@@ -299,6 +303,11 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert MaxProposalsReached();
         }
 
+        // Check user hasn't already proposed this type in this cycle
+        if (_hasProposedInCycle[cycleId][proposalType][proposer]) {
+            revert AlreadyProposedInCycle();
+        }
+
         // Create proposal
         proposalId = ++_proposalCount;
 
@@ -321,6 +330,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         _activeProposalCount[proposalType]++;
         _cycleProposals[cycleId].push(proposalId);
+
+        // Mark that user has proposed this type in this cycle
+        _hasProposedInCycle[cycleId][proposalType][proposer] = true;
 
         emit ProposalCreated(proposalId, proposer, proposalType, amount, recipient, description);
     }
