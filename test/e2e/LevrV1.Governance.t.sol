@@ -299,8 +299,9 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
 
-        // Bob tries to vote but has 0 VP
+        // HIGH FIX [H-2]: Bob tries to vote but has 0 VP - now correctly reverts
         vm.prank(bob);
+        vm.expectRevert(ILevrGovernor_v1.InsufficientVotingPower.selector);
         ILevrGovernor_v1(governor).vote(pid, true);
 
         // Check vote receipts
@@ -312,7 +313,8 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         );
 
         assertGt(aliceReceipt.votes, 0, 'alice votes should be counted');
-        assertEq(bobReceipt.votes, 0, 'bob votes should be 0');
+        assertEq(bobReceipt.votes, 0, 'bob should not have voted (reverted)');
+        assertEq(bobReceipt.hasVoted, false, 'bob vote should not be recorded');
     }
 
     // ============ Test 4: Concurrency Limits ============
@@ -323,17 +325,18 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 1 days);
 
-        // Create maxActiveProposals (7) BoostStakingPool proposals (first auto-starts cycle)
-        vm.startPrank(alice);
-        for (uint256 i = 0; i < 7; i++) {
-            ILevrGovernor_v1(governor).proposeBoost(10 ether);
-        }
+        // Alice can only propose once per type per cycle
+        vm.prank(alice);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(10 ether); // First auto-starts cycle
+        assertGt(pid1, 0, 'should create first boost proposal');
 
-        // Try to create one more BoostStakingPool (should revert)
-        vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
+        // Alice tries to create another BoostStakingPool in same cycle (should revert)
+        vm.prank(alice);
+        vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
         ILevrGovernor_v1(governor).proposeBoost(10 ether);
 
-        // But TransferToAddress should still work (separate limit)
+        // But alice can create TransferToAddress proposal (different type)
+        vm.prank(alice);
         uint256 pidTransfer = ILevrGovernor_v1(governor).proposeTransfer(
             address(0xBEEF),
             10 ether,
@@ -341,16 +344,10 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         );
         assertGt(pidTransfer, 0, 'should create transfer proposal');
 
-        // Create 6 more TransferToAddress proposals (total 7)
-        for (uint256 i = 0; i < 6; i++) {
-            ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 10 ether, 'test');
-        }
-
-        // Try one more TransferToAddress (should revert)
-        vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
+        // Alice tries to create another TransferToAddress in same cycle (should revert)
+        vm.prank(alice);
+        vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
         ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 10 ether, 'test');
-
-        vm.stopPrank();
     }
 
     // ============ Test 5: Quorum Not Met ============

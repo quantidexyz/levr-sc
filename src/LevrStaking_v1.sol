@@ -55,13 +55,18 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address treasury_,
         address factory_
     ) external {
-        if (underlying != address(0)) revert();
+        // CRITICAL FIX [C-2]: Use custom error instead of generic revert()
+        if (underlying != address(0)) revert AlreadyInitialized();
         if (
             underlying_ == address(0) ||
             stakedToken_ == address(0) ||
             treasury_ == address(0) ||
             factory_ == address(0)
         ) revert ZeroAddress();
+
+        // CRITICAL FIX [C-2]: Ensure only factory can initialize
+        if (_msgSender() != factory_) revert OnlyFactory();
+
         underlying = underlying_;
         stakedToken = stakedToken_;
         treasury = treasury_;

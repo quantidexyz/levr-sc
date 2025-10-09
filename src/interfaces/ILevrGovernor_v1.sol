@@ -93,6 +93,9 @@ interface ILevrGovernor_v1 {
     /// @notice No active governance cycle
     error NoActiveCycle();
 
+    /// @notice Insufficient voting power to vote
+    error InsufficientVotingPower();
+
     // ============ Events ============
 
     /// @notice Emitted when a new proposal is created

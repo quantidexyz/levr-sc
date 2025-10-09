@@ -110,6 +110,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Calculate user's VP at proposal creation time (snapshot)
         uint256 votes = _calculateVPAtSnapshot(proposalId, voter);
 
+        // HIGH FIX [H-2]: Prevent 0 VP votes
+        if (votes == 0) revert InsufficientVotingPower();
+
         // Get user's balance for quorum tracking
         uint256 voterBalance = IERC20(stakedToken).balanceOf(voter);
 
@@ -350,8 +353,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Get user's stakeStartTime
         uint256 startTime = ILevrStaking_v1(staking).stakeStartTime(user);
 
-        // If user staked after proposal was created, they have 0 VP for this proposal
-        if (startTime == 0 || startTime >= proposal.createdAt) {
+        // HIGH FIX [H-2]: If user staked after proposal was created, they have 0 VP for this proposal
+        // Changed from >= to > for correct timing
+        if (startTime == 0 || startTime > proposal.createdAt) {
             return 0;
         }
 

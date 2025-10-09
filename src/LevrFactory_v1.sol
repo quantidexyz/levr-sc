@@ -65,7 +65,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     /// @inheritdoc ILevrFactory_v1
     function register(
         address clankerToken
-    ) external override returns (ILevrFactory_v1.Project memory project) {
+    ) external override nonReentrant returns (ILevrFactory_v1.Project memory project) {
         Project storage p = _projects[clankerToken];
         require(p.staking == address(0), 'ALREADY_REGISTERED');
 
@@ -79,6 +79,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
         // Look up prepared contracts for this caller
         ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[caller];
+
+        // CRITICAL FIX [C-1]: Delete the prepared contracts to prevent reuse
+        delete _preparedContracts[caller];
 
         // Deploy all contracts via delegatecall to deployer logic
         bytes memory data = abi.encodeWithSignature(

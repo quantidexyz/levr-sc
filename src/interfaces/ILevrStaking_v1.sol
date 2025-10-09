@@ -21,6 +21,8 @@ interface ILevrStaking_v1 {
     error InsufficientStake();
     error InsufficientRewardLiquidity();
     error InsufficientEscrow();
+    error AlreadyInitialized();
+    error OnlyFactory();
 
     // ============ Events ============
 

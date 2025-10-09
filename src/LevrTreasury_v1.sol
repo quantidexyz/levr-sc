@@ -54,6 +54,9 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         // approve and pull via accrueFromTreasury for atomicity
         IERC20(underlying).approve(project.staking, amount);
         ILevrStaking_v1(project.staking).accrueFromTreasury(underlying, amount, true);
+
+        // HIGH FIX [H-3]: Reset approval to 0 after to prevent unlimited approval vulnerability
+        IERC20(underlying).approve(project.staking, 0);
     }
 
     function getUnderlyingBalance() external view returns (uint256) {
