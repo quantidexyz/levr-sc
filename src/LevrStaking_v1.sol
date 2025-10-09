@@ -309,31 +309,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             .getClankerMetadata(underlying);
         if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
 
-        // The feeOwner in ClankerFeeLocker might not be the staking contract
-        // It could be the LP locker or the original reward recipient
-        // Let's try multiple potential feeOwners
-
-        // First try: staking contract as feeOwner
+        // Note: Fee owner can be configured externally via ClankerFeeLocker.setFeeOwner()
         try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
             uint256 fees
         ) {
-            if (fees > 0) return fees;
+            return fees;
         } catch {
-            // Continue to next attempt
+            return 0;
         }
-
-        // Second try: LP locker as feeOwner (fees might be stored under LP locker's name)
-        if (metadata.lpLocker != address(0)) {
-            try
-                IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token)
-            returns (uint256 fees) {
-                if (fees > 0) return fees;
-            } catch {
-                // Continue to next attempt
-            }
-        }
-
-        return 0;
     }
 
     /// @notice Internal function to claim pending rewards from ClankerFeeLocker
@@ -354,38 +337,17 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             }
         }
 
-        // Now claim from ClankerFeeLocker if available
+        // Claim from ClankerFeeLocker if available
+        // Note: Fee owner can be configured externally via ClankerFeeLocker.setFeeOwner()
         if (metadata.feeLocker != address(0)) {
-            // Try claiming with staking contract as feeOwner first
             try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
                 uint256 availableFees
             ) {
                 if (availableFees > 0) {
                     IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
-                    return; // Successfully claimed
                 }
             } catch {
-                // Continue to next attempt
-            }
-
-            // Try claiming with LP locker as feeOwner (fees might be under LP locker's ownership)
-            if (metadata.lpLocker != address(0)) {
-                try
-                    IClankerFeeLocker(metadata.feeLocker).availableFees(metadata.lpLocker, token)
-                returns (uint256 availableFees) {
-                    if (availableFees > 0) {
-                        // Need to claim to LP locker first, then transfer to staking
-                        // This is more complex and might require LP locker cooperation
-                        // For now, just try direct claim (might fail)
-                        try IClankerFeeLocker(metadata.feeLocker).claim(metadata.lpLocker, token) {
-                            // Claimed to LP locker - would need additional transfer logic
-                        } catch {
-                            // Can't claim directly
-                        }
-                    }
-                } catch {
-                    // Ignore errors
-                }
+                // Fee locker might not have this token or staking not set as fee owner
             }
         }
     }
@@ -482,6 +444,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint64 start = _streamStartByToken[token];
         uint64 end = _streamEndByToken[token];
         if (end == 0 || start == 0) return;
+
+        // MEDIUM FIX [M-2]: Don't consume stream time if no stakers
+        // This preserves rewards for when stakers return
+        if (_totalStaked == 0) return;
+
         uint64 last = _lastUpdateByToken[token];
         uint64 from = last < start ? start : last;
         uint64 to = uint64(block.timestamp);
@@ -494,11 +461,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             return;
         }
         uint256 vestAmount = (total * (to - from)) / duration;
-        if (_totalStaked > 0 && vestAmount > 0) {
+        if (vestAmount > 0) {
             ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
             info.accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
         }
-        // Advance last update regardless; if no stakers, the stream time is consumed
+        // Advance last update only when there are stakers
         _lastUpdateByToken[token] = to;
     }
 

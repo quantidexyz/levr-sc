@@ -96,6 +96,9 @@ interface ILevrGovernor_v1 {
     /// @notice Insufficient voting power to vote
     error InsufficientVotingPower();
 
+    /// @notice Cycle is still active, cannot start new one
+    error CycleStillActive();
+
     // ============ Events ============
 
     /// @notice Emitted when a new proposal is created
@@ -182,6 +185,12 @@ interface ILevrGovernor_v1 {
     ///      Automatically starts new cycle after execution
     /// @param proposalId The ID of the proposal to execute
     function execute(uint256 proposalId) external;
+
+    /// @notice Start a new governance cycle
+    /// @dev Can only be called if no active cycle exists or current cycle has ended
+    ///      Useful for recovering from failed cycles where no proposals were executed
+    ///      Anyone can call this function to restart governance
+    function startNewCycle() external;
 
     /// @notice Get the current state of a proposal
     /// @param proposalId The ID of the proposal
