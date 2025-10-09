@@ -94,10 +94,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Wait for VP to accumulate
         vm.warp(block.timestamp + 1 days);
 
-        // Start governance cycle
-        g.startNewCycle();
-
-        // First transfer proposal succeeds
+        // First transfer proposal succeeds (auto-starts cycle)
         vm.prank(u);
         g.proposeTransfer(address(0xB0B), 1 ether, 'ops');
 
@@ -112,13 +109,11 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         g.vote(1, true);
 
         // Execute first proposal to free up the slot (quorum/approval = 0 for this test)
+        // Execution auto-starts new cycle
         vm.warp(block.timestamp + 5 days + 1); // Past voting window
         g.execute(1);
 
-        // Start new cycle
-        g.startNewCycle();
-
-        // Now new proposal should succeed
+        // Now new proposal should succeed in the new auto-started cycle
         vm.prank(u);
         g.proposeTransfer(address(0xB0B), 1 ether, 'ops3');
     }

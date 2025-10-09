@@ -158,14 +158,14 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Wait for some time to accrue VP
         vm.warp(block.timestamp + 10 days);
 
-        // Start governance cycle
-        ILevrGovernor_v1(governor).startNewCycle();
-        uint256 cycleId = ILevrGovernor_v1(governor).currentCycleId();
-        assertEq(cycleId, 1, 'cycle should be 1');
-
-        // Create 3 proposals during proposal window
+        // Create first proposal (auto-starts governance cycle - proposer pays gas)
         vm.prank(alice);
         uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        uint256 cycleId = ILevrGovernor_v1(governor).currentCycleId();
+        assertEq(cycleId, 1, 'cycle should be 1 after first proposal');
+
+        // Create more proposals during proposal window
 
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
@@ -278,9 +278,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Wait some time
         vm.warp(block.timestamp + 10 days);
 
-        // Start cycle and create proposal
-        ILevrGovernor_v1(governor).startNewCycle();
-
+        // Create proposal (auto-starts cycle - proposer pays gas)
         vm.prank(alice);
         uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
 
@@ -325,10 +323,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 1 days);
 
-        // Start cycle
-        ILevrGovernor_v1(governor).startNewCycle();
-
-        // Create maxActiveProposals (7) BoostStakingPool proposals
+        // Create maxActiveProposals (7) BoostStakingPool proposals (first auto-starts cycle)
         vm.startPrank(alice);
         for (uint256 i = 0; i < 7; i++) {
             ILevrGovernor_v1(governor).proposeBoost(10 ether);
@@ -375,7 +370,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 1 days);
 
         // Start cycle
-        ILevrGovernor_v1(governor).startNewCycle();
+        // Cycle auto-starts on first proposal
 
         // Create proposal
         vm.prank(alice);
@@ -417,7 +412,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 1 days);
 
         // Start cycle
-        ILevrGovernor_v1(governor).startNewCycle();
+        // Cycle auto-starts on first proposal
 
         // Create proposal
         vm.prank(alice);
@@ -459,7 +454,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 1 days);
 
         // Start cycle
-        ILevrGovernor_v1(governor).startNewCycle();
+        // Cycle auto-starts on first proposal
 
         // Create 3 proposals
         vm.prank(alice);
@@ -532,7 +527,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 1 days);
 
         // Start cycle
-        ILevrGovernor_v1(governor).startNewCycle();
+        // Cycle auto-starts on first proposal
 
         // Alice tries to propose (should revert)
         vm.prank(alice);
@@ -553,7 +548,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         assertGt(pid, 0, 'proposal should be created');
     }
 
-    // ============ Test 9: Proposal Window Timing ============
+    // ============ Test 9: Proposal Window Timing & Auto-Cycle Management ============
 
     function test_ProposalWindowTiming() public {
         // Alice has enough stake
@@ -561,43 +556,40 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 1 days);
 
-        // Try to propose before cycle starts (should revert)
-        vm.prank(alice);
-        vm.expectRevert(ILevrGovernor_v1.NoActiveCycle.selector);
-        ILevrGovernor_v1(governor).proposeBoost(100 ether);
-
-        // Start cycle
-        ILevrGovernor_v1(governor).startNewCycle();
-
-        // Propose during proposal window (should succeed)
+        // First proposal auto-starts cycle 1
         vm.prank(alice);
         uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
-        assertEq(pid1, 1);
+        assertEq(pid1, 1, 'First proposal should have ID 1');
+        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 1, 'Should be in cycle 1');
 
-        // Warp to end of proposal window
+        // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
 
-        // Try to propose after proposal window closed (should revert)
-        vm.prank(alice);
-        vm.expectRevert(ILevrGovernor_v1.ProposalWindowClosed.selector);
-        ILevrGovernor_v1(governor).proposeBoost(200 ether);
-
-        // But we can still vote
+        // Can vote during voting window
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid1, true);
 
-        // Warp past voting window
+        // Warp past voting window (cycle ended)
         vm.warp(block.timestamp + 5 days + 1);
 
         // Try to vote after voting window (should revert)
-        vm.expectRevert(ILevrGovernor_v1.VotingNotActive.selector);
-        vm.prank(alice);
-        ILevrGovernor_v1(governor).vote(pid1, true); // Will fail because already voted, but let's test with bob
-
-        // Give bob tokens
         _stakeFor(bob, 5 ether);
         vm.prank(bob);
         vm.expectRevert(ILevrGovernor_v1.VotingNotActive.selector);
         ILevrGovernor_v1(governor).vote(pid1, true);
+
+        // New proposal after cycle ended auto-starts cycle 2
+        vm.prank(alice);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        assertEq(pid2, 2, 'Second proposal should have ID 2');
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            2,
+            'Should be in cycle 2 after auto-start'
+        );
+
+        // Verify pid2 is in new cycle
+        ILevrGovernor_v1.Proposal memory p2 = ILevrGovernor_v1(governor).getProposal(pid2);
+        assertEq(p2.cycleId, 2, 'New proposal should be in cycle 2');
     }
 }

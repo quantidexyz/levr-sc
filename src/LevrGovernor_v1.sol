@@ -71,14 +71,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         underlying = underlying_;
     }
 
-    // ============ Modifiers ============
-
-    modifier onlyFactoryOwner() {
-        // For cycle management - only factory owner can start cycles
-        // Factory owner check would go here (simplified for now)
-        _;
-    }
-
     // ============ External Functions ============
 
     /// @inheritdoc ILevrGovernor_v1
@@ -195,27 +187,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         }
 
         emit ProposalExecuted(proposalId, _msgSender());
-    }
 
-    /// @inheritdoc ILevrGovernor_v1
-    function startNewCycle() external onlyFactoryOwner {
-        // Get config from factory
-        uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds();
-        uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds();
-
-        uint256 cycleId = ++_currentCycleId;
-        uint256 start = block.timestamp;
-        uint256 proposalEnd = start + proposalWindow;
-        uint256 voteEnd = proposalEnd + votingWindow;
-
-        _cycles[cycleId] = Cycle({
-            proposalWindowStart: start,
-            proposalWindowEnd: proposalEnd,
-            votingWindowEnd: voteEnd,
-            executed: false
-        });
-
-        emit CycleStarted(cycleId, start, proposalEnd, voteEnd);
+        // Automatically start new cycle after successful execution (executor pays gas)
+        _startNewCycle();
     }
 
     // ============ View Functions ============
@@ -293,13 +267,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         address proposer = _msgSender();
 
-        // Check active cycle exists
-        if (_currentCycleId == 0) revert NoActiveCycle();
+        // Auto-start new cycle if none exists or current cycle has ended
+        if (_currentCycleId == 0 || _needsNewCycle()) {
+            _startNewCycle();
+        }
 
         uint256 cycleId = _currentCycleId;
         Cycle memory cycle = _cycles[cycleId];
 
-        // Check proposal window is open
+        // Check proposal window is open (should always be true after auto-start)
         if (
             block.timestamp < cycle.proposalWindowStart || block.timestamp > cycle.proposalWindowEnd
         ) {
@@ -441,5 +417,36 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         }
 
         return winnerId; // Returns 0 if no winner
+    }
+
+    /// @dev Check if a new cycle needs to be started
+    function _needsNewCycle() internal view returns (bool) {
+        if (_currentCycleId == 0) return true;
+
+        Cycle memory cycle = _cycles[_currentCycleId];
+
+        // New cycle needed if voting window has ended
+        return block.timestamp > cycle.votingWindowEnd;
+    }
+
+    /// @dev Internal function to start a new governance cycle
+    function _startNewCycle() internal {
+        // Get config from factory
+        uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds();
+        uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds();
+
+        uint256 cycleId = ++_currentCycleId;
+        uint256 start = block.timestamp;
+        uint256 proposalEnd = start + proposalWindow;
+        uint256 voteEnd = proposalEnd + votingWindow;
+
+        _cycles[cycleId] = Cycle({
+            proposalWindowStart: start,
+            proposalWindowEnd: proposalEnd,
+            votingWindowEnd: voteEnd,
+            executed: false
+        });
+
+        emit CycleStarted(cycleId, start, proposalEnd, voteEnd);
     }
 }

@@ -140,16 +140,16 @@ interface ILevrGovernor_v1 {
 
     /// @notice Create a proposal to boost the staking pool
     /// @dev Requires minimum staked balance (minSTokenBpsToSubmit)
-    ///      Proposal window must be open
     ///      Max active proposals per type not exceeded
+    ///      Automatically starts new cycle if none exists or current ended
     /// @param amount Amount of tokens to transfer from treasury to staking
     /// @return proposalId The ID of the created proposal
     function proposeBoost(uint256 amount) external returns (uint256 proposalId);
 
     /// @notice Create a proposal to transfer tokens to an address
     /// @dev Requires minimum staked balance (minSTokenBpsToSubmit)
-    ///      Proposal window must be open
     ///      Max active proposals per type not exceeded
+    ///      Automatically starts new cycle if none exists or current ended
     /// @param recipient Address to receive tokens
     /// @param amount Amount of tokens to transfer
     /// @param description Proposal description
@@ -173,13 +173,9 @@ interface ILevrGovernor_v1 {
     ///      Proposal must meet quorum and approval thresholds
     ///      Proposal must be the winner (highest yes votes) for its cycle
     ///      Calls treasury to perform the action
+    ///      Automatically starts new cycle after execution
     /// @param proposalId The ID of the proposal to execute
     function execute(uint256 proposalId) external;
-
-    /// @notice Start a new governance cycle
-    /// @dev Only callable by authorized address (factory owner or admin)
-    ///      Sets proposal and voting windows based on factory config
-    function startNewCycle() external;
 
     /// @notice Get the current state of a proposal
     /// @param proposalId The ID of the proposal
