@@ -332,6 +332,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             proposer: proposer,
             amount: amount,
             recipient: recipient,
+            description: description,
             createdAt: block.timestamp,
             votingStartsAt: cycle.proposalWindowEnd,
             votingEndsAt: cycle.votingWindowEnd,

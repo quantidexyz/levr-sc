@@ -31,6 +31,7 @@ interface ILevrGovernor_v1 {
         address proposer; // Address that created the proposal
         uint256 amount; // Amount of tokens to transfer
         address recipient; // Recipient address (for TransferToAddress type)
+        string description; // Proposal description (for TransferToAddress type)
         uint256 createdAt; // Timestamp when proposal was created
         uint256 votingStartsAt; // Timestamp when voting starts
         uint256 votingEndsAt; // Timestamp when voting ends
