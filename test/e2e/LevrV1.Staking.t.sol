@@ -62,6 +62,9 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
     function _deployRegisterAndGet(
         address fac
     ) internal returns (address governor, address treasury, address staking, address stakedToken) {
+        // Prepare infrastructure first
+        LevrFactory_v1(fac).prepareForDeployment();
+
         ClankerDeployer d = new ClankerDeployer();
         clankerToken = d.deployFactoryStaticFull({
             clankerFactory: clankerFactory,

@@ -31,10 +31,11 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         underlying = new MockERC20('Token', 'TKN');
 
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
-        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(
-            cfg,
-            address(this)
-        );
+        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
+
+        // Prepare infrastructure before registering
+        factory.prepareForDeployment();
+
         ILevrFactory_v1.Project memory project = factory.register(address(underlying));
         governor = LevrGovernor_v1(project.governor);
         treasury = LevrTreasury_v1(payable(project.treasury));
@@ -72,6 +73,10 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             cfg,
             address(this)
         );
+
+        // Prepare infrastructure before registering
+        fac.prepareForDeployment();
+
         ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
         LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
 

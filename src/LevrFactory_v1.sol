@@ -12,6 +12,9 @@ import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 import {IClanker} from './interfaces/external/IClanker.sol';
 import {IClankerLpLockerFeeConversion} from './interfaces/external/IClankerLpLockerFeeConversion.sol';
 
+import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
+import {LevrStaking_v1} from './LevrStaking_v1.sol';
+
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Context {
     uint16 public override protocolFeeBps;
     uint32 public override streamWindowSeconds;
@@ -48,19 +51,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     function prepareForDeployment() external override returns (address treasury, address staking) {
         address deployer = _msgSender();
 
-        // Deploy via delegatecall to keep factory size small
-        bytes memory data = abi.encodeWithSignature(
-            'deployInfrastructure(address,address)',
-            address(this),
-            trustedForwarder()
-        );
+        treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
+        staking = address(new LevrStaking_v1(trustedForwarder()));
 
-        (bool success, bytes memory returnData) = levrDeployer.delegatecall(data);
-        require(success, 'INFRASTRUCTURE_DEPLOY_FAILED');
-
-        (treasury, staking) = abi.decode(returnData, (address, address));
-
-        // Store prepared contracts for this deployer
         _preparedContracts[deployer] = ILevrFactory_v1.PreparedContracts({
             treasury: treasury,
             staking: staking
@@ -87,20 +80,12 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         // Look up prepared contracts for this caller
         ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[caller];
 
-        return _deployProject(clankerToken, prepared.treasury, prepared.staking);
-    }
-
-    function _deployProject(
-        address clankerToken,
-        address treasury_,
-        address staking_
-    ) internal returns (ILevrFactory_v1.Project memory project) {
         // Deploy all contracts via delegatecall to deployer logic
         bytes memory data = abi.encodeWithSignature(
             'deployProject(address,address,address,address,address)',
             clankerToken,
-            treasury_,
-            staking_,
+            prepared.treasury,
+            prepared.staking,
             address(this),
             trustedForwarder()
         );

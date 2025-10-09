@@ -27,6 +27,11 @@ interface ILevrTreasury_v1 {
 
     // ============ Functions ============
 
+    /// @notice Initialize the treasury (called once by factory during deployment).
+    /// @param governor_ Governor contract address
+    /// @param underlying_ Underlying token address
+    function initialize(address governor_, address underlying_) external;
+
     /// @notice Execute a governor-authorized transfer of underlying.
     /// @param to Recipient
     /// @param amount Amount to transfer

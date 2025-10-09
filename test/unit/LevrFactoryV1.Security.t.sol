@@ -19,10 +19,7 @@ contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
 
     function setUp() public {
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
-        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(
-            cfg,
-            address(this)
-        );
+        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
     }
 
     function test_cannot_register_with_someone_elses_treasury() public {
@@ -88,18 +85,22 @@ contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
         assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
     }
 
-    function test_can_register_without_preparation() public {
+    function test_can_register_with_preparation() public {
+        // Bob prepares infrastructure
+        vm.prank(bob);
+        (address bobTreasury, address bobStaking) = factory.prepareForDeployment();
+
         // Bob creates token (he's the admin)
         vm.prank(bob);
         MockERC20 bobToken = new MockERC20('Bob Token', 'BOB');
 
-        // Bob registers without preparation - should succeed
+        // Bob registers with his prepared contracts - should succeed
         vm.prank(bob);
         ILevrFactory_v1.Project memory project = factory.register(address(bobToken));
 
-        assertTrue(project.treasury != address(0), 'Treasury deployed');
+        assertEq(project.treasury, bobTreasury, 'Treasury should match prepared');
+        assertEq(project.staking, bobStaking, 'Staking should match prepared');
         assertTrue(project.governor != address(0), 'Governor deployed');
-        assertTrue(project.staking != address(0), 'Staking deployed');
         assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
     }
 
