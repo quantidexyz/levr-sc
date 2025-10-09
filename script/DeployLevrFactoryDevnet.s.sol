@@ -33,7 +33,7 @@ import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
 contract DeployLevrFactoryDevnet is Script {
     // Devnet configuration - deterministic values for consistent deployment
     uint16 constant PROTOCOL_FEE_BPS = 50; // 0.5%
-    uint32 constant STREAM_WINDOW_SECONDS = 2592000; // 30 days
+    uint32 constant STREAM_WINDOW_SECONDS = 259200; // 3 days
 
     function run() external {
         uint256 privateKey = vm.envUint('PRIVATE_KEY');
