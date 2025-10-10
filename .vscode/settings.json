@@ -9,11 +9,11 @@
   "solidity.packageDefaultDependenciesDirectory": "lib",
   "solidity.remappings": [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-    "@uniswapV4-core/=lib/v4-core/src/",
+    "@uniswapV4-core/=lib/universal-router/lib/v4-periphery/lib/v4-core/src/",
     "@uniswapV4-periphery/=lib/universal-router/lib/v4-periphery/src/",
     "@uniswapV4-permit2/=lib/universal-router/lib/permit2/src/",
     "@uniswapV4-universal-router/=lib/universal-router/",
-    "forge-std/=lib/forge-std/src/"
+    "forge-std/=lib/openzeppelin-contracts/lib/forge-std/src/"
   ],
 
   // ---------------------------
