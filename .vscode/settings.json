@@ -1,4 +1,6 @@
 {
+  // ---------------------------
+  // Solidity Settings
   "solidity.compileUsingRemoteVersion": "v0.8.30",
   "solidity.defaultCompiler": "remote",
   "solidity.enabledAsYouTypeCompilationErrorCheck": true,
@@ -13,11 +15,35 @@
     "@uniswap/permit2/=lib/permit2/src/",
     "@uniswap/universal-router/=lib/universal-router/src/"
   ],
-  "files.associations": {
-    "*.sol": "solidity"
-  },
+
+  // ---------------------------
+  // Editor Settings
   "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  // ---------------------------
+  // Files & Associations
+  "files.associations": {
+    "*.sol": "solidity",
+    ".env*": "env",
+    ".env": "env"
+  },
+  "git.detectSubmodules": false,
+
+  // ---------------------------
+  // Language-Specific Settings
+
+  // JuanBlanco
   "[solidity]": {
     "editor.defaultFormatter": "JuanBlanco.solidity"
-  }
+  },
+
+  // ---------------------------
+  // Extension Settings
+  "emmet.useInlineCompletions": true,
+  "prettier.configPath": "../.prettierrc.mjs",
+
+  // ---------------------------
+  // Cursor Settings
+  "cursor.cpp.enablePartialAccepts": true
 }
