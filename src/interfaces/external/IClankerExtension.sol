@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IClanker} from "./IClanker.sol";
+import {IClanker} from './IClanker.sol';
 
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
+import {IERC165} from '@openzeppelin/contracts/utils/introspection/IERC165.sol';
+import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';
 
 interface IClankerExtension is IERC165 {
     // error when the msgValue is not zero when it is expected to be zero

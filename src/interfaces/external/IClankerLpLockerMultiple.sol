@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IClankerLpLocker} from "./IClankerLPLocker.sol";
-import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
+import {IClankerLpLocker} from './IClankerLPLocker.sol';
+import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';
 
 interface IClankerLpLockerMultiple is IClankerLpLocker {
     error Unauthorized();
@@ -36,11 +36,7 @@ interface IClankerLpLockerMultiple is IClankerLpLocker {
         address newAdmin
     );
 
-    function updateRewardAdmin(
-        address token,
-        uint256 rewardIndex,
-        address newAdmin
-    ) external;
+    function updateRewardAdmin(address token, uint256 rewardIndex, address newAdmin) external;
 
     function updateRewardRecipient(
         address token,

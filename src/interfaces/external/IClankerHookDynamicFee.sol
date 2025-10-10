@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {PoolId} from "@uniswap/v4-core/types/PoolId.sol";
+import {PoolId} from '@uniswapV4-core/types/PoolId.sol';
 
 interface IClankerHookDynamicFee {
     error BaseFeeTooLow();
@@ -40,10 +40,6 @@ interface IClankerHookDynamicFee {
         uint24 prevVA; // swap's previous volatility accumulation, used to generate the volatility reference
     }
 
-    function poolConfigVars(
-        PoolId poolId
-    ) external view returns (PoolDynamicConfigVars memory);
-    function poolFeeVars(
-        PoolId poolId
-    ) external view returns (PoolDynamicFeeVars memory);
+    function poolConfigVars(PoolId poolId) external view returns (PoolDynamicConfigVars memory);
+    function poolFeeVars(PoolId poolId) external view returns (PoolDynamicFeeVars memory);
 }

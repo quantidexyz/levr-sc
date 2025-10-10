@@ -16,9 +16,9 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IClankerLpLocker} from '../../src/interfaces/external/IClankerLPLocker.sol';
 import {IClankerLpLockerMultiple} from '../../src/interfaces/external/IClankerLpLockerMultiple.sol';
 import {IClankerFeeLocker} from '../../src/interfaces/external/IClankerFeeLocker.sol';
-import {PoolKey} from '@uniswap/v4-core/types/PoolKey.sol';
-import {Currency} from '@uniswap/v4-core/types/Currency.sol';
-import {IPoolManager} from '@uniswap/v4-core/src/interfaces/IPoolManager.sol';
+import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';
+import {Currency} from '@uniswapV4-core/types/Currency.sol';
+import {IPoolManager} from '@uniswapV4-core/interfaces/IPoolManager.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {

@@ -1,25 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IClanker} from "./IClanker.sol";
+import {IClanker} from './IClanker.sol';
 
-import {IPoolManager} from "@uniswap/v4-core/interfaces/IPoolManager.sol";
-import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
+import {IPoolManager, SwapParams} from '@uniswapV4-core/interfaces/IPoolManager.sol';
+import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';
 
 interface IClankerMevModule {
     error PoolLocked();
     error OnlyHook();
 
     // initialize the mev module
-    function initialize(
-        PoolKey calldata poolKey,
-        bytes calldata mevModuleInitData
-    ) external;
+    function initialize(PoolKey calldata poolKey, bytes calldata mevModuleInitData) external;
 
     // before a swap, call the mev module
     function beforeSwap(
         PoolKey calldata poolKey,
-        IPoolManager.SwapParams calldata swapParams,
+        SwapParams calldata swapParams,
         bool clankerIsToken0,
         bytes calldata mevModuleSwapData
     ) external returns (bool disableMevModule);

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IClanker} from "./IClanker.sol";
-import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
+import {IClanker} from './IClanker.sol';
+import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';
 
 interface IClankerLpLocker {
     struct TokenRewardInfo {
@@ -54,9 +54,7 @@ interface IClankerLpLocker {
     ) external returns (uint256 tokenId);
 
     // get the reward info for a token
-    function tokenRewards(
-        address token
-    ) external view returns (TokenRewardInfo memory);
+    function tokenRewards(address token) external view returns (TokenRewardInfo memory);
 
     function supportsInterface(bytes4 interfaceId) external view returns (bool);
 }

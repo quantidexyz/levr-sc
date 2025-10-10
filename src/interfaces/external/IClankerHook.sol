@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IClanker} from "./IClanker.sol";
+import {IClanker} from './IClanker.sol';
 
-import {PoolId} from "@uniswap/v4-core/types/PoolId.sol";
-import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
+import {PoolId} from '@uniswapV4-core/types/PoolId.sol';
+import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';
 
 interface IClankerHook {
     error ETHPoolNotAllowed();
@@ -57,17 +57,12 @@ interface IClankerHook {
     ) external returns (PoolKey memory);
 
     // turn a pool's mev module on if it exists
-    function initializeMevModule(
-        PoolKey calldata poolKey,
-        bytes calldata mevModuleData
-    ) external;
+    function initializeMevModule(PoolKey calldata poolKey, bytes calldata mevModuleData) external;
 
     // note: original base IClankerHook deployment is missing these functions but
     // the IClankerLpFeeConversion locker needs them
     function mevModuleEnabled(PoolId poolId) external view returns (bool);
-    function poolCreationTimestamp(
-        PoolId poolId
-    ) external view returns (uint256);
+    function poolCreationTimestamp(PoolId poolId) external view returns (uint256);
     function MAX_MEV_MODULE_DELAY() external view returns (uint256);
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool);

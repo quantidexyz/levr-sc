@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IClanker} from "./IClanker.sol";
+import {IClanker} from './IClanker.sol';
 
-import {IPoolManager} from "@uniswap/v4-core/interfaces/IPoolManager.sol";
-import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
+import {IPoolManager, SwapParams} from '@uniswapV4-core/interfaces/IPoolManager.sol';
+import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';
 
-import {BalanceDelta} from "@uniswap/v4-core/types/BalanceDelta.sol";
+import {BalanceDelta} from '@uniswapV4-core/types/BalanceDelta.sol';
 
 interface IClankerHookV2PoolExtension {
     error OnlyHook();
@@ -29,7 +29,7 @@ interface IClankerHookV2PoolExtension {
     // after a swap, call the user extension to perform any post-swap actions
     function afterSwap(
         PoolKey calldata poolKey,
-        IPoolManager.SwapParams calldata swapParams,
+        SwapParams calldata swapParams,
         BalanceDelta delta,
         bool clankerIsToken0,
         bytes calldata poolExtensionSwapData
