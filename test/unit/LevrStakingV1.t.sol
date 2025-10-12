@@ -188,28 +188,24 @@ contract LevrStakingV1_UnitTest is Test {
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        // Wait 100 days - VP should be 1000 * 100 days
+        // Wait 100 days - VP should be 1000 token-days (normalized)
         vm.warp(block.timestamp + 100 days);
         uint256 vpBefore = staking.getVotingPower(address(this));
-        assertEq(vpBefore, 1000 ether * 100 days, 'VP should be 1000 * 100 days');
+        assertEq(vpBefore, 1000 * 100, 'VP should be 100,000 token-days');
 
         // Unstake 30% (300 tokens)
         uint256 returnedVP = staking.unstake(300 ether, address(this));
 
         // Immediately after unstake: 700 tokens * 70 days = 49,000 token-days
         uint256 vpAfter = staking.getVotingPower(address(this));
-        uint256 expectedVP = 700 ether * 70 days;
-        assertEq(vpAfter, expectedVP, 'VP should be reduced by 30% (time * remaining%)');
+        uint256 expectedVP = 700 * 70;
+        assertEq(vpAfter, expectedVP, 'VP should be 49,000 token-days (30% reduction)');
         assertEq(returnedVP, expectedVP, 'Returned VP should match actual VP');
 
         // After 30 more days: 700 tokens * 100 days total
         vm.warp(block.timestamp + 30 days);
         uint256 vpFinal = staking.getVotingPower(address(this));
-        assertEq(
-            vpFinal,
-            700 ether * 100 days,
-            'VP should continue accumulating from new baseline'
-        );
+        assertEq(vpFinal, 700 * 100, 'VP should be 70,000 token-days (continues accumulating)');
     }
 
     function test_full_unstake_resets_time_to_zero() public {
@@ -237,10 +233,10 @@ contract LevrStakingV1_UnitTest is Test {
         // Unstake 50%
         uint256 returnedVP = staking.unstake(1000 ether, address(this));
 
-        // Should have: 1000 tokens * 100 days (50% of time)
+        // Should have: 1000 tokens * 100 days = 100,000 token-days
         uint256 vp = staking.getVotingPower(address(this));
-        uint256 expectedVP = 1000 ether * 100 days;
-        assertEq(vp, expectedVP, '50% unstake should reduce time by 50%');
+        uint256 expectedVP = 1000 * 100;
+        assertEq(vp, expectedVP, 'VP should be 100,000 token-days');
         assertEq(returnedVP, expectedVP, 'Returned VP should match for UI simulation');
     }
 
@@ -251,22 +247,22 @@ contract LevrStakingV1_UnitTest is Test {
         // Wait 100 days, unstake 20% (200 tokens)
         vm.warp(block.timestamp + 100 days);
         staking.unstake(200 ether, address(this));
-        // Now: 800 tokens * 80 days
+        // Now: 800 tokens * 80 days = 64,000 token-days
         uint256 vp1 = staking.getVotingPower(address(this));
-        assertEq(vp1, 800 ether * 80 days, 'First unstake: 800 tokens * 80 days');
+        assertEq(vp1, 800 * 80, 'First unstake: 64,000 token-days');
 
         // Wait 20 more days (total 100 days from new baseline)
         vm.warp(block.timestamp + 20 days);
-        // Now: 800 tokens * 100 days
+        // Now: 800 tokens * 100 days = 80,000 token-days
         uint256 vp2 = staking.getVotingPower(address(this));
-        assertEq(vp2, 800 ether * 100 days, 'After 20 days: 800 tokens * 100 days');
+        assertEq(vp2, 800 * 100, 'After 20 days: 80,000 token-days');
 
         // Unstake 25% of remaining (200 tokens of 800)
         staking.unstake(200 ether, address(this));
-        // Now: 600 tokens * 75 days (25% reduction from 100 days)
+        // Now: 600 tokens * 75 days = 45,000 token-days
 
         uint256 vp3 = staking.getVotingPower(address(this));
-        assertEq(vp3, 600 ether * 75 days, 'Second unstake: 600 tokens * 75 days');
+        assertEq(vp3, 600 * 75, 'Second unstake: 45,000 token-days');
     }
 
     function test_partial_unstake_then_restake_preserves_time() public {
@@ -278,19 +274,15 @@ contract LevrStakingV1_UnitTest is Test {
         // Partial unstake
         staking.unstake(500 ether, address(this));
         uint256 vpAfterUnstake = staking.getVotingPower(address(this));
-        assertEq(vpAfterUnstake, 500 ether * 50 days, 'After unstake: 500 tokens * 50 days');
+        assertEq(vpAfterUnstake, 500 * 50, 'After unstake: 25,000 token-days');
 
         // Restake (top-up preserves time)
         underlying.approve(address(staking), 300 ether);
         staking.stake(300 ether);
 
-        // VP should be (500 + 300) * 50 days = 40,000 token-days
+        // VP should be 800 tokens * 50 days = 40,000 token-days
         uint256 vpAfterRestake = staking.getVotingPower(address(this));
-        assertEq(
-            vpAfterRestake,
-            800 ether * 50 days,
-            'After restake: 800 tokens * 50 days (time preserved)'
-        );
+        assertEq(vpAfterRestake, 800 * 50, 'After restake: 40,000 token-days (time preserved)');
     }
 
     function test_unstake_everything_resets_to_zero() public {
@@ -316,9 +308,9 @@ contract LevrStakingV1_UnitTest is Test {
         // Unstake 10% (100 tokens)
         staking.unstake(100 ether, address(this));
 
-        // Should have: 900 tokens * 900 days (90% of time)
+        // Should have: 900 tokens * 900 days = 810,000 token-days
         uint256 vp = staking.getVotingPower(address(this));
-        assertEq(vp, 900 ether * 900 days, '10% unstake should reduce time by 10%');
+        assertEq(vp, 900 * 900, '10% unstake should give 810,000 token-days');
     }
 
     function test_partial_unstake_90_percent() public {
@@ -331,8 +323,8 @@ contract LevrStakingV1_UnitTest is Test {
         // Unstake 90% (900 tokens)
         staking.unstake(900 ether, address(this));
 
-        // Should have: 100 tokens * 100 days (10% of time)
+        // Should have: 100 tokens * 100 days = 10,000 token-days
         uint256 vp = staking.getVotingPower(address(this));
-        assertEq(vp, 100 ether * 100 days, '90% unstake should reduce time by 90%');
+        assertEq(vp, 100 * 100, '90% unstake should give 10,000 token-days');
     }
 }

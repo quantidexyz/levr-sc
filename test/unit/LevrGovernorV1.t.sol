@@ -80,19 +80,19 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
         LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
 
-        // fund user tokens and stake 1 wei to satisfy minWTokenToSubmit
+        // fund user tokens and stake enough to get meaningful VP with token-days normalization
         address u = address(0x1111);
         underlying.mint(u, 10 ether);
         vm.startPrank(u);
         underlying.approve(proj.staking, type(uint256).max);
-        LevrStaking_v1(proj.staking).stake(1);
+        LevrStaking_v1(proj.staking).stake(1 ether); // Stake 1 token instead of 1 wei
         vm.stopPrank();
 
         // fund treasury for transfers
         underlying.mint(proj.treasury, 10_000 ether);
 
-        // Wait for VP to accumulate
-        vm.warp(block.timestamp + 1 days);
+        // Wait for VP to accumulate (with normalization, need time to get non-zero VP)
+        vm.warp(block.timestamp + 10 days);
 
         // First transfer proposal succeeds (auto-starts cycle)
         vm.prank(u);

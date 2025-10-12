@@ -122,10 +122,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         stakeStartTime[staker] = _onUnstakeNewTimestamp(amount);
 
         // Calculate new voting power after unstake (for UI simulation)
+        // Normalized to token-days for UI-friendly numbers
         uint256 remainingBalance = _staked[staker];
         uint256 newStartTime = stakeStartTime[staker];
         if (remainingBalance > 0 && newStartTime > 0) {
-            newVotingPower = remainingBalance * (block.timestamp - newStartTime);
+            uint256 timeStaked = block.timestamp - newStartTime;
+            newVotingPower = (remainingBalance * timeStaked) / (1e18 * 86400);
         } else {
             newVotingPower = 0;
         }
@@ -492,7 +494,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (balance == 0) return 0; // No staked balance
 
         uint256 timeStaked = block.timestamp - startTime;
-        return balance * timeStaked;
+
+        // Normalize to token-days: divide by 1e18 (token decimals) and 86400 (seconds per day)
+        // This makes VP human-readable: 1000 tokens × 100 days = 100,000 token-days
+        return (balance * timeStaked) / (1e18 * 86400);
     }
 
     /// @notice Calculate new stakeStartTime after partial unstake

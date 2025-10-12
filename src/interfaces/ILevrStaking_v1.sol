@@ -126,9 +126,11 @@ interface ILevrStaking_v1 {
     function stakeStartTime(address user) external view returns (uint256 timestamp);
 
     /// @notice Calculate voting power for a user
-    /// @dev VP = staked balance × time staked (in seconds)
+    /// @dev VP = (staked balance × time staked) / (1e18 × 86400)
+    ///      Normalized to token-days for UI-friendly numbers
+    ///      Example: 1000 tokens staked for 100 days = 100,000 token-days
     ///      Returns 0 if user has never staked or has unstaked completely
     /// @param user The user address
-    /// @return votingPower The user's voting power
+    /// @return votingPower The user's voting power in token-days
     function getVotingPower(address user) external view returns (uint256 votingPower);
 }

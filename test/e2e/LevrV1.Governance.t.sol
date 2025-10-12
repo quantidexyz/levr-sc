@@ -245,18 +245,18 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Wait 30 days to accumulate VP
         vm.warp(block.timestamp + 30 days);
 
-        // Check Alice's VP (should be 5 tokens × 30 days)
+        // Check Alice's VP (should be 5 tokens × 30 days = 150 token-days)
         uint256 vpBefore = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertEq(vpBefore, 5 ether * 30 days, 'alice should have 5 * 30 days VP');
+        assertEq(vpBefore, 5 * 30, 'alice should have 150 token-days VP');
 
         // Alice unstakes 1 token (20% unstake → proportional time reduction)
         vm.prank(alice);
         ILevrStaking_v1(staking).unstake(1 ether, alice);
 
-        // Check Alice's VP after unstake (should be 4 tokens × 24 days = 80% of previous)
+        // Check Alice's VP after unstake (should be 4 tokens × 24 days = 96 token-days)
         uint256 vpAfter = ILevrStaking_v1(staking).getVotingPower(alice);
-        uint256 expectedVP = 4 ether * 24 days; // 80% of tokens, 80% of time
-        assertEq(vpAfter, expectedVP, 'alice VP should be proportionally reduced (20% loss)');
+        uint256 expectedVP = 4 * 24; // 80% of tokens, 80% of time
+        assertEq(vpAfter, expectedVP, 'alice VP should be 96 token-days (20% loss)');
 
         // Alice stakes again (top-up preserves time baseline)
         vm.prank(alice);
@@ -264,14 +264,14 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         vm.prank(alice);
         ILevrStaking_v1(staking).stake(1 ether);
 
-        // VP should now be 5 tokens × 24 days (time baseline preserved)
+        // VP should now be 5 tokens × 24 days = 120 token-days (time baseline preserved)
         uint256 vpAfterRestake = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertEq(vpAfterRestake, 5 ether * 24 days, 'restake preserves time baseline');
+        assertEq(vpAfterRestake, 5 * 24, 'restake preserves time baseline (120 token-days)');
 
         // Wait 1 day and verify time accumulates from baseline
         vm.warp(block.timestamp + 1 days);
         uint256 vpNew = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertEq(vpNew, 5 ether * 25 days, 'VP accumulates from new baseline');
+        assertEq(vpNew, 5 * 25, 'VP accumulates from new baseline (125 token-days)');
 
         // Verify anti-gaming: can't recover lost time by unstake/restake cycling
         assertLt(vpNew, vpBefore, 'cannot recover lost time through cycling');
@@ -374,7 +374,8 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Charlie stakes a small amount
         _stakeFor(charlie, 0.5 ether);
 
-        vm.warp(block.timestamp + 1 days);
+        // Wait longer to accumulate sufficient VP (with token-days normalization)
+        vm.warp(block.timestamp + 10 days);
 
         // Start cycle
         // Cycle auto-starts on first proposal
