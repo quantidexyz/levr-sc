@@ -238,15 +238,6 @@ interface ILevrGovernor_v1 {
     /// @return True if approval threshold is met
     function meetsApproval(uint256 proposalId) external view returns (bool);
 
-    /// @notice Get the voting power snapshot for a user on a proposal
-    /// @param proposalId The ID of the proposal
-    /// @param user The user address
-    /// @return votingPower The voting power from snapshot
-    function getVotingPowerSnapshot(
-        uint256 proposalId,
-        address user
-    ) external view returns (uint256 votingPower);
-
     /// @notice Get the number of active proposals for a type
     /// @param proposalType The proposal type
     /// @return count The number of active proposals

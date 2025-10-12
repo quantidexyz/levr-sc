@@ -141,7 +141,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
 **Governance Model**:
 
-- **Voting Power**: VP = staked balance × time staked (resets on unstake)
+- **Voting Power**: VP = staked balance × time staked (proportionally reduced on partial unstake)
 - **Proposal Types**: BoostStakingPool (treasury → staking), TransferToAddress (treasury → recipient)
 - **Cycle Management**: Manual start via `startNewCycle()` (factory owner only)
 - **Quorum**: Balance-based participation (% of token supply that voted)
@@ -156,7 +156,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 - `vote(proposalId, support)` → Vote yes/no with time-weighted VP (gasless via meta-tx)
 - `execute(proposalId)` → Execute winning proposal (anyone can call)
 - `getProposal(proposalId)` → View proposal details
-- `getVotingPowerSnapshot(proposalId, user)` → Get user's VP for proposal
 - `state(proposalId)` → Pending/Active/Defeated/Succeeded/Executed
 - `getWinner(cycleId)` → Get winning proposal for cycle
 - `meetsQuorum(proposalId)` → Check quorum (balance participation)
@@ -185,7 +184,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
 **Functions**:
 
-- `stake(amount)`, `unstake(amount, to)` → Mint/burn stakedToken 1:1 (gasless via meta-tx)
+- `stake(amount)` → Mint stakedToken 1:1 (gasless via meta-tx)
+- `unstake(amount, to)` → Burn stakedToken, return underlying, returns newVotingPower for UI simulation (gasless via meta-tx)
 - `accrueRewards(token)` → **Manual reward accrual** (requires explicit call)
 - `accrueFromTreasury(token, amount, pull)` → Boost from treasury
 - `claimRewards(tokens[], to)` → Multi-token claim (gasless via meta-tx)
@@ -202,7 +202,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 - **First stake** (balance was 0): Sets `stakeStartTime = block.timestamp`
 - **Top-up**: Preserves existing stakeStartTime (doesn't reset)
 - **Claim rewards**: Preserves stakeStartTime (doesn't reset)
-- **Unstake** (any amount): Resets `stakeStartTime = 0`
+- **Partial unstake**: Proportionally reduces time accumulation
+  - Formula: `newTime = oldTime × (remainingBalance / originalBalance)`
+  - Example: Unstake 30% → time reduced by 30%
+- **Full unstake**: Resets `stakeStartTime = 0`
 
 **🔄 UPDATED Reward Paths** (Manual Accrual System):
 
@@ -318,7 +321,7 @@ Users claim → Multi-token claim with reserve checks
    └─ TransferToAddress: treasury.transfer(recipient, amount)
 ```
 
-**Anti-Gaming**: VP snapshot at proposal creation, unstake resets timer, per-type concurrency limits
+**Anti-Gaming**: Time-weighted VP (naturally protects against late staking), proportional VP reduction on unstake, per-type concurrency limits
 
 ### Governance Deep Dive
 
@@ -338,12 +341,13 @@ Users claim → Multi-token claim with reserve checks
 - Prevents minority with high VP from passing proposals alone (quorum ensures broad participation)
 - Rewards long-term stakers with more influence on what passes (approval uses VP weighting)
 
-**VP Calculation** (On-Demand):
+**VP Calculation** (Time-Weighted):
 
-- Calculated when user votes: `balance × (proposal.createdAt - stakeStartTime)`
-- Returns 0 if user staked after proposal was created
-- Cached in `vpSnapshot` mapping for later queries
-- No gas-intensive enumeration at proposal creation
+- Uses current VP from staking contract: `ILevrStaking_v1(staking).getVotingPower(voter)`
+- VP = balance × (block.timestamp - stakeStartTime)
+- Returns 0 if user has never staked or fully unstaked
+- Natural protection: late stakers have minimal time accumulation = minimal VP
+- No snapshot storage needed - lower gas costs
 
 **Cycle State Management**:
 
@@ -355,6 +359,84 @@ struct Cycle {
   bool executed;              // Prevents multiple executions
 }
 ```
+
+### Proportional Voting Power Reduction on Unstake
+
+**Design Philosophy**: Balance anti-gaming protections with fairness for legitimate users who need to withdraw funds.
+
+**Formula**: `newTime = oldTime × (remainingBalance / originalBalance)`
+
+**Example Scenarios**:
+
+1. **30% Unstake**:
+   - Before: 1000 tokens × 100 days = 100,000 token-days VP
+   - Unstake: 300 tokens (30%)
+   - After: 700 tokens × 70 days = 49,000 token-days VP (51% VP loss)
+
+2. **50% Unstake**:
+   - Before: 2000 tokens × 200 days = 400,000 token-days VP
+   - Unstake: 1000 tokens (50%)
+   - After: 1000 tokens × 100 days = 100,000 token-days VP (75% VP loss)
+
+3. **Full Unstake**:
+   - Before: 1000 tokens × 100 days = 100,000 token-days VP
+   - Unstake: 1000 tokens (100%)
+   - After: 0 tokens × 0 days = 0 VP
+
+**Anti-Gaming Benefits**:
+
+- **Prevents unstake/restake cycling** to maintain time accumulation
+- **Fair penalty** proportional to unstake amount
+- **Cannot recover lost time** through repeated cycling
+- **Restaking preserves time** baseline (encourages commitment)
+- **Natural late-staking protection**: New stakers have minimal time = minimal VP regardless of balance
+- **Flash loan protection**: VP = huge balance × seconds = negligible
+- **Combined with time-weighted voting**: Even whales need time to accumulate meaningful VP
+
+**Implementation Details**:
+
+```solidity
+function unstake(uint256 amount, address to) external returns (uint256 newVotingPower) {
+    // ... settlement logic ...
+    
+    // Proportionally reduce time on partial unstake
+    stakeStartTime[staker] = _onUnstakeNewTimestamp(amount);
+    
+    // Return new VP for UI simulation
+    uint256 remainingBalance = _staked[staker];
+    uint256 newStartTime = stakeStartTime[staker];
+    if (remainingBalance > 0 && newStartTime > 0) {
+        newVotingPower = remainingBalance * (block.timestamp - newStartTime);
+    } else {
+        newVotingPower = 0;
+    }
+}
+
+function _onUnstakeNewTimestamp(uint256 unstakeAmount) internal view returns (uint256) {
+    // Calculate: newStartTime = now - (oldTime × remainingPercent)
+    uint256 remainingBalance = _staked[staker]; // Already updated
+    uint256 originalBalance = remainingBalance + unstakeAmount;
+    uint256 timeAccumulated = block.timestamp - stakeStartTime[staker];
+    uint256 newTimeAccumulated = (timeAccumulated * remainingBalance) / originalBalance;
+    return block.timestamp - newTimeAccumulated;
+}
+```
+
+**UI Integration**:
+
+The `unstake()` function returns `newVotingPower` so UIs can simulate the impact before users confirm:
+
+```typescript
+// Frontend simulation
+const currentVP = await staking.getVotingPower(userAddress);
+const newVP = await staking.unstake.staticCall(amount, userAddress);
+const vpLoss = currentVP - newVP;
+const vpLossPercent = (vpLoss / currentVP) * 100;
+
+// Show user: "Unstaking will reduce your VP by 51% (from 100K to 49K)"
+```
+
+**Note on VP Snapshots**: The system does NOT use VP snapshots. Voting power is calculated in real-time from the staking contract, which naturally prevents gaming because VP = balance × time staked. Late stakers have minimal time accumulation regardless of their balance, providing inherent protection without snapshot complexity.
 
 ## Data Structures
 
@@ -386,7 +468,7 @@ struct PreparedContracts {
 | `treasury.transfer/applyBoost()`   | Only governor                                  |
 | `governor.startNewCycle()`         | Only factory owner (TODO: improve)             |
 | `governor.proposeBoost/Transfer()` | Anyone with `minSTokenBpsToSubmit` % of supply |
-| `governor.vote()`                  | Anyone (uses VP from snapshot)                 |
+| `governor.vote()`                  | Anyone (uses time-weighted VP from staking)    |
 | `governor.execute()`               | Anyone (if proposal is winner)                 |
 | `staking.stake/unstake/claim()`    | Anyone                                         |
 | `staking.accrueRewards()`          | Anyone (manual accrual)                        |
@@ -610,14 +692,15 @@ contract MyContract is ERC2771ContextBase {
 
 - `test/e2e/LevrV1.Governance.t.sol` - **Comprehensive governance E2E tests** (9 tests, all passing)
   - Full governance cycle with time-weighted voting
-  - Anti-gaming protections (VP snapshots, timer resets)
+  - Anti-gaming protections (time-weighted VP, proportional unstake reduction)
   - Concurrency limits, quorum, approval thresholds
   - Winner selection and execution
 - `test/e2e/LevrV1.Staking.t.sol` - Staking with real Clanker integration (5 tests)
 - `test/e2e/LevrV1.Registration.t.sol` - Registration flow tests (4 tests)
-- `test/unit/LevrStakingV1.t.sol` - Staking unit tests (8 tests)
+- `test/unit/LevrStakingV1.t.sol` - Staking unit tests (13 tests, including 8 governance VP tests)
   - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
   - `test_manual_reward_accrual_and_streaming` - Manual accrual flow testing
+  - `test_partial_unstake_*` - Proportional VP reduction tests (8 comprehensive tests)
 - `test/unit/LevrGovernorV1.t.sol` - Governor unit tests (1 test)
 - `test/unit/LevrTreasuryV1.t.sol` - Treasury unit tests (2 tests)
 - `test/unit/LevrStakedTokenV1.t.sol` - StakedToken unit tests (2 tests)
@@ -712,12 +795,18 @@ contract MyContract is ERC2771ContextBase {
   - `minWTokenToSubmit` - Replaced by `minSTokenBpsToSubmit` (percentage-based)
 - ❌ Wrapper token system - Never implemented in v1
 - ❌ `test/e2e/LevrV1.Treasury.t.sol` - Redundant (covered by treasury unit + governance E2E)
+- ❌ **VP snapshot system** - Removed October 12, 2025 (simplified to pure time-weighted VP)
+  - Removed `_vpSnapshot` mapping storage
+  - Removed `_calculateVPAtSnapshot()` internal function
+  - Removed `getVotingPowerSnapshot()` from interface
+  - Now uses `ILevrStaking_v1(staking).getVotingPower(voter)` directly
+  - Benefits: Simpler code, lower gas costs, more inclusive, natural anti-gaming protection
 
 ### Added
 
 - ✅ **Time-weighted governance system** (LevrGovernor_v1)
   - Voting power = staked balance × time staked
-  - VP snapshot at proposal creation (prevents last-minute gaming)
+  - Time-weighted VP naturally protects against late staking (no snapshots needed)
   - Dual threshold: quorum (balance participation) + approval (VP voting)
   - Cycle-based proposal management
   - Per-type concurrency limits
@@ -728,7 +817,8 @@ contract MyContract is ERC2771ContextBase {
 - ✅ **Staking time tracking** for governance
   - stakeStartTime mapping
   - getVotingPower() function
-  - Timer resets on unstake (anti-gaming)
+  - Proportional VP reduction on partial unstake (anti-gaming)
+  - unstake() returns newVotingPower for UI simulation
 - ✅ **Manual reward accrual system** - Explicit `accrueRewards()` calls required
 - ✅ **ClankerFeeLocker integration** - Automatic claiming before manual accrual
 - ✅ `outstandingRewards()` - Check available and pending rewards

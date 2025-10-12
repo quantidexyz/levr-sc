@@ -39,9 +39,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     mapping(uint256 => ILevrGovernor_v1.Proposal) private _proposals;
     mapping(uint256 => mapping(address => ILevrGovernor_v1.VoteReceipt)) private _voteReceipts;
 
-    // VP snapshots per proposal
-    mapping(uint256 => mapping(address => uint256)) private _vpSnapshot;
-
     // Track active proposals per type
     mapping(ILevrGovernor_v1.ProposalType => uint256) private _activeProposalCount;
 
@@ -107,19 +104,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert AlreadyVoted();
         }
 
-        // Calculate user's VP at proposal creation time (snapshot)
-        uint256 votes = _calculateVPAtSnapshot(proposalId, voter);
+        // Get user's current voting power from staking contract
+        // VP = balance × time staked (naturally protects against last-minute gaming)
+        uint256 votes = ILevrStaking_v1(staking).getVotingPower(voter);
 
-        // HIGH FIX [H-2]: Prevent 0 VP votes
+        // Prevent 0 VP votes
         if (votes == 0) revert InsufficientVotingPower();
 
         // Get user's balance for quorum tracking
         uint256 voterBalance = IERC20(stakedToken).balanceOf(voter);
-
-        // Store in snapshot mapping for later queries
-        if (_vpSnapshot[proposalId][voter] == 0) {
-            _vpSnapshot[proposalId][voter] = votes;
-        }
 
         // Record vote (VP for yes/no tallying)
         if (support) {
@@ -258,19 +251,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     }
 
     /// @inheritdoc ILevrGovernor_v1
-    function getVotingPowerSnapshot(
-        uint256 proposalId,
-        address user
-    ) external view returns (uint256) {
-        // If already calculated and stored, return it
-        uint256 stored = _vpSnapshot[proposalId][user];
-        if (stored > 0) return stored;
-
-        // Otherwise calculate on-demand
-        return _calculateVPAtSnapshot(proposalId, user);
-    }
-
-    /// @inheritdoc ILevrGovernor_v1
     function activeProposalCount(ProposalType proposalType) external view returns (uint256) {
         return _activeProposalCount[proposalType];
     }
@@ -351,30 +331,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         _hasProposedInCycle[cycleId][proposalType][proposer] = true;
 
         emit ProposalCreated(proposalId, proposer, proposalType, amount, recipient, description);
-    }
-
-    function _calculateVPAtSnapshot(
-        uint256 proposalId,
-        address user
-    ) internal view returns (uint256) {
-        ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
-
-        // Get user's staked balance (current balance)
-        uint256 balance = IERC20(stakedToken).balanceOf(user);
-        if (balance == 0) return 0;
-
-        // Get user's stakeStartTime
-        uint256 startTime = ILevrStaking_v1(staking).stakeStartTime(user);
-
-        // HIGH FIX [H-2]: If user staked after proposal was created, they have 0 VP for this proposal
-        // Changed from >= to > for correct timing
-        if (startTime == 0 || startTime > proposal.createdAt) {
-            return 0;
-        }
-
-        // Calculate VP: balance × time_staked_at_proposal_creation
-        uint256 timeStaked = proposal.createdAt - startTime;
-        return balance * timeStaked;
     }
 
     function _state(uint256 proposalId) internal view returns (ProposalState) {

@@ -97,7 +97,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function unstake(uint256 amount, address to) external nonReentrant {
+    function unstake(
+        uint256 amount,
+        address to
+    ) external nonReentrant returns (uint256 newVotingPower) {
         if (amount == 0) revert InvalidAmount();
         if (to == address(0)) revert ZeroAddress();
         address staker = _msgSender();
@@ -115,8 +118,17 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         _escrowBalance[underlying] = esc - amount;
         IERC20(underlying).safeTransfer(to, amount);
 
-        // Governance: Reset stake start time on any unstake (partial or full)
-        stakeStartTime[staker] = 0;
+        // Governance: Proportionally reduce time on partial unstake, reset to 0 on full unstake
+        stakeStartTime[staker] = _onUnstakeNewTimestamp(amount);
+
+        // Calculate new voting power after unstake (for UI simulation)
+        uint256 remainingBalance = _staked[staker];
+        uint256 newStartTime = stakeStartTime[staker];
+        if (remainingBalance > 0 && newStartTime > 0) {
+            newVotingPower = remainingBalance * (block.timestamp - newStartTime);
+        } else {
+            newVotingPower = 0;
+        }
 
         emit Unstaked(staker, to, amount);
     }
@@ -481,5 +493,42 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         uint256 timeStaked = block.timestamp - startTime;
         return balance * timeStaked;
+    }
+
+    /// @notice Calculate new stakeStartTime after partial unstake
+    /// @dev Reduces time accumulation proportionally to amount unstaked
+    ///      Formula: newTime = oldTime * (remainingBalance / originalBalance)
+    ///      Example: 1000 tokens staked for 100 days, unstake 300 (30%)
+    ///               Result: 700 tokens with 70 days of time accumulation
+    ///      NOTE: _staked[staker] is already updated when this is called
+    /// @param unstakeAmount Amount being unstaked
+    /// @return newStartTime New timestamp to set (0 if full unstake)
+    function _onUnstakeNewTimestamp(
+        uint256 unstakeAmount
+    ) internal view returns (uint256 newStartTime) {
+        address staker = _msgSender();
+        uint256 currentStartTime = stakeStartTime[staker];
+
+        // If never staked, return 0
+        if (currentStartTime == 0) return 0;
+
+        // NOTE: _staked[staker] is already updated to remaining balance
+        uint256 remainingBalance = _staked[staker];
+
+        // If no balance remaining, reset to 0
+        if (remainingBalance == 0) return 0;
+
+        // Calculate original balance before unstake
+        uint256 originalBalance = remainingBalance + unstakeAmount;
+
+        // Calculate time accumulated so far
+        uint256 timeAccumulated = block.timestamp - currentStartTime;
+
+        // Proportionally reduce time accumulation
+        // newTime = oldTime * (remainingBalance / originalBalance)
+        uint256 newTimeAccumulated = (timeAccumulated * remainingBalance) / originalBalance;
+
+        // Calculate new start time
+        newStartTime = block.timestamp - newTimeAccumulated;
     }
 }

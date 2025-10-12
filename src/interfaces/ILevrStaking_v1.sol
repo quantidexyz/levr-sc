@@ -64,7 +64,10 @@ interface ILevrStaking_v1 {
     function stake(uint256 amount) external;
 
     /// @notice Unstake; burns staked token and returns underlying to `to`.
-    function unstake(uint256 amount, address to) external;
+    /// @param amount Amount to unstake
+    /// @param to Address to receive the unstaked tokens
+    /// @return newVotingPower The user's voting power after unstaking (useful for UI simulation)
+    function unstake(uint256 amount, address to) external returns (uint256 newVotingPower);
 
     /// @notice Claim rewards for tokens to `to`.
     function claimRewards(address[] calldata tokens, address to) external;

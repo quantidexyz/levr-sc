@@ -245,31 +245,39 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Wait 30 days to accumulate VP
         vm.warp(block.timestamp + 30 days);
 
-        // Check Alice's VP (should be balance × time)
+        // Check Alice's VP (should be 5 tokens × 30 days)
         uint256 vpBefore = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertGt(vpBefore, 0, 'alice should have VP');
+        assertEq(vpBefore, 5 ether * 30 days, 'alice should have 5 * 30 days VP');
 
-        // Alice unstakes 1 token (timer resets)
+        // Alice unstakes 1 token (20% unstake → proportional time reduction)
         vm.prank(alice);
         ILevrStaking_v1(staking).unstake(1 ether, alice);
 
-        // Check Alice's VP after unstake (should be 0)
+        // Check Alice's VP after unstake (should be 4 tokens × 24 days = 80% of previous)
         uint256 vpAfter = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertEq(vpAfter, 0, 'alice VP should reset to 0 after unstake');
+        uint256 expectedVP = 4 ether * 24 days; // 80% of tokens, 80% of time
+        assertEq(vpAfter, expectedVP, 'alice VP should be proportionally reduced (20% loss)');
 
-        // Alice stakes again
+        // Alice stakes again (top-up preserves time baseline)
         vm.prank(alice);
         IERC20(clankerToken).approve(staking, 1 ether);
         vm.prank(alice);
         ILevrStaking_v1(staking).stake(1 ether);
 
-        // Wait a bit and check VP is much lower
+        // VP should now be 5 tokens × 24 days (time baseline preserved)
+        uint256 vpAfterRestake = ILevrStaking_v1(staking).getVotingPower(alice);
+        assertEq(vpAfterRestake, 5 ether * 24 days, 'restake preserves time baseline');
+
+        // Wait 1 day and verify time accumulates from baseline
         vm.warp(block.timestamp + 1 days);
         uint256 vpNew = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertLt(vpNew, vpBefore / 10, 'new VP should be much lower after reset');
+        assertEq(vpNew, 5 ether * 25 days, 'VP accumulates from new baseline');
+
+        // Verify anti-gaming: can't recover lost time by unstake/restake cycling
+        assertLt(vpNew, vpBefore, 'cannot recover lost time through cycling');
     }
 
-    // ============ Test 3: Anti-Gaming - Last Minute Staking ============
+    // ============ Test 3: Anti-Gaming - Time-Weighted VP Protects Against Late Staking ============
 
     function test_AntiGaming_LastMinuteStaking() public {
         // Alice stakes early
@@ -288,23 +296,26 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
 
-        // Check VP snapshots
-        uint256 aliceVP = ILevrGovernor_v1(governor).getVotingPowerSnapshot(pid, alice);
-        uint256 bobVP = ILevrGovernor_v1(governor).getVotingPowerSnapshot(pid, bob);
+        // Check current voting power (no snapshots - uses current VP from staking)
+        uint256 aliceVP = ILevrStaking_v1(staking).getVotingPower(alice);
+        uint256 bobVP = ILevrStaking_v1(staking).getVotingPower(bob);
 
-        assertGt(aliceVP, 0, 'alice should have VP (staked before proposal)');
-        assertEq(bobVP, 0, 'bob should have 0 VP (staked after proposal)');
+        assertGt(aliceVP, 0, 'alice should have VP from long staking time');
+        assertGt(bobVP, 0, 'bob has some VP from 2 days of staking');
 
-        // Alice votes
+        // CRITICAL: Time-weighted VP protects against late staking
+        // Alice has MORE VP despite having FEWER tokens (5 vs 10)
+        // because she staked for longer (12+ days vs 2 days)
+        assertGt(aliceVP, bobVP, 'alice VP > bob VP (time-weighted protection)');
+
+        // Both can vote, but Alice's vote carries more weight
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
 
-        // HIGH FIX [H-2]: Bob tries to vote but has 0 VP - now correctly reverts
         vm.prank(bob);
-        vm.expectRevert(ILevrGovernor_v1.InsufficientVotingPower.selector);
-        ILevrGovernor_v1(governor).vote(pid, true);
+        ILevrGovernor_v1(governor).vote(pid, false);
 
-        // Check vote receipts
+        // Check vote receipts - Alice's votes should be worth more
         ILevrGovernor_v1.VoteReceipt memory aliceReceipt = ILevrGovernor_v1(governor)
             .getVoteReceipt(pid, alice);
         ILevrGovernor_v1.VoteReceipt memory bobReceipt = ILevrGovernor_v1(governor).getVoteReceipt(
@@ -312,9 +323,8 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
             bob
         );
 
-        assertGt(aliceReceipt.votes, 0, 'alice votes should be counted');
-        assertEq(bobReceipt.votes, 0, 'bob should not have voted (reverted)');
-        assertEq(bobReceipt.hasVoted, false, 'bob vote should not be recorded');
+        assertGt(aliceReceipt.votes, bobReceipt.votes, 'alice votes > bob votes (time weighting)');
+        assertTrue(bobReceipt.hasVoted, 'bob vote should be recorded');
     }
 
     // ============ Test 4: Concurrency Limits ============
