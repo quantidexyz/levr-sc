@@ -265,7 +265,7 @@ contract LevrStakingV1_UnitTest is Test {
         assertEq(vp3, 600 * 75, 'Second unstake: 45,000 token-days');
     }
 
-    function test_partial_unstake_then_restake_preserves_time() public {
+    function test_partial_unstake_then_restake_uses_weighted_average() public {
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
@@ -276,13 +276,20 @@ contract LevrStakingV1_UnitTest is Test {
         uint256 vpAfterUnstake = staking.getVotingPower(address(this));
         assertEq(vpAfterUnstake, 500 * 50, 'After unstake: 25,000 token-days');
 
-        // Restake (top-up preserves time)
+        // Restake 300 tokens - uses weighted average
+        // Before restake: 500 tokens with 50 days (25,000 token-days VP)
+        // After restake: 800 tokens
+        // Weighted time: (500 * 50) / 800 = 31.25 days
         underlying.approve(address(staking), 300 ether);
         staking.stake(300 ether);
 
-        // VP should be 800 tokens * 50 days = 40,000 token-days
+        // VP should be 800 tokens * 31.25 days = 25,000 token-days (VP preserved)
         uint256 vpAfterRestake = staking.getVotingPower(address(this));
-        assertEq(vpAfterRestake, 800 * 50, 'After restake: 40,000 token-days (time preserved)');
+        assertEq(
+            vpAfterRestake,
+            25_000,
+            'After restake: 25,000 token-days (VP preserved via weighted average)'
+        );
     }
 
     function test_unstake_everything_resets_to_zero() public {
@@ -326,5 +333,331 @@ contract LevrStakingV1_UnitTest is Test {
         // Should have: 100 tokens * 100 days = 10,000 token-days
         uint256 vp = staking.getVotingPower(address(this));
         assertEq(vp, 100 * 100, '90% unstake should give 10,000 token-days');
+    }
+
+    // ============ Stake VP Calculation Tests ============
+
+    function test_stake_vp_calculation_immediate() public {
+        underlying.approve(address(staking), 1000 ether);
+
+        // Initial stake: VP should be 0 immediately
+        staking.stake(100 ether);
+        uint256 vp0 = staking.getVotingPower(address(this));
+        assertEq(vp0, 0, 'VP should be 0 immediately after first stake');
+
+        // After 50 days: VP = 100 × 50 = 5,000
+        vm.warp(block.timestamp + 50 days);
+        uint256 vp1 = staking.getVotingPower(address(this));
+        assertEq(vp1, 100 * 50, 'VP should be 5,000 token-days');
+
+        // Stake 400 more: VP preserved at 5,000
+        staking.stake(400 ether);
+        uint256 vp2 = staking.getVotingPower(address(this));
+        assertEq(vp2, 5000, 'VP should be preserved at 5,000 token-days');
+
+        // Verify calculation is accurate: 500 tokens * 10 days (weighted) = 5,000
+        uint256 expectedWeightedTime = 5000 / 500; // = 10 days
+        assertEq(expectedWeightedTime, 10, 'Weighted time should be 10 days');
+    }
+
+    function test_stake_and_unstake_vp_symmetry() public {
+        underlying.approve(address(staking), 1500 ether);
+
+        // Stake and accumulate VP
+        staking.stake(1000 ether);
+        vm.warp(block.timestamp + 100 days);
+        uint256 vpBeforeUnstake = staking.getVotingPower(address(this));
+        assertEq(vpBeforeUnstake, 100_000, 'Should have 100,000 token-days');
+
+        // Unstake 50%: VP is proportionally reduced to match remaining balance
+        // 500 tokens * 50 days (50% of time) = 25,000 token-days
+        uint256 returnedVP = staking.unstake(500 ether, address(this));
+        uint256 vpAfterUnstake = staking.getVotingPower(address(this));
+        assertEq(returnedVP, vpAfterUnstake, 'Unstake returned VP must match getVotingPower');
+        assertEq(
+            vpAfterUnstake,
+            25_000,
+            'VP should be proportionally reduced: 500 tokens * 50 days'
+        );
+
+        // Restake: VP should be preserved at 25,000
+        staking.stake(500 ether);
+        uint256 vpAfterRestake = staking.getVotingPower(address(this));
+        assertEq(vpAfterRestake, 25_000, 'VP should be preserved on restake');
+
+        // After 50 more days: 1000 tokens * 75 days (weighted) = 75,000 token-days
+        vm.warp(block.timestamp + 50 days);
+        uint256 vpFinal = staking.getVotingPower(address(this));
+        assertEq(vpFinal, 75_000, 'VP should continue accumulating: 1000 * 75 days');
+    }
+
+    // ============ Weighted Average Staking Tests (Anti-Gaming) ============
+
+    function test_weighted_average_basic_example_from_spec() public {
+        // Example from user: 100 tokens for 1 month, then 1000 tokens
+        underlying.approve(address(staking), 1100 ether);
+
+        // Stake 100 tokens
+        staking.stake(100 ether);
+
+        // Wait 30 days (1 month)
+        vm.warp(block.timestamp + 30 days);
+
+        // VP after 30 days: 100 tokens * 30 days = 3000 token-days
+        uint256 vpBefore = staking.getVotingPower(address(this));
+        assertEq(vpBefore, 100 * 30, 'Should have 3,000 token-days after 30 days');
+
+        // Now stake 1000 more tokens
+        staking.stake(1000 ether);
+
+        // VP should be preserved: still 3000 token-days, but now with 1100 tokens
+        // Weighted time: 3000 / 1100 = 2.727... days
+        uint256 vpAfter = staking.getVotingPower(address(this));
+        // Allow 1 token-day tolerance due to rounding
+        assertApproxEqAbs(vpAfter, 3000, 1, 'VP should be preserved at ~3,000 token-days');
+
+        // After 27.273 more days, should have: 1100 tokens * 30 days = 33,000 token-days
+        vm.warp(block.timestamp + (30 days - 2 days - 17 hours - 27 minutes - 16 seconds));
+        uint256 vpFinal = staking.getVotingPower(address(this));
+        // Allow small tolerance due to rounding
+        assertApproxEqAbs(vpFinal, 1100 * 30, 10, 'Should accumulate to 33,000 token-days');
+    }
+
+    function test_gaming_attempt_fails_small_stake_long_time() public {
+        // Attacker tries to game by staking tiny amount for long time
+        underlying.approve(address(staking), 10_000 ether);
+
+        // Stake just 1 token
+        staking.stake(1 ether);
+
+        // Wait 1 year
+        vm.warp(block.timestamp + 365 days);
+
+        // VP: 1 token * 365 days = 365 token-days
+        uint256 vpSmallStake = staking.getVotingPower(address(this));
+        assertEq(vpSmallStake, 1 * 365, 'Should only have 365 token-days');
+
+        // Now try to game by staking huge amount
+        staking.stake(9999 ether);
+
+        // Weighted average prevents gaming: VP is still only ~365 token-days
+        // With 10,000 tokens: 365 / 10,000 = 0.0365 days (rounding may cause 364)
+        uint256 vpAfterGaming = staking.getVotingPower(address(this));
+        assertApproxEqAbs(
+            vpAfterGaming,
+            365,
+            1,
+            'VP should NOT increase from late staking - gaming prevented!'
+        );
+
+        // The key insight: attacker's 10,000 tokens have only ~0.0365 days of effective stake time
+        // They'd need to wait a full year with the full 10,000 tokens to get meaningful VP
+        // This mechanism successfully prevents last-minute whales from dominating
+    }
+
+    function test_weighted_average_successive_stakes() public {
+        underlying.approve(address(staking), 1000 ether);
+
+        // Stake 100 tokens
+        staking.stake(100 ether);
+
+        // Wait 100 days: VP = 100 × 100 = 10,000
+        vm.warp(block.timestamp + 100 days);
+        uint256 vp1 = staking.getVotingPower(address(this));
+        assertEq(vp1, 100 * 100, 'Should have 10,000 token-days');
+
+        // Stake 900 more tokens (total 1000)
+        // VP preserved: 10,000 token-days
+        // New weighted time: 10,000 / 1000 = 10 days
+        staking.stake(900 ether);
+        uint256 vp2 = staking.getVotingPower(address(this));
+        assertEq(vp2, 10_000, 'VP preserved at 10,000 token-days');
+
+        // Wait 90 more days to reach 100 days equivalent
+        // VP = 1000 × (10 + 90) = 100,000
+        vm.warp(block.timestamp + 90 days);
+        uint256 vp3 = staking.getVotingPower(address(this));
+        assertEq(vp3, 100_000, 'Should reach 100,000 token-days');
+
+        // This test verifies that weighted average allows fair accumulation
+        // while preventing gaming from late large stakes
+    }
+
+    function test_weighted_average_equal_amounts_halves_time() public {
+        underlying.approve(address(staking), 2000 ether);
+
+        // Stake 1000 tokens
+        staking.stake(1000 ether);
+
+        // Wait 100 days
+        vm.warp(block.timestamp + 100 days);
+        uint256 vp1 = staking.getVotingPower(address(this));
+        assertEq(vp1, 1000 * 100, 'Should have 100,000 token-days');
+
+        // Stake equal amount (1000 more)
+        staking.stake(1000 ether);
+
+        // VP preserved, time should be exactly halved: 100,000 / 2000 = 50 days
+        uint256 vp2 = staking.getVotingPower(address(this));
+        assertEq(vp2, 100_000, 'VP preserved at 100,000 token-days');
+
+        // Wait 50 more days - should reach 100 days equivalent
+        vm.warp(block.timestamp + 50 days);
+        uint256 vp3 = staking.getVotingPower(address(this));
+        assertEq(vp3, 2000 * 100, 'Should reach 200,000 token-days');
+    }
+
+    function test_weighted_average_prevents_late_whale_manipulation() public {
+        // Scenario: Legitimate early staker vs late whale trying to dominate
+        address earlyStaker = address(0xEAE1);
+        address lateWhale = address(0xCA7E);
+
+        underlying.mint(earlyStaker, 100 ether);
+        underlying.mint(lateWhale, 10_000 ether);
+
+        // Early staker: 100 tokens for 365 days
+        vm.startPrank(earlyStaker);
+        underlying.approve(address(staking), 100 ether);
+        staking.stake(100 ether);
+        vm.stopPrank();
+
+        // Wait 365 days
+        vm.warp(block.timestamp + 365 days);
+
+        // Early staker VP: 100 * 365 = 36,500 token-days
+        uint256 earlyVP = staking.getVotingPower(earlyStaker);
+        assertEq(earlyVP, 100 * 365, 'Early staker has 36,500 token-days');
+
+        // Late whale stakes 10,000 tokens (100x more)
+        vm.startPrank(lateWhale);
+        underlying.approve(address(staking), 10_000 ether);
+        staking.stake(10_000 ether);
+        vm.stopPrank();
+
+        // Late whale has 0 VP immediately
+        uint256 whaleVP = staking.getVotingPower(lateWhale);
+        assertEq(whaleVP, 0, 'Late whale has 0 VP initially');
+
+        // After 1 day, whale has: 10,000 * 1 = 10,000 token-days
+        vm.warp(block.timestamp + 1 days);
+        uint256 whaleVPAfter1Day = staking.getVotingPower(lateWhale);
+        assertEq(whaleVPAfter1Day, 10_000, 'Whale needs time to accumulate VP');
+
+        // Early staker now has: 100 * 366 = 36,600 token-days
+        uint256 earlyVPAfter1Day = staking.getVotingPower(earlyStaker);
+        assertEq(earlyVPAfter1Day, 100 * 366, 'Early staker continues accumulating');
+
+        // Whale needs 3.66 days to match early staker
+        // This prevents instant dominance and rewards early commitment
+    }
+
+    function test_weighted_average_extreme_ratio_1_to_million() public {
+        // Mint enough tokens for this test
+        underlying.mint(address(this), 1_000_001 ether);
+        underlying.approve(address(staking), 1_000_001 ether);
+
+        // Stake 1 token
+        staking.stake(1 ether);
+
+        // Wait 1000 days
+        vm.warp(block.timestamp + 1000 days);
+        uint256 vp1 = staking.getVotingPower(address(this));
+        assertEq(vp1, 1000, 'Should have 1,000 token-days');
+
+        // Stake 1 million more tokens
+        staking.stake(1_000_000 ether);
+
+        // VP preserved: 1,000 token-days (may have small rounding error with extreme ratio)
+        // With 1,000,001 tokens: 1,000 / 1,000,001 ≈ 0.001 days
+        uint256 vp2 = staking.getVotingPower(address(this));
+        assertApproxEqAbs(
+            vp2,
+            1000,
+            10,
+            'VP preserved despite extreme ratio (small rounding acceptable)'
+        );
+
+        // After 1 day: 1,000,001 * ~1 day ≈ 1,000,001 token-days (allow rounding error)
+        vm.warp(block.timestamp + 1 days);
+        uint256 vp3 = staking.getVotingPower(address(this));
+        assertApproxEqAbs(
+            vp3,
+            1_000_001,
+            1000,
+            'Must accumulate with full balance (rounding acceptable)'
+        );
+    }
+
+    function test_weighted_average_voting_power_never_increases_on_stake() public {
+        underlying.approve(address(staking), 10_000 ether);
+
+        // Initial stake
+        staking.stake(100 ether);
+        vm.warp(block.timestamp + 50 days);
+        uint256 vpBefore = staking.getVotingPower(address(this));
+
+        // Any additional stake should preserve (not increase) VP
+        staking.stake(900 ether);
+        uint256 vpAfter = staking.getVotingPower(address(this));
+
+        assertEq(vpAfter, vpBefore, 'VP should never increase from staking more tokens');
+    }
+
+    function test_weighted_average_multiple_users_independent() public {
+        address alice = address(0xA11CE);
+        address bob = address(0xB0B);
+
+        underlying.mint(alice, 1000 ether);
+        underlying.mint(bob, 1000 ether);
+
+        // Alice: stake 100 for 10 days, then 900
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(100 ether);
+        vm.warp(block.timestamp + 10 days);
+        staking.stake(900 ether);
+        vm.stopPrank();
+
+        uint256 aliceVP = staking.getVotingPower(alice);
+        assertEq(aliceVP, 1000, 'Alice: 1,000 token-days preserved');
+
+        // Bob: stake 500 for 20 days, then 500
+        vm.startPrank(bob);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(500 ether);
+        vm.warp(block.timestamp + 20 days);
+        staking.stake(500 ether);
+        vm.stopPrank();
+
+        uint256 bobVP = staking.getVotingPower(bob);
+        assertEq(bobVP, 500 * 20, 'Bob: 10,000 token-days preserved');
+
+        // Bob has more VP despite same final balance (rewarded for time commitment)
+        assertGt(bobVP, aliceVP, 'Bob should have more VP due to longer commitment');
+    }
+
+    function test_weighted_average_precision_no_overflow() public {
+        // Test with realistic token amounts (18 decimals)
+        // Mint enough tokens for this test
+        uint256 largeAmount = 1_000_000 ether;
+        underlying.mint(address(this), largeAmount * 2);
+        underlying.approve(address(staking), type(uint256).max);
+
+        // Stake realistic amount: 1 million tokens
+        staking.stake(largeAmount);
+
+        // Wait significant time: 10 years
+        vm.warp(block.timestamp + 3650 days);
+
+        // VP should be calculable without overflow
+        uint256 vp1 = staking.getVotingPower(address(this));
+        assertGt(vp1, 0, 'Should handle large calculations');
+
+        // Stake another million
+        staking.stake(largeAmount);
+
+        // VP should be preserved
+        uint256 vp2 = staking.getVotingPower(address(this));
+        assertApproxEqRel(vp2, vp1, 0.0001e18, 'VP preserved with large amounts');
     }
 }

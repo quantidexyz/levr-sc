@@ -197,10 +197,16 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 - `stakeStartTime(user)` → Public getter for when user started staking
 - `getVotingPower(user)` → Returns VP = balance × (block.timestamp - stakeStartTime)
 
-**Time Tracking Logic**:
+**Time Tracking Logic** (Weighted Average System):
 
 - **First stake** (balance was 0): Sets `stakeStartTime = block.timestamp`
-- **Top-up**: Preserves existing stakeStartTime (doesn't reset)
+- **Additional stake** (balance > 0): Calculates weighted average timestamp
+  - Formula: `newStartTime = currentTime - (oldBalance × timeAccumulated) / newTotalBalance`
+  - Preserves voting power while reflecting dilution
+  - Example: 100 tokens for 30 days (3,000 token-days VP), stake 1,000 more
+    - New: 1,100 tokens with weighted time of ~2.727 days
+    - VP preserved at 3,000 token-days
+  - Prevents gaming: late large stakes don't grant instant VP
 - **Claim rewards**: Preserves stakeStartTime (doesn't reset)
 - **Partial unstake**: Proportionally reduces time accumulation
   - Formula: `newTime = oldTime × (remainingBalance / originalBalance)`
@@ -360,6 +366,70 @@ struct Cycle {
 }
 ```
 
+### Weighted Average Staking Mechanism
+
+**Design Philosophy**: Preserve voting power when users stake additional tokens while preventing gaming from late large stakes.
+
+**Formula**: `newStartTime = currentTime - (oldBalance × timeAccumulated) / newTotalBalance`
+
+**Example Scenarios**:
+
+1. **Small Initial Stake, Then Large Stake**:
+   - Initial: 100 tokens for 30 days = 3,000 token-days VP
+   - Stake: 1,000 more tokens (total 1,100)
+   - New weighted time: 3,000 / 1,100 = 2.727 days
+   - VP immediately after: 3,000 token-days (preserved!)
+   - After 27.273 more days: 1,100 × 30 = 33,000 token-days
+
+2. **Equal Amount Doubling**:
+   - Initial: 1,000 tokens for 100 days = 100,000 token-days VP
+   - Stake: 1,000 more tokens (total 2,000)
+   - New weighted time: 100,000 / 2,000 = 50 days (exactly halved)
+   - VP preserved: 100,000 token-days
+
+3. **Gaming Attempt**:
+   - Attacker: 1 token for 365 days = 365 token-days VP
+   - Attacker stakes 9,999 more tokens (total 10,000)
+   - New weighted time: 365 / 10,000 = 0.0365 days
+   - VP after: Still only ~365 token-days (gaming prevented!)
+
+**Anti-Gaming Benefits**:
+
+- **Preserves earned VP**: Users don't lose existing voting power when adding tokens
+- **Prevents instant VP from late stakes**: Large late stakes get diluted time
+- **Fair to long-term stakers**: Early commitment rewarded with better VP/token ratio
+- **No exploitation possible**: VP never increases from staking more tokens
+- **Combined with proportional unstake**: Complete protection against all cycling attacks
+
+**Implementation Details**:
+
+```solidity
+function _onStakeNewTimestamp(uint256 stakeAmount) internal view returns (uint256 newStartTime) {
+    address staker = _msgSender();
+    uint256 oldBalance = _staked[staker];
+    uint256 currentStartTime = stakeStartTime[staker];
+
+    // First stake: set timestamp to now
+    if (oldBalance == 0 || currentStartTime == 0) {
+        return block.timestamp;
+    }
+
+    // Calculate accumulated time so far
+    uint256 timeAccumulated = block.timestamp - currentStartTime;
+
+    // Calculate new total balance
+    uint256 newTotalBalance = oldBalance + stakeAmount;
+
+    // Calculate weighted average time: (oldBalance × timeAccumulated) / newTotalBalance
+    // This preserves voting power: oldVP = oldBalance × timeAccumulated
+    // After stake: newVP = newTotalBalance × newTimeAccumulated = oldVP (preserved)
+    uint256 newTimeAccumulated = (oldBalance * timeAccumulated) / newTotalBalance;
+
+    // Calculate new start time
+    newStartTime = block.timestamp - newTimeAccumulated;
+}
+```
+
 ### Proportional Voting Power Reduction on Unstake
 
 **Design Philosophy**: Balance anti-gaming protections with fairness for legitimate users who need to withdraw funds.
@@ -388,9 +458,10 @@ struct Cycle {
 - **Prevents unstake/restake cycling** to maintain time accumulation
 - **Fair penalty** proportional to unstake amount
 - **Cannot recover lost time** through repeated cycling
-- **Restaking preserves time** baseline (encourages commitment)
+- **Restaking uses weighted average** (preserves VP, prevents gaming)
 - **Natural late-staking protection**: New stakers have minimal time = minimal VP regardless of balance
 - **Flash loan protection**: VP = huge balance × seconds = negligible
+- **Combined with weighted average staking**: Complete protection against all timing attacks
 - **Combined with time-weighted voting**: Even whales need time to accumulate meaningful VP
 
 **Implementation Details**:
@@ -697,10 +768,13 @@ contract MyContract is ERC2771ContextBase {
   - Winner selection and execution
 - `test/e2e/LevrV1.Staking.t.sol` - Staking with real Clanker integration (5 tests)
 - `test/e2e/LevrV1.Registration.t.sol` - Registration flow tests (4 tests)
-- `test/unit/LevrStakingV1.t.sol` - Staking unit tests (13 tests, including 8 governance VP tests)
+- `test/unit/LevrStakingV1.t.sol` - Staking unit tests (24 tests, including 19 governance VP tests)
   - Pass `address(0)` for forwarder in unit tests if not testing meta-tx
   - `test_manual_reward_accrual_and_streaming` - Manual accrual flow testing
   - `test_partial_unstake_*` - Proportional VP reduction tests (8 comprehensive tests)
+  - `test_weighted_average_*` - Weighted average staking tests (11 comprehensive anti-gaming tests)
+  - `test_stake_vp_calculation_immediate` - Verifies VP accuracy on stake
+  - `test_stake_and_unstake_vp_symmetry` - Full cycle VP verification
 - `test/unit/LevrGovernorV1.t.sol` - Governor unit tests (1 test)
 - `test/unit/LevrTreasuryV1.t.sol` - Treasury unit tests (2 tests)
 - `test/unit/LevrStakedTokenV1.t.sol` - StakedToken unit tests (2 tests)

@@ -82,10 +82,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Settle streaming for all reward tokens before balance changes
         _settleStreamingAll();
 
-        // Governance: Set stake start time on first stake (when balance was 0)
-        if (_staked[staker] == 0) {
-            stakeStartTime[staker] = block.timestamp;
-        }
+        // Governance: Calculate weighted average timestamp for voting power preservation
+        stakeStartTime[staker] = _onStakeNewTimestamp(amount);
 
         IERC20(underlying).safeTransferFrom(staker, address(this), amount);
         _escrowBalance[underlying] += amount;
@@ -498,6 +496,44 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Normalize to token-days: divide by 1e18 (token decimals) and 86400 (seconds per day)
         // This makes VP human-readable: 1000 tokens × 100 days = 100,000 token-days
         return (balance * timeStaked) / (1e18 * 86400);
+    }
+
+    /// @notice Calculate new stakeStartTime when staking additional tokens
+    /// @dev Uses weighted average to preserve voting power while reflecting dilution
+    ///      Formula: newStartTime = currentTime - (oldBalance × timeAccumulated) / newTotalBalance
+    ///      Example: 100 tokens staked for 30 days, then stake 1000 more
+    ///               Old VP: 100 × 30 days = 3000 token-days
+    ///               New balance: 1100 tokens
+    ///               New time: 3000 / 1100 = 2.727 days
+    ///               Result: 1100 tokens with 2.727 days of accumulation (preserves 3000 token-days VP)
+    ///      NOTE: _staked[staker] is NOT yet updated when this is called
+    /// @param stakeAmount Amount being staked
+    /// @return newStartTime New timestamp to set
+    function _onStakeNewTimestamp(
+        uint256 stakeAmount
+    ) internal view returns (uint256 newStartTime) {
+        address staker = _msgSender();
+        uint256 oldBalance = _staked[staker];
+        uint256 currentStartTime = stakeStartTime[staker];
+
+        // First stake: set timestamp to now
+        if (oldBalance == 0 || currentStartTime == 0) {
+            return block.timestamp;
+        }
+
+        // Calculate accumulated time so far
+        uint256 timeAccumulated = block.timestamp - currentStartTime;
+
+        // Calculate new total balance
+        uint256 newTotalBalance = oldBalance + stakeAmount;
+
+        // Calculate weighted average time: (oldBalance × timeAccumulated) / newTotalBalance
+        // This preserves voting power: oldVP = oldBalance × timeAccumulated
+        // After stake: newVP = newTotalBalance × newTimeAccumulated = oldVP (preserved)
+        uint256 newTimeAccumulated = (oldBalance * timeAccumulated) / newTotalBalance;
+
+        // Calculate new start time
+        newStartTime = block.timestamp - newTimeAccumulated;
     }
 
     /// @notice Calculate new stakeStartTime after partial unstake
