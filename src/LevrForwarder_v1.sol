@@ -28,7 +28,7 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
         uint256 length = calls.length;
         results = new Result[](length);
 
-        // SECURITY FIX #1: Validate msg.value matches total required
+        // Validate msg.value matches total required
         uint256 totalValue = 0;
         for (uint256 i = 0; i < length; i++) {
             totalValue += calls[i].value;
@@ -47,9 +47,8 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
             calli = calls[i];
 
             // Special case: if target is this forwarder, execute directly without ERC2771 modifications
-            // This allows calling executeTransaction via multicall
             if (calli.target == address(this)) {
-                // Security: Only allow executeTransaction selector to prevent recursive executeMulticall
+                // Only allow executeTransaction selector to prevent recursive executeMulticall
                 bytes4 selector = bytes4(calli.callData);
                 if (selector != this.executeTransaction.selector) {
                     revert ForbiddenSelectorOnSelf(selector);
@@ -69,7 +68,6 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
                 (success, returnData) = calli.target.call{value: calli.value}(data);
             }
 
-            // Check if failure is allowed
             if (!success && !calli.allowFailure) {
                 revert CallFailed(calli);
             }
@@ -84,15 +82,13 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
         address target,
         bytes calldata data
     ) external payable returns (bool success, bytes memory returnData) {
-        // SECURITY: Only allow calls from the forwarder itself (via executeMulticall)
-        // This prevents anyone from impersonating addresses by crafting malicious calldata
-        // when calling ERC2771Context contracts
+        // Only allow calls from the forwarder itself (via executeMulticall)
+        // to prevent address impersonation attacks
         if (msg.sender != address(this)) {
             revert OnlyMulticallCanExecuteTransaction();
         }
 
         // Execute call directly without appending sender (non-ERC2771)
-        // This allows calling external contracts that don't use ERC2771 in multicall sequences
         (success, returnData) = target.call{value: msg.value}(data);
     }
 

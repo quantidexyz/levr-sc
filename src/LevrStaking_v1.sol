@@ -55,7 +55,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address treasury_,
         address factory_
     ) external {
-        // CRITICAL FIX [C-2]: Use custom error instead of generic revert()
+        // Ensure initialization only happens once
         if (underlying != address(0)) revert AlreadyInitialized();
         if (
             underlying_ == address(0) ||
@@ -64,7 +64,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             factory_ == address(0)
         ) revert ZeroAddress();
 
-        // CRITICAL FIX [C-2]: Ensure only factory can initialize
+        // Only factory can initialize
         if (_msgSender() != factory_) revert OnlyFactory();
 
         underlying = underlying_;
@@ -227,7 +227,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     ) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (pullFromTreasury) {
-            // Only treasury is allowed to initiate a pull from treasury funds
+            // Only treasury can initiate a pull
             require(_msgSender() == treasury, 'ONLY_TREASURY');
             uint256 beforeAvail = _availableUnaccountedRewards(token);
             IERC20(token).safeTransferFrom(treasury, address(this), amount);
@@ -321,7 +321,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             .getClankerMetadata(underlying);
         if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
 
-        // Note: Fee owner can be configured externally via ClankerFeeLocker.setFeeOwner()
         try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
             uint256 fees
         ) {
@@ -350,7 +349,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         }
 
         // Claim from ClankerFeeLocker if available
-        // Note: Fee owner can be configured externally via ClankerFeeLocker.setFeeOwner()
         if (metadata.feeLocker != address(0)) {
             try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
                 uint256 availableFees
@@ -457,8 +455,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint64 end = _streamEndByToken[token];
         if (end == 0 || start == 0) return;
 
-        // MEDIUM FIX [M-2]: Don't consume stream time if no stakers
-        // This preserves rewards for when stakers return
+        // Don't consume stream time if no stakers to preserve rewards
         if (_totalStaked == 0) return;
 
         uint64 last = _lastUpdateByToken[token];
@@ -506,7 +503,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     ///               New balance: 1100 tokens
     ///               New time: 3000 / 1100 = 2.727 days
     ///               Result: 1100 tokens with 2.727 days of accumulation (preserves 3000 token-days VP)
-    ///      NOTE: _staked[staker] is NOT yet updated when this is called
     /// @param stakeAmount Amount being staked
     /// @return newStartTime New timestamp to set
     function _onStakeNewTimestamp(
@@ -541,7 +537,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     ///      Formula: newTime = oldTime * (remainingBalance / originalBalance)
     ///      Example: 1000 tokens staked for 100 days, unstake 300 (30%)
     ///               Result: 700 tokens with 70 days of time accumulation
-    ///      NOTE: _staked[staker] is already updated when this is called
     /// @param unstakeAmount Amount being unstaked
     /// @return newStartTime New timestamp to set (0 if full unstake)
     function _onUnstakeNewTimestamp(
@@ -553,7 +548,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // If never staked, return 0
         if (currentStartTime == 0) return 0;
 
-        // NOTE: _staked[staker] is already updated to remaining balance
         uint256 remainingBalance = _staked[staker];
 
         // If no balance remaining, reset to 0

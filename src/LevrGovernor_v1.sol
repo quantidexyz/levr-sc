@@ -135,7 +135,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     /// @inheritdoc ILevrGovernor_v1
     function startNewCycle() external {
-        // MEDIUM FIX [M-3]: Allow anyone to start a new cycle if current one has ended
+        // Allow anyone to start a new cycle if current one has ended
         // This helps recover from failed cycles where no proposals were executed
         if (_currentCycleId == 0) {
             _startNewCycle();
@@ -366,20 +366,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // If quorum is 0, no participation requirement
         if (quorumBps == 0) return true;
 
-        // MEDIUM FIX [M-4]: INTENTIONAL DESIGN CHOICE - Quorum uses balance, not VP
-        //
-        // Quorum measures participation rate (what % of stakers voted), while
-        // vote tallying uses time-weighted VP (rewards long-term commitment).
-        //
+        // Quorum uses staked token balance (not VP) to measure participation rate.
         // This two-tier system ensures:
-        // 1. Quorum: Democratic participation (all stakers equal for participation)
-        // 2. Approval: Time-weighted influence (long-term stakers have more say)
-        //
-        // Alternative designs considered:
-        // - VP for both: New stakers couldn't participate meaningfully in quorum
-        // - Balance for both: Removes incentive for long-term commitment
-        //
-        // Current design balances democratic access with commitment rewards.
+        // 1. Quorum: Democratic participation (all stakers equal)
+        // 2. Approval: Time-weighted influence (VP rewards long-term commitment)
         uint256 totalSupply = IERC20(stakedToken).totalSupply();
         if (totalSupply == 0) return false;
 

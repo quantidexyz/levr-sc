@@ -23,7 +23,7 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
     }
 
     function initialize(address governor_, address underlying_) external {
-        // one-time init by factory
+        // One-time initialization by factory only
         if (governor != address(0)) revert();
         if (_msgSender() != factory) revert();
         if (governor_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
@@ -47,15 +47,15 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
     /// @inheritdoc ILevrTreasury_v1
     function applyBoost(uint256 amount) external onlyGovernor nonReentrant {
         if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
-        // move underlying from treasury to staking and accrue
+
         ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
             underlying
         );
-        // approve and pull via accrueFromTreasury for atomicity
+        // Approve and pull via accrueFromTreasury for atomicity
         IERC20(underlying).approve(project.staking, amount);
         ILevrStaking_v1(project.staking).accrueFromTreasury(underlying, amount, true);
 
-        // HIGH FIX [H-3]: Reset approval to 0 after to prevent unlimited approval vulnerability
+        // Reset approval to 0 after use
         IERC20(underlying).approve(project.staking, 0);
     }
 

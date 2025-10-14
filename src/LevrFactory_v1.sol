@@ -81,7 +81,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         // Look up prepared contracts for this caller
         ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[caller];
 
-        // CRITICAL FIX [C-1]: Delete the prepared contracts to prevent reuse
+        // Delete prepared contracts to prevent reuse across multiple registrations
         delete _preparedContracts[caller];
 
         // Deploy all contracts via delegatecall to deployer logic
