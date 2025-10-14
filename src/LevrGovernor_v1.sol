@@ -214,7 +214,11 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     /// @inheritdoc ILevrGovernor_v1
     function getProposal(uint256 proposalId) external view returns (Proposal memory) {
-        return _proposals[proposalId];
+        Proposal memory proposal = _proposals[proposalId];
+        proposal.state = _state(proposalId);
+        proposal.meetsQuorum = _meetsQuorum(proposalId);
+        proposal.meetsApproval = _meetsApproval(proposalId);
+        return proposal;
     }
 
     /// @inheritdoc ILevrGovernor_v1
@@ -321,7 +325,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             noVotes: 0,
             totalBalanceVoted: 0,
             executed: false,
-            cycleId: cycleId
+            cycleId: cycleId,
+            state: ProposalState.Pending,
+            meetsQuorum: false,
+            meetsApproval: false
         });
 
         _activeProposalCount[proposalType]++;

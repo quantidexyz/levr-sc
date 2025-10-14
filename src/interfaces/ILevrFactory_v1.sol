@@ -28,6 +28,12 @@ interface ILevrFactory_v1 {
         address stakedToken;
     }
 
+    /// @notice Project information including token address.
+    struct ProjectInfo {
+        address clankerToken; // The project token address
+        Project project; // The project contract addresses
+    }
+
     /// @notice Prepared contracts for a deployer (before registration).
     struct PreparedContracts {
         address treasury;
@@ -109,6 +115,16 @@ interface ILevrFactory_v1 {
     function getClankerMetadata(
         address clankerToken
     ) external view returns (ClankerMetadata memory metadata);
+
+    /// @notice Get paginated list of registered projects.
+    /// @param offset Starting index for pagination
+    /// @param limit Maximum number of projects to return
+    /// @return projects Array of project information
+    /// @return total Total number of registered projects
+    function getProjects(
+        uint256 offset,
+        uint256 limit
+    ) external view returns (ProjectInfo[] memory projects, uint256 total);
 
     // Config getters for periphery contracts
     /// @notice Protocol fee in basis points.

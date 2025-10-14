@@ -40,6 +40,9 @@ interface ILevrGovernor_v1 {
         uint256 totalBalanceVoted; // Total sToken balance that voted (for quorum)
         bool executed; // Whether proposal has been executed
         uint256 cycleId; // Governance cycle ID
+        ProposalState state; // Current state of the proposal (computed)
+        bool meetsQuorum; // Whether proposal meets quorum threshold (computed)
+        bool meetsApproval; // Whether proposal meets approval threshold (computed)
     }
 
     /// @notice Vote receipt for a user on a proposal

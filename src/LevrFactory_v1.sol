@@ -31,6 +31,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 public override minSTokenBpsToSubmit;
 
     mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
+    address[] private _projectTokens; // Array of all registered project tokens
 
     // Track prepared contracts by deployer
     mapping(address => ILevrFactory_v1.PreparedContracts) private _preparedContracts; // deployer => PreparedContracts
@@ -100,6 +101,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
         // Store in registry
         _projects[clankerToken] = project;
+        _projectTokens.push(clankerToken);
 
         emit Registered(
             clankerToken,
@@ -173,6 +175,43 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
                 hook: address(0),
                 exists: false
             });
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function getProjects(
+        uint256 offset,
+        uint256 limit
+    )
+        external
+        view
+        override
+        returns (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total)
+    {
+        total = _projectTokens.length;
+
+        // Handle bounds
+        if (offset >= total) {
+            return (new ILevrFactory_v1.ProjectInfo[](0), total);
+        }
+
+        // Calculate actual length
+        uint256 end = offset + limit;
+        if (end > total) {
+            end = total;
+        }
+        uint256 length = end - offset;
+
+        // Build result array
+        projects = new ILevrFactory_v1.ProjectInfo[](length);
+        for (uint256 i = 0; i < length; i++) {
+            address token = _projectTokens[offset + i];
+            projects[i] = ILevrFactory_v1.ProjectInfo({
+                clankerToken: token,
+                project: _projects[token]
+            });
+        }
+
+        return (projects, total);
     }
 
     function _applyConfig(FactoryConfig memory cfg) internal {

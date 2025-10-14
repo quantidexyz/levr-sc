@@ -117,4 +117,144 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         vm.prank(u);
         g.proposeTransfer(address(0xB0B), 1 ether, 'ops3');
     }
+
+    function test_getProposal_returns_computed_fields() public {
+        // Create a proposal
+        vm.prank(user);
+        uint256 pid = governor.proposeBoost(100 ether);
+
+        // Get proposal in pending state
+        ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
+        assertEq(
+            uint256(proposal.state),
+            uint256(ILevrGovernor_v1.ProposalState.Pending),
+            'Should be Pending'
+        );
+        assertFalse(proposal.meetsQuorum, 'Should not meet quorum yet');
+        assertFalse(proposal.meetsApproval, 'Should not meet approval yet');
+
+        // Warp to voting window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Get proposal in active state
+        proposal = governor.getProposal(pid);
+        assertEq(
+            uint256(proposal.state),
+            uint256(ILevrGovernor_v1.ProposalState.Active),
+            'Should be Active'
+        );
+        assertFalse(proposal.meetsQuorum, 'Should not meet quorum without votes');
+        assertFalse(proposal.meetsApproval, 'Should not meet approval without votes');
+
+        // Vote
+        vm.prank(user);
+        governor.vote(pid, true);
+
+        // Get proposal with vote
+        proposal = governor.getProposal(pid);
+        assertEq(
+            uint256(proposal.state),
+            uint256(ILevrGovernor_v1.ProposalState.Active),
+            'Should still be Active'
+        );
+        // With quorum/approval at 0 in test config, both should be true
+        assertTrue(proposal.meetsQuorum, 'Should meet quorum (0% threshold)');
+        assertTrue(proposal.meetsApproval, 'Should meet approval (0% threshold)');
+
+        // Warp past voting window
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Get proposal in succeeded state
+        proposal = governor.getProposal(pid);
+        assertEq(
+            uint256(proposal.state),
+            uint256(ILevrGovernor_v1.ProposalState.Succeeded),
+            'Should be Succeeded'
+        );
+        assertTrue(proposal.meetsQuorum, 'Should meet quorum');
+        assertTrue(proposal.meetsApproval, 'Should meet approval');
+
+        // Execute proposal
+        governor.execute(pid);
+
+        // Get proposal in executed state
+        proposal = governor.getProposal(pid);
+        assertEq(
+            uint256(proposal.state),
+            uint256(ILevrGovernor_v1.ProposalState.Executed),
+            'Should be Executed'
+        );
+        assertTrue(proposal.executed, 'Should be marked as executed');
+    }
+
+    function test_getProposal_invalid_proposalId_reverts() public {
+        // Try to get a non-existent proposal (should revert)
+        vm.expectRevert(ILevrGovernor_v1.InvalidProposalType.selector);
+        governor.getProposal(999);
+
+        vm.expectRevert(ILevrGovernor_v1.InvalidProposalType.selector);
+        governor.getProposal(0);
+    }
+
+    function test_getProposal_defeated_proposal_state() public {
+        // Create a factory with high quorum that can't be met
+        ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: 0,
+            streamWindowSeconds: 3 days,
+            protocolTreasury: protocolTreasury,
+            proposalWindowSeconds: 2 days,
+            votingWindowSeconds: 5 days,
+            maxActiveProposals: 10,
+            quorumBps: 7000, // 70% quorum
+            approvalBps: 5100,
+            minSTokenBpsToSubmit: 0
+        });
+        (LevrFactory_v1 fac, , ) = deployFactoryWithDefaultClanker(cfg, address(this));
+
+        fac.prepareForDeployment();
+        ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
+        LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
+
+        // Create multiple stakers so one person can't meet quorum alone
+        address alice = address(0x1111);
+        address bob = address(0x2222);
+
+        // Alice stakes 40% of supply
+        underlying.mint(alice, 4 ether);
+        vm.startPrank(alice);
+        underlying.approve(proj.staking, type(uint256).max);
+        LevrStaking_v1(proj.staking).stake(4 ether);
+        vm.stopPrank();
+
+        // Bob stakes 60% of supply (now 10 ether total)
+        underlying.mint(bob, 6 ether);
+        vm.startPrank(bob);
+        underlying.approve(proj.staking, type(uint256).max);
+        LevrStaking_v1(proj.staking).stake(6 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 10 days);
+
+        // Alice creates proposal
+        vm.prank(alice);
+        uint256 pid = g.proposeBoost(100 ether);
+
+        // Only Alice votes (40% participation < 70% quorum)
+        vm.warp(block.timestamp + 2 days + 1);
+        vm.prank(alice);
+        g.vote(pid, true);
+
+        // Warp past voting
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Get proposal - should be Defeated due to insufficient quorum
+        ILevrGovernor_v1.Proposal memory proposal = g.getProposal(pid);
+        assertEq(
+            uint256(proposal.state),
+            uint256(ILevrGovernor_v1.ProposalState.Defeated),
+            'Should be Defeated'
+        );
+        assertFalse(proposal.meetsQuorum, 'Should not meet quorum (40% < 70%)');
+        assertTrue(proposal.meetsApproval, 'Should meet approval (100% yes votes)');
+    }
 }

@@ -118,4 +118,259 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         assertEq(proj.staking, staking, 'Project staking registered');
         assertEq(proj.stakedToken, project.stakedToken, 'Project stakedToken registered');
     }
+
+    function test_getProjects_empty() public {
+        // Call getProjects with no registered projects
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(0, 10);
+
+        assertEq(total, 0, 'Total should be 0 when no projects registered');
+        assertEq(projects.length, 0, 'Projects array should be empty');
+    }
+
+    function test_getProjects_single_project() public {
+        // Register one project
+        factory.prepareForDeployment();
+        MockERC20 token1 = new MockERC20('Token1', 'TK1');
+        ILevrFactory_v1.Project memory project1 = factory.register(address(token1));
+
+        // Query all projects
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(0, 10);
+
+        assertEq(total, 1, 'Total should be 1');
+        assertEq(projects.length, 1, 'Should return 1 project');
+        assertEq(projects[0].clankerToken, address(token1), 'Token address should match');
+        assertEq(projects[0].project.treasury, project1.treasury, 'Treasury should match');
+        assertEq(projects[0].project.governor, project1.governor, 'Governor should match');
+        assertEq(projects[0].project.staking, project1.staking, 'Staking should match');
+        assertEq(projects[0].project.stakedToken, project1.stakedToken, 'StakedToken should match');
+    }
+
+    function test_getProjects_multiple_projects() public {
+        // Register 5 projects
+        address[] memory tokens = new address[](5);
+        ILevrFactory_v1.Project[] memory registeredProjects = new ILevrFactory_v1.Project[](5);
+
+        for (uint256 i = 0; i < 5; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            tokens[i] = address(token);
+            registeredProjects[i] = factory.register(address(token));
+        }
+
+        // Query all projects
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(0, 10);
+
+        assertEq(total, 5, 'Total should be 5');
+        assertEq(projects.length, 5, 'Should return all 5 projects');
+
+        // Verify each project
+        for (uint256 i = 0; i < 5; i++) {
+            assertEq(projects[i].clankerToken, tokens[i], 'Token address should match');
+            assertEq(
+                projects[i].project.treasury,
+                registeredProjects[i].treasury,
+                'Treasury should match'
+            );
+        }
+    }
+
+    function test_getProjects_pagination() public {
+        // Register 5 projects
+        address[] memory tokens = new address[](5);
+
+        for (uint256 i = 0; i < 5; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            tokens[i] = address(token);
+            factory.register(address(token));
+        }
+
+        // Query first 2 projects
+        (ILevrFactory_v1.ProjectInfo[] memory page1, uint256 total1) = factory.getProjects(0, 2);
+        assertEq(total1, 5, 'Total should be 5');
+        assertEq(page1.length, 2, 'First page should have 2 projects');
+        assertEq(page1[0].clankerToken, tokens[0], 'First project should be token 0');
+        assertEq(page1[1].clankerToken, tokens[1], 'Second project should be token 1');
+
+        // Query next 2 projects
+        (ILevrFactory_v1.ProjectInfo[] memory page2, uint256 total2) = factory.getProjects(2, 2);
+        assertEq(total2, 5, 'Total should still be 5');
+        assertEq(page2.length, 2, 'Second page should have 2 projects');
+        assertEq(page2[0].clankerToken, tokens[2], 'Third project should be token 2');
+        assertEq(page2[1].clankerToken, tokens[3], 'Fourth project should be token 3');
+
+        // Query last project
+        (ILevrFactory_v1.ProjectInfo[] memory page3, uint256 total3) = factory.getProjects(4, 2);
+        assertEq(total3, 5, 'Total should still be 5');
+        assertEq(page3.length, 1, 'Third page should have 1 project (last one)');
+        assertEq(page3[0].clankerToken, tokens[4], 'Fifth project should be token 4');
+    }
+
+    function test_getProjects_offset_out_of_bounds() public {
+        // Register 3 projects
+        for (uint256 i = 0; i < 3; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            factory.register(address(token));
+        }
+
+        // Query with offset beyond total
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(10, 5);
+
+        assertEq(total, 3, 'Total should be 3');
+        assertEq(projects.length, 0, 'Should return empty array for out of bounds offset');
+    }
+
+    function test_getProjects_limit_exceeds_remaining() public {
+        // Register 3 projects
+        for (uint256 i = 0; i < 3; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            factory.register(address(token));
+        }
+
+        // Query with limit larger than remaining
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(1, 10);
+
+        assertEq(total, 3, 'Total should be 3');
+        assertEq(projects.length, 2, 'Should return only remaining 2 projects');
+    }
+
+    function test_getProjects_offset_at_exactly_total() public {
+        // Register 3 projects
+        for (uint256 i = 0; i < 3; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            factory.register(address(token));
+        }
+
+        // Query with offset exactly at total (edge case)
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(3, 5);
+
+        assertEq(total, 3, 'Total should be 3');
+        assertEq(projects.length, 0, 'Should return empty array when offset == total');
+    }
+
+    function test_getProjects_zero_limit() public {
+        // Register 2 projects
+        for (uint256 i = 0; i < 2; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            factory.register(address(token));
+        }
+
+        // Query with limit of 0 (should return empty array)
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(0, 0);
+
+        assertEq(total, 2, 'Total should be 2');
+        assertEq(projects.length, 0, 'Should return empty array with limit 0');
+    }
+
+    function test_getProjects_large_limit() public {
+        // Register 3 projects
+        address[] memory tokens = new address[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            tokens[i] = address(token);
+            factory.register(address(token));
+        }
+
+        // Query with very large limit (should return all projects)
+        (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(
+            0,
+            type(uint256).max
+        );
+
+        assertEq(total, 3, 'Total should be 3');
+        assertEq(projects.length, 3, 'Should return all 3 projects');
+
+        // Verify all tokens are present
+        for (uint256 i = 0; i < 3; i++) {
+            assertEq(projects[i].clankerToken, tokens[i], 'Token should match');
+        }
+    }
+
+    function test_getProjects_consistency_across_multiple_calls() public {
+        // Register 5 projects
+        address[] memory tokens = new address[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            tokens[i] = address(token);
+            factory.register(address(token));
+        }
+
+        // Make multiple calls and verify consistency
+        (ILevrFactory_v1.ProjectInfo[] memory firstCall, uint256 total1) = factory.getProjects(
+            0,
+            5
+        );
+        (ILevrFactory_v1.ProjectInfo[] memory secondCall, uint256 total2) = factory.getProjects(
+            0,
+            5
+        );
+
+        assertEq(total1, total2, 'Total should be consistent');
+        assertEq(firstCall.length, secondCall.length, 'Length should be consistent');
+
+        for (uint256 i = 0; i < firstCall.length; i++) {
+            assertEq(
+                firstCall[i].clankerToken,
+                secondCall[i].clankerToken,
+                'Tokens should be consistent'
+            );
+            assertEq(
+                firstCall[i].project.treasury,
+                secondCall[i].project.treasury,
+                'Treasury should be consistent'
+            );
+        }
+    }
+
+    function test_getProjects_order_matches_registration_order() public {
+        // Register projects in specific order
+        address[] memory tokens = new address[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            tokens[i] = address(token);
+            factory.register(address(token));
+        }
+
+        // Query all projects
+        (ILevrFactory_v1.ProjectInfo[] memory projects, ) = factory.getProjects(0, 10);
+
+        // Verify order matches registration order
+        for (uint256 i = 0; i < 3; i++) {
+            assertEq(projects[i].clankerToken, tokens[i], 'Order should match registration order');
+        }
+    }
 }
