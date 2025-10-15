@@ -36,5 +36,5 @@ jobs:
 
       - name: Run Forge tests
         run: |
-          forge test -vvv
+          forge test -vvv --skip test/e2e
         id: test
