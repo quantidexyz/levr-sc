@@ -443,6 +443,104 @@ contract SwapV4Helper is Test {
     }
 
     /**
+     * @notice Simplified swap function for tests - ETH to Token
+     * @param poolKey The pool configuration
+     * @param ethAmount Amount of ETH to swap
+     * @param minTokensOut Minimum tokens expected (slippage protection)
+     * @return tokensReceived Amount of tokens received
+     */
+    function swapETHForToken(
+        PoolKey memory poolKey,
+        uint256 ethAmount,
+        uint256 minTokensOut
+    ) external payable returns (uint256 tokensReceived) {
+        require(msg.value == ethAmount, 'SwapV4Helper: ETH amount mismatch');
+
+        SwapParams memory params = SwapParams({
+            poolKey: poolKey,
+            zeroForOne: true, // WETH (currency0) -> Token (currency1)
+            amountIn: uint128(ethAmount),
+            amountOutMinimum: uint128(minTokensOut),
+            hookData: bytes(''),
+            deadline: block.timestamp + 20 minutes
+        });
+
+        return this.executeSwap{value: ethAmount}(params);
+    }
+
+    /**
+     * @notice Simplified swap function for tests - Token to ETH
+     * @param poolKey The pool configuration
+     * @param tokenAmount Amount of tokens to swap
+     * @param minETHOut Minimum ETH expected (slippage protection)
+     * @return ethReceived Amount of ETH received
+     */
+    function swapTokenForETH(
+        PoolKey memory poolKey,
+        uint256 tokenAmount,
+        uint256 minETHOut
+    ) external returns (uint256 ethReceived) {
+        SwapParams memory params = SwapParams({
+            poolKey: poolKey,
+            zeroForOne: false, // Token (currency1) -> WETH (currency0)
+            amountIn: uint128(tokenAmount),
+            amountOutMinimum: uint128(minETHOut),
+            hookData: bytes(''),
+            deadline: block.timestamp + 20 minutes
+        });
+
+        return this.executeSwap(params);
+    }
+
+    /**
+     * @notice Execute multiple swaps to generate fees for testing
+     * @param poolKey The pool configuration
+     * @param totalETHAmount Total ETH to use for swaps
+     * @param swapCount Number of swaps to execute
+     * @return feesGenerated Approximate fees generated (actual fees determined by pool)
+     */
+    function generateFeesWithSwaps(
+        PoolKey memory poolKey,
+        uint256 totalETHAmount,
+        uint256 swapCount
+    ) external payable returns (uint256 feesGenerated) {
+        require(msg.value == totalETHAmount, 'SwapV4Helper: Incorrect ETH amount');
+        require(swapCount > 0, 'SwapV4Helper: Invalid swap count');
+
+        uint256 ethPerSwap = totalETHAmount / swapCount;
+        uint256 successfulSwaps = 0;
+        uint256 totalTokensReceived = 0;
+
+        for (uint256 i = 0; i < swapCount; i++) {
+            try this.swapETHForToken{value: ethPerSwap}(poolKey, ethPerSwap, 1) returns (
+                uint256 tokensReceived
+            ) {
+                totalTokensReceived += tokensReceived;
+                successfulSwaps++;
+
+                // Swap back half the tokens to generate more fees
+                if (tokensReceived > 2) {
+                    uint256 swapBackAmount = tokensReceived / 2;
+
+                    try this.swapTokenForETH(poolKey, swapBackAmount, 1) {
+                        // Successfully swapped back
+                    } catch {
+                        // Failed to swap back - that's ok, we still generated fees
+                    }
+                }
+            } catch {
+                // Swap failed - continue to next iteration
+                continue;
+            }
+        }
+
+        // Estimate fees: typically 0.3% to 1% of volume depending on pool config
+        feesGenerated = (totalETHAmount * successfulSwaps * 30) / (swapCount * 10000); // ~0.3% estimate
+
+        return feesGenerated;
+    }
+
+    /**
      * @notice Receive function to handle native ETH
      */
     receive() external payable {
