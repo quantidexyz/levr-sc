@@ -7,8 +7,10 @@ import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {ERC2771ContextBase} from './base/ERC2771ContextBase.sol';
 import {ILevrFeeSplitter_v1} from './interfaces/ILevrFeeSplitter_v1.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
+import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 import {IClankerLpLocker} from './interfaces/external/IClankerLPLocker.sol';
+import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
 
 /**
  * @title LevrFeeSplitter_v1
@@ -81,13 +83,20 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         if (!metadata.exists) revert ClankerMetadataNotFound();
         if (metadata.lpLocker == address(0)) revert LpLockerNotConfigured();
 
-        // Collect rewards from LP locker
-        // This sends fees directly to address(this) because we're the reward recipient
-        // NOTE: We do NOT claim from ClankerFeeLocker - the LP locker handles that
+        // Step 1: Collect rewards from LP locker (moves fees from V4 pool to ClankerFeeLocker)
         try IClankerLpLocker(metadata.lpLocker).collectRewards(clankerToken) {
-            // Successfully collected - fees now in this contract
+            // Successfully collected from pool to locker
         } catch {
             // Ignore errors - might not have fees to collect
+        }
+
+        // Step 2: Claim fees from ClankerFeeLocker to this contract (fee splitter)
+        if (metadata.feeLocker != address(0)) {
+            try IClankerFeeLocker(metadata.feeLocker).claim(address(this), rewardToken) {
+                // Successfully claimed from fee locker to splitter
+            } catch {
+                // Fee locker might not have this token or fees
+            }
         }
 
         // Check balance available for distribution
@@ -99,6 +108,7 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
         SplitConfig[] storage splits = _projectSplits[clankerToken];
         address staking = getStakingAddress(clankerToken);
+        bool sentToStaking = false;
 
         for (uint256 i = 0; i < splits.length; i++) {
             SplitConfig memory split = splits[i];
@@ -107,8 +117,9 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
             if (amount > 0) {
                 IERC20(rewardToken).safeTransfer(split.receiver, amount);
 
-                // If this is the staking contract, emit event for manual accrual
+                // Track if we sent to staking for automatic accrual
                 if (split.receiver == staking) {
+                    sentToStaking = true;
                     emit StakingDistribution(clankerToken, rewardToken, amount);
                 }
 
@@ -121,6 +132,13 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         _distributionState[clankerToken][rewardToken].lastDistribution = block.timestamp;
 
         emit Distributed(clankerToken, rewardToken, balance);
+
+        // If we sent fees to staking, automatically call accrueRewards
+        // This makes the fees immediately available without needing a separate transaction
+        if (sentToStaking) {
+            ILevrStaking_v1(staking).accrueRewards(rewardToken);
+            emit AutoAccrualSuccess(clankerToken, rewardToken);
+        }
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
@@ -153,14 +171,22 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     /// @inheritdoc ILevrFeeSplitter_v1
     function pendingFees(
-        address /* clankerToken */,
+        address clankerToken,
         address rewardToken
     ) external view override returns (uint256 pending) {
-        // For this singleton design, pending fees are just the balance in this contract
-        // that belongs to this project's reward token
-        // Note: This is a simplified view - in practice all projects share the contract balance
-        // but each project's fees are isolated by the distribution flow
-        return IERC20(rewardToken).balanceOf(address(this));
+        // Query pending fees from ClankerFeeLocker (same as staking contract does)
+        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
+            .getClankerMetadata(clankerToken);
+
+        if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
+
+        try
+            IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), rewardToken)
+        returns (uint256 fees) {
+            return fees;
+        } catch {
+            return 0;
+        }
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
@@ -259,11 +285,20 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         if (!metadata.exists) revert ClankerMetadataNotFound();
         if (metadata.lpLocker == address(0)) revert LpLockerNotConfigured();
 
-        // Collect rewards from LP locker
+        // Step 1: Collect rewards from LP locker (moves fees from V4 pool to ClankerFeeLocker)
         try IClankerLpLocker(metadata.lpLocker).collectRewards(clankerToken) {
-            // Successfully collected
+            // Successfully collected from pool to locker
         } catch {
             // Ignore errors
+        }
+
+        // Step 2: Claim fees from ClankerFeeLocker to this contract (fee splitter)
+        if (metadata.feeLocker != address(0)) {
+            try IClankerFeeLocker(metadata.feeLocker).claim(address(this), rewardToken) {
+                // Successfully claimed from fee locker to splitter
+            } catch {
+                // Fee locker might not have this token or fees
+            }
         }
 
         // Check balance available for distribution
@@ -275,6 +310,7 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
         SplitConfig[] storage splits = _projectSplits[clankerToken];
         address staking = getStakingAddress(clankerToken);
+        bool sentToStaking = false;
 
         for (uint256 i = 0; i < splits.length; i++) {
             SplitConfig memory split = splits[i];
@@ -284,6 +320,7 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
                 IERC20(rewardToken).safeTransfer(split.receiver, amount);
 
                 if (split.receiver == staking) {
+                    sentToStaking = true;
                     emit StakingDistribution(clankerToken, rewardToken, amount);
                 }
 
@@ -296,5 +333,11 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         _distributionState[clankerToken][rewardToken].lastDistribution = block.timestamp;
 
         emit Distributed(clankerToken, rewardToken, balance);
+
+        // If we sent fees to staking, automatically call accrueRewards
+        if (sentToStaking) {
+            ILevrStaking_v1(staking).accrueRewards(rewardToken);
+            emit AutoAccrualSuccess(clankerToken, rewardToken);
+        }
     }
 }

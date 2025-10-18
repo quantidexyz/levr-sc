@@ -67,6 +67,23 @@ contract LevrFeeSplitterV1_UnitTest is Test {
         );
     }
 
+    // Helper to mock common calls needed for distribution
+    function mockDistributionCalls(address rewardToken) internal {
+        // Mock LP locker
+        vm.mockCall(
+            address(0x1F1111),
+            abi.encodeWithSignature('collectRewards(address)', address(clankerToken)),
+            abi.encode()
+        );
+
+        // Mock staking.accrueRewards() call (automatically called by fee splitter)
+        vm.mockCall(
+            staking,
+            abi.encodeWithSignature('accrueRewards(address)', rewardToken),
+            abi.encode()
+        );
+    }
+
     // ============ Constructor Tests ============
 
     function test_constructor_setsFactory() public view {
@@ -230,14 +247,23 @@ contract LevrFeeSplitterV1_UnitTest is Test {
         );
     }
 
-    function test_pendingFees_returnsContractBalance() public {
-        // Transfer tokens to splitter
-        weth.mint(address(splitter), 1000 ether);
+    function test_pendingFees_returnsFeeLockerFees() public {
+        // Mock fee locker to return specific available fees
+        vm.mockCall(
+            address(0xF11111),
+            abi.encodeWithSignature(
+                'availableFees(address,address)',
+                address(splitter),
+                address(weth)
+            ),
+            abi.encode(500 ether)
+        );
 
+        // pendingFees returns fees from fee locker, not contract balance
         assertEq(
             splitter.pendingFees(address(clankerToken), address(weth)),
-            1000 ether,
-            'Pending fees should match balance'
+            500 ether,
+            'Pending fees should match fee locker'
         );
     }
 
@@ -295,12 +321,7 @@ contract LevrFeeSplitterV1_UnitTest is Test {
         vm.prank(tokenAdmin);
         splitter.configureSplits(address(clankerToken), splits);
 
-        // Mock LP locker
-        vm.mockCall(
-            address(0x1F1111),
-            abi.encodeWithSignature('collectRewards(address)', address(clankerToken)),
-            abi.encode()
-        );
+        mockDistributionCalls(address(weth));
 
         // Transfer tokens to splitter (simulating collectRewards)
         weth.mint(address(splitter), 1000 ether);
@@ -327,12 +348,7 @@ contract LevrFeeSplitterV1_UnitTest is Test {
         vm.prank(tokenAdmin);
         splitter.configureSplits(address(clankerToken), splits);
 
-        // Mock LP locker
-        vm.mockCall(
-            address(0x1F1111),
-            abi.encodeWithSignature('collectRewards(address)', address(clankerToken)),
-            abi.encode()
-        );
+        mockDistributionCalls(address(weth));
 
         // Transfer tokens to splitter
         weth.mint(address(splitter), 1000 ether);
@@ -377,12 +393,7 @@ contract LevrFeeSplitterV1_UnitTest is Test {
         vm.prank(tokenAdmin);
         splitter.configureSplits(address(clankerToken), splits);
 
-        // Mock LP locker
-        vm.mockCall(
-            address(0x1F1111),
-            abi.encodeWithSignature('collectRewards(address)', address(clankerToken)),
-            abi.encode()
-        );
+        mockDistributionCalls(address(weth));
 
         // Transfer tokens to splitter
         weth.mint(address(splitter), 1000 ether);
@@ -411,12 +422,8 @@ contract LevrFeeSplitterV1_UnitTest is Test {
         vm.prank(tokenAdmin);
         splitter.configureSplits(address(clankerToken), splits);
 
-        // Mock LP locker
-        vm.mockCall(
-            address(0x1F1111),
-            abi.encodeWithSignature('collectRewards(address)', address(clankerToken)),
-            abi.encode()
-        );
+        mockDistributionCalls(address(weth));
+        mockDistributionCalls(address(usdc));
 
         // Transfer both tokens to splitter
         weth.mint(address(splitter), 1000 ether);
@@ -482,5 +489,93 @@ contract LevrFeeSplitterV1_UnitTest is Test {
                 'Each receiver should get 10%'
             );
         }
+    }
+
+    // ============ Outstanding Rewards Integration Tests ============
+
+    function test_distribute_transfersToStakingForOutstandingRewards() public {
+        // Configure 70/30 split
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: staking, bps: 7000}); // 70%
+        splits[1] = ILevrFeeSplitter_v1.SplitConfig({receiver: receiver1, bps: 3000}); // 30%
+
+        vm.prank(tokenAdmin);
+        splitter.configureSplits(address(clankerToken), splits);
+
+        mockDistributionCalls(address(weth));
+
+        // Transfer tokens to splitter (simulating collected fees)
+        weth.mint(address(splitter), 1000 ether);
+
+        // Check initial staking balance
+        uint256 stakingBalanceBefore = weth.balanceOf(staking);
+
+        // Distribute fees
+        splitter.distribute(address(clankerToken), address(weth));
+
+        // Verify staking received 70%
+        uint256 stakingBalanceAfter = weth.balanceOf(staking);
+        assertEq(
+            stakingBalanceAfter - stakingBalanceBefore,
+            700 ether,
+            'Staking should receive 70%'
+        );
+
+        // After distribution, staking contract has the balance
+        // When staking's outstandingRewards(weth) is called, it will see this 700 ether
+        // as available (unaccrued) rewards until accrueRewards() is called
+        assertEq(weth.balanceOf(staking), 700 ether, 'Staking balance should be 700 ether');
+
+        // Verify receiver1 got 30%
+        assertEq(weth.balanceOf(receiver1), 300 ether, 'Receiver1 should receive 30%');
+
+        // Verify splitter has 0 balance after distribution
+        assertEq(weth.balanceOf(address(splitter)), 0, 'Splitter should have 0 balance after');
+    }
+
+    function test_distribute_multipleDistributionsAccumulate() public {
+        // Configure 100% to staking
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](1);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: staking, bps: 10000}); // 100%
+
+        vm.prank(tokenAdmin);
+        splitter.configureSplits(address(clankerToken), splits);
+
+        mockDistributionCalls(address(weth));
+
+        uint256 stakingBalanceBefore = weth.balanceOf(staking);
+
+        // First distribution: 500 ether
+        weth.mint(address(splitter), 500 ether);
+        splitter.distribute(address(clankerToken), address(weth));
+
+        uint256 stakingBalanceAfter1 = weth.balanceOf(staking);
+        assertEq(
+            stakingBalanceAfter1 - stakingBalanceBefore,
+            500 ether,
+            'First distribution should add 500 ether'
+        );
+
+        // Second distribution: 300 ether
+        weth.mint(address(splitter), 300 ether);
+        splitter.distribute(address(clankerToken), address(weth));
+
+        uint256 stakingBalanceAfter2 = weth.balanceOf(staking);
+        assertEq(
+            stakingBalanceAfter2 - stakingBalanceBefore,
+            800 ether,
+            'Total should be 800 ether after two distributions'
+        );
+
+        // The staking contract now has 800 ether total
+        // This will be reflected in outstandingRewards() as available (unaccrued)
+        assertEq(weth.balanceOf(staking), 800 ether, 'Staking should have 800 ether total');
+
+        // Verify distribution state
+        ILevrFeeSplitter_v1.DistributionState memory state = splitter.getDistributionState(
+            address(clankerToken),
+            address(weth)
+        );
+        assertEq(state.totalDistributed, 800 ether, 'Total distributed should be 800 ether');
     }
 }

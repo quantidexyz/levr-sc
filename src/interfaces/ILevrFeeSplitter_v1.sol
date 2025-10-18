@@ -65,6 +65,16 @@ interface ILevrFeeSplitter_v1 {
     /// @param amount The amount sent to staking
     event StakingDistribution(address indexed clankerToken, address indexed token, uint256 amount);
 
+    /// @notice Emitted when automatic accrual succeeds after distribution
+    /// @param clankerToken The Clanker token address
+    /// @param token The reward token
+    event AutoAccrualSuccess(address indexed clankerToken, address indexed token);
+
+    /// @notice Emitted when automatic accrual fails after distribution
+    /// @param clankerToken The Clanker token address
+    /// @param token The reward token
+    event AutoAccrualFailed(address indexed clankerToken, address indexed token);
+
     // ============ Admin Functions ============
 
     /// @notice Configure fee splits for a project (only token admin)
@@ -138,4 +148,3 @@ interface ILevrFeeSplitter_v1 {
     /// @return factory The Levr factory address
     function factory() external view returns (address);
 }
-
