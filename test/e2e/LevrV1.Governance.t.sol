@@ -258,20 +258,23 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         uint256 expectedVP = 4 * 24; // 80% of tokens, 80% of time
         assertEq(vpAfter, expectedVP, 'alice VP should be 96 token-days (20% loss)');
 
-        // Alice stakes again (top-up preserves time baseline)
+        // Alice stakes again (weighted average preserves VP)
         vm.prank(alice);
         IERC20(clankerToken).approve(staking, 1 ether);
         vm.prank(alice);
         ILevrStaking_v1(staking).stake(1 ether);
 
-        // VP should now be 5 tokens × 24 days = 120 token-days (time baseline preserved)
+        // Weighted average: VP preserved at 96, time diluted
+        // Before: 4 tokens × 24 days = 96 token-days
+        // After: 5 tokens × (96/5) days = 5 × 19.2 = 96 token-days
         uint256 vpAfterRestake = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertEq(vpAfterRestake, 5 * 24, 'restake preserves time baseline (120 token-days)');
+        assertEq(vpAfterRestake, 96, 'restake preserves VP at 96 token-days (weighted average)');
 
-        // Wait 1 day and verify time accumulates from baseline
-        vm.warp(block.timestamp + 1 days);
+        // Wait 4.8 days to reach 24 days equivalent (19.2 + 4.8 = 24)
+        vm.warp(block.timestamp + 4 days + 19 hours + 12 minutes);
         uint256 vpNew = ILevrStaking_v1(staking).getVotingPower(alice);
-        assertEq(vpNew, 5 * 25, 'VP accumulates from new baseline (125 token-days)');
+        // Should be approximately 5 × 24 = 120 token-days
+        assertApproxEqAbs(vpNew, 5 * 24, 1, 'VP reaches 120 token-days after sufficient time');
 
         // Verify anti-gaming: can't recover lost time by unstake/restake cycling
         assertLt(vpNew, vpBefore, 'cannot recover lost time through cycling');
