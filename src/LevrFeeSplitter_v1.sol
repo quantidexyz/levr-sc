@@ -14,10 +14,10 @@ import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
 
 /**
  * @title LevrFeeSplitter_v1
- * @notice Singleton that enables flexible fee distribution for all Clanker tokens
- * @dev Acts as fee receiver from ClankerLpLocker and distributes fees according to per-project configuration
- *      Each project (identified by clankerToken) can configure its own split percentages
- *      Only the token admin can configure splits for their project
+ * @notice Per-project fee splitter for flexible fee distribution
+ * @dev Each Clanker token gets its own dedicated fee splitter instance
+ *      This prevents token mixing issues with shared reward tokens (WETH, USDC, etc.)
+ *      Deploy via LevrFeeSplitterDeployer_v1
  */
 contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -26,48 +26,57 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     uint256 private constant BPS_DENOMINATOR = 10_000; // 100% = 10,000 bps
 
-    // ============ State Variables ============
+    // ============ Immutables ============
 
-    /// @notice The Levr factory address (for getClankerMetadata and getProjectContracts)
+    /// @notice The Clanker token this splitter handles
+    address public immutable clankerToken;
+
+    /// @notice The Levr factory address (for metadata and project lookups)
     address public immutable factory;
 
-    /// @notice Per-project configuration (clankerToken => splits)
-    mapping(address => SplitConfig[]) private _projectSplits;
+    // ============ State Variables ============
 
-    /// @notice Per-project distribution state (clankerToken => rewardToken => state)
-    mapping(address => mapping(address => DistributionState)) private _distributionState;
+    /// @notice Split configuration for this project
+    SplitConfig[] private _splits;
+
+    /// @notice Per-reward-token distribution state
+    mapping(address => DistributionState) private _distributionState;
 
     // ============ Constructor ============
 
     /**
-     * @notice Deploy the singleton fee splitter
+     * @notice Deploy a fee splitter for a specific Clanker token
+     * @param clankerToken_ The Clanker token address this splitter handles
      * @param factory_ The Levr factory address
      * @param trustedForwarder_ The ERC2771 forwarder for meta-transactions
      */
-    constructor(address factory_, address trustedForwarder_) ERC2771ContextBase(trustedForwarder_) {
+    constructor(
+        address clankerToken_,
+        address factory_,
+        address trustedForwarder_
+    ) ERC2771ContextBase(trustedForwarder_) {
+        if (clankerToken_ == address(0)) revert ZeroAddress();
         if (factory_ == address(0)) revert ZeroAddress();
+        clankerToken = clankerToken_;
         factory = factory_;
     }
 
     // ============ Admin Functions ============
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function configureSplits(
-        address clankerToken,
-        SplitConfig[] calldata splits
-    ) external override {
-        // Only token admin can configure splits for their project
-        _onlyTokenAdmin(clankerToken);
+    function configureSplits(SplitConfig[] calldata splits) external {
+        // Only token admin can configure splits
+        _onlyTokenAdmin();
 
         // Validate splits
-        _validateSplits(clankerToken, splits);
+        _validateSplits(splits);
 
         // Clear existing splits
-        delete _projectSplits[clankerToken];
+        delete _splits;
 
         // Store new splits
         for (uint256 i = 0; i < splits.length; i++) {
-            _projectSplits[clankerToken].push(splits[i]);
+            _splits.push(splits[i]);
         }
 
         emit SplitsConfigured(clankerToken, splits);
@@ -76,7 +85,7 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
     // ============ Distribution Functions ============
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function distribute(address clankerToken, address rewardToken) external override nonReentrant {
+    function distribute(address rewardToken) external nonReentrant {
         // Get LP locker from factory
         ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
             .getClankerMetadata(clankerToken);
@@ -104,14 +113,13 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         if (balance == 0) return; // No fees to distribute
 
         // Distribute according to configured splits
-        if (!_isSplitsConfigured(clankerToken)) revert SplitsNotConfigured();
+        if (!_isSplitsConfigured()) revert SplitsNotConfigured();
 
-        SplitConfig[] storage splits = _projectSplits[clankerToken];
-        address staking = getStakingAddress(clankerToken);
+        address staking = getStakingAddress();
         bool sentToStaking = false;
 
-        for (uint256 i = 0; i < splits.length; i++) {
-            SplitConfig memory split = splits[i];
+        for (uint256 i = 0; i < _splits.length; i++) {
+            SplitConfig memory split = _splits[i];
             uint256 amount = (balance * split.bps) / BPS_DENOMINATOR;
 
             if (amount > 0) {
@@ -128,8 +136,8 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         }
 
         // Update distribution state
-        _distributionState[clankerToken][rewardToken].totalDistributed += balance;
-        _distributionState[clankerToken][rewardToken].lastDistribution = block.timestamp;
+        _distributionState[rewardToken].totalDistributed += balance;
+        _distributionState[rewardToken].lastDistribution = block.timestamp;
 
         emit Distributed(clankerToken, rewardToken, balance);
 
@@ -142,39 +150,30 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function distributeBatch(
-        address clankerToken,
-        address[] calldata rewardTokens
-    ) external override nonReentrant {
+    function distributeBatch(address[] calldata rewardTokens) external nonReentrant {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
             // Use internal logic without reentrancy guard (already protected)
-            _distributeSingle(clankerToken, rewardTokens[i]);
+            _distributeSingle(rewardTokens[i]);
         }
     }
 
     // ============ View Functions ============
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function getSplits(
-        address clankerToken
-    ) external view override returns (SplitConfig[] memory splits) {
-        return _projectSplits[clankerToken];
+    function getSplits() external view returns (SplitConfig[] memory splits) {
+        return _splits;
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function getTotalBps(address clankerToken) external view override returns (uint256 totalBps) {
-        SplitConfig[] storage splits = _projectSplits[clankerToken];
-        for (uint256 i = 0; i < splits.length; i++) {
-            totalBps += splits[i].bps;
+    function getTotalBps() external view returns (uint256 totalBps) {
+        for (uint256 i = 0; i < _splits.length; i++) {
+            totalBps += _splits[i].bps;
         }
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function pendingFees(
-        address clankerToken,
-        address rewardToken
-    ) external view override returns (uint256 pending) {
-        // Query pending fees from ClankerFeeLocker (same as staking contract does)
+    function pendingFees(address rewardToken) external view returns (uint256 pending) {
+        // Query pending fees from ClankerFeeLocker
         ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
             .getClankerMetadata(clankerToken);
 
@@ -190,24 +189,40 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
+    function pendingFeesInclBalance(address rewardToken) external view returns (uint256 pending) {
+        // Get pending in fee locker
+        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
+            .getClankerMetadata(clankerToken);
+
+        uint256 locker_pending = 0;
+        if (metadata.exists && metadata.feeLocker != address(0)) {
+            try
+                IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), rewardToken)
+            returns (uint256 fees) {
+                locker_pending = fees;
+            } catch {}
+        }
+
+        // Add any tokens already in this contract's balance
+        uint256 balance = IERC20(rewardToken).balanceOf(address(this));
+
+        return locker_pending + balance;
+    }
+
+    /// @inheritdoc ILevrFeeSplitter_v1
     function getDistributionState(
-        address clankerToken,
         address rewardToken
-    ) external view override returns (DistributionState memory state) {
-        return _distributionState[clankerToken][rewardToken];
+    ) external view returns (DistributionState memory state) {
+        return _distributionState[rewardToken];
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function isSplitsConfigured(
-        address clankerToken
-    ) external view override returns (bool configured) {
-        return _isSplitsConfigured(clankerToken);
+    function isSplitsConfigured() external view returns (bool configured) {
+        return _isSplitsConfigured();
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
-    function getStakingAddress(
-        address clankerToken
-    ) public view override returns (address staking) {
+    function getStakingAddress() public view returns (address staking) {
         ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
             clankerToken
         );
@@ -218,16 +233,14 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     /**
      * @notice Check if splits are configured and valid (sum to 100%)
-     * @param clankerToken The Clanker token address
      * @return configured True if splits are properly configured
      */
-    function _isSplitsConfigured(address clankerToken) internal view returns (bool configured) {
-        SplitConfig[] storage splits = _projectSplits[clankerToken];
-        if (splits.length == 0) return false;
+    function _isSplitsConfigured() internal view returns (bool configured) {
+        if (_splits.length == 0) return false;
 
         uint256 totalBps = 0;
-        for (uint256 i = 0; i < splits.length; i++) {
-            totalBps += splits[i].bps;
+        for (uint256 i = 0; i < _splits.length; i++) {
+            totalBps += _splits[i].bps;
         }
 
         return totalBps == BPS_DENOMINATOR;
@@ -235,14 +248,13 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     /**
      * @notice Validate split configuration
-     * @param clankerToken The Clanker token address
      * @param splits The splits to validate
      */
-    function _validateSplits(address clankerToken, SplitConfig[] calldata splits) internal view {
+    function _validateSplits(SplitConfig[] calldata splits) internal view {
         if (splits.length == 0) revert NoReceivers();
 
         // Get staking address for this project from factory
-        address staking = getStakingAddress(clankerToken);
+        address staking = getStakingAddress();
         if (staking == address(0)) revert ProjectNotRegistered();
 
         uint256 totalBps = 0;
@@ -266,19 +278,17 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     /**
      * @notice Ensure caller is the token admin
-     * @param clankerToken The Clanker token address
      */
-    function _onlyTokenAdmin(address clankerToken) internal view {
+    function _onlyTokenAdmin() internal view {
         address tokenAdmin = IClankerToken(clankerToken).admin();
         if (_msgSender() != tokenAdmin) revert OnlyTokenAdmin();
     }
 
     /**
      * @notice Internal distribution logic (without reentrancy guard)
-     * @param clankerToken The Clanker token address
      * @param rewardToken The reward token to distribute
      */
-    function _distributeSingle(address clankerToken, address rewardToken) internal {
+    function _distributeSingle(address rewardToken) internal {
         // Get LP locker from factory
         ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
             .getClankerMetadata(clankerToken);
@@ -306,14 +316,13 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         if (balance == 0) return;
 
         // Distribute according to configured splits
-        if (!_isSplitsConfigured(clankerToken)) revert SplitsNotConfigured();
+        if (!_isSplitsConfigured()) revert SplitsNotConfigured();
 
-        SplitConfig[] storage splits = _projectSplits[clankerToken];
-        address staking = getStakingAddress(clankerToken);
+        address staking = getStakingAddress();
         bool sentToStaking = false;
 
-        for (uint256 i = 0; i < splits.length; i++) {
-            SplitConfig memory split = splits[i];
+        for (uint256 i = 0; i < _splits.length; i++) {
+            SplitConfig memory split = _splits[i];
             uint256 amount = (balance * split.bps) / BPS_DENOMINATOR;
 
             if (amount > 0) {
@@ -329,8 +338,8 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         }
 
         // Update distribution state
-        _distributionState[clankerToken][rewardToken].totalDistributed += balance;
-        _distributionState[clankerToken][rewardToken].lastDistribution = block.timestamp;
+        _distributionState[rewardToken].totalDistributed += balance;
+        _distributionState[rewardToken].lastDistribution = block.timestamp;
 
         emit Distributed(clankerToken, rewardToken, balance);
 

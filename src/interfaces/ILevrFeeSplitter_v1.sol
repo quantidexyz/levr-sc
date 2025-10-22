@@ -2,8 +2,9 @@
 pragma solidity ^0.8.30;
 
 /// @title Levr Fee Splitter v1 Interface
-/// @notice Singleton that enables flexible fee distribution for all Clanker tokens
-/// @dev Acts as fee receiver from ClankerLpLocker and distributes fees according to per-project configuration
+/// @notice Per-project fee splitter for flexible fee distribution
+/// @dev Each Clanker token gets its own dedicated fee splitter instance
+///      Deploy via LevrFeeSplitterDeployer_v1
 interface ILevrFeeSplitter_v1 {
     // ============ Structs ============
 
@@ -13,7 +14,7 @@ interface ILevrFeeSplitter_v1 {
         uint16 bps; // Basis points (e.g., 3000 = 30%)
     }
 
-    /// @notice Distribution state per project per reward token
+    /// @notice Distribution state per reward token
     struct DistributionState {
         uint256 totalDistributed; // Total amount distributed for this token
         uint256 lastDistribution; // Timestamp of last distribution
@@ -36,12 +37,12 @@ interface ILevrFeeSplitter_v1 {
 
     // ============ Events ============
 
-    /// @notice Emitted when splits are configured for a project
-    /// @param clankerToken The Clanker token address (identifies the project)
+    /// @notice Emitted when splits are configured for this project
+    /// @param clankerToken The Clanker token address (this splitter's project)
     /// @param splits Array of split configurations
     event SplitsConfigured(address indexed clankerToken, SplitConfig[] splits);
 
-    /// @notice Emitted when fees are distributed for a project
+    /// @notice Emitted when fees are distributed
     /// @param clankerToken The Clanker token address
     /// @param token The reward token that was distributed
     /// @param totalAmount Total amount distributed
@@ -59,7 +60,7 @@ interface ILevrFeeSplitter_v1 {
         uint256 amount
     );
 
-    /// @notice Emitted when fees are distributed to staking contract (signals manual accrual needed)
+    /// @notice Emitted when fees are distributed to staking contract
     /// @param clankerToken The Clanker token address
     /// @param token The reward token
     /// @param amount The amount sent to staking
@@ -77,72 +78,66 @@ interface ILevrFeeSplitter_v1 {
 
     // ============ Admin Functions ============
 
-    /// @notice Configure fee splits for a project (only token admin)
+    /// @notice Configure fee splits for this project (only token admin)
     /// @dev Total bps must equal 10,000 (100%)
     ///      Caller must be the token admin (IClankerToken(clankerToken).admin())
     ///      At most one split can point to the staking contract
-    /// @param clankerToken The Clanker token address (identifies the project)
-    /// @param splits Array of split configurations for this project
-    function configureSplits(address clankerToken, SplitConfig[] calldata splits) external;
+    /// @param splits Array of split configurations
+    function configureSplits(SplitConfig[] calldata splits) external;
 
     // ============ Distribution Functions ============
 
     /// @notice Collect rewards from LP locker and distribute according to configured splits
     /// @dev Permissionless - anyone can trigger distribution
     ///      Supports multiple tokens (ETH, WETH, underlying, etc.)
-    ///      ⚠️ IMPORTANT: Call once per (clankerToken, rewardToken) pair
-    ///         Multiple calls for same pair will have no effect (second call finds 0 balance)
-    /// @param clankerToken The Clanker token address (identifies the project)
     /// @param rewardToken The reward token to distribute (e.g., WETH, clankerToken itself)
-    function distribute(address clankerToken, address rewardToken) external;
+    function distribute(address rewardToken) external;
 
-    /// @notice Batch distribute multiple reward tokens for a single project
+    /// @notice Batch distribute multiple reward tokens
     /// @dev More gas efficient than calling distribute() multiple times
-    ///      Use this for multi-token fee distribution (e.g., WETH + Clanker token)
-    /// @param clankerToken The Clanker token address (identifies the project)
     /// @param rewardTokens Array of reward tokens to distribute
-    function distributeBatch(address clankerToken, address[] calldata rewardTokens) external;
+    function distributeBatch(address[] calldata rewardTokens) external;
 
     // ============ View Functions ============
 
-    /// @notice Get current split configuration for a project
-    /// @param clankerToken The Clanker token address
+    /// @notice Get current split configuration
     /// @return splits Array of split configurations
-    function getSplits(address clankerToken) external view returns (SplitConfig[] memory splits);
+    function getSplits() external view returns (SplitConfig[] memory splits);
 
-    /// @notice Get total configured split percentage for a project
-    /// @param clankerToken The Clanker token address
+    /// @notice Get total configured split percentage
     /// @return totalBps Total basis points (should always be 10,000 if configured)
-    function getTotalBps(address clankerToken) external view returns (uint256 totalBps);
+    function getTotalBps() external view returns (uint256 totalBps);
 
-    /// @notice Get pending fees for a project's reward token (balance in this contract)
-    /// @param clankerToken The Clanker token address (identifies the project)
+    /// @notice Get pending fees for a reward token (in fee locker only)
     /// @param rewardToken The reward token to check
-    /// @return pending Pending fees available to distribute
-    function pendingFees(
-        address clankerToken,
-        address rewardToken
-    ) external view returns (uint256 pending);
+    /// @return pending Pending fees in fee locker
+    function pendingFees(address rewardToken) external view returns (uint256 pending);
 
-    /// @notice Get distribution state for a project's reward token
-    /// @param clankerToken The Clanker token address
+    /// @notice Get total pending fees including tokens already in the splitter's balance
+    /// @dev This includes tokens from fee locker AND any tokens in contract balance
+    /// @param rewardToken The reward token to check
+    /// @return pending Total pending fees (fee locker + contract balance)
+    function pendingFeesInclBalance(address rewardToken) external view returns (uint256 pending);
+
+    /// @notice Get distribution state for a reward token
     /// @param rewardToken The reward token to check
     /// @return state Distribution state (total distributed, last distribution time)
     function getDistributionState(
-        address clankerToken,
         address rewardToken
     ) external view returns (DistributionState memory state);
 
-    /// @notice Check if splits are configured for a project (sum to 100%)
-    /// @param clankerToken The Clanker token address
+    /// @notice Check if splits are configured (sum to 100%)
     /// @return configured True if splits are properly configured
-    function isSplitsConfigured(address clankerToken) external view returns (bool configured);
+    function isSplitsConfigured() external view returns (bool configured);
 
-    /// @notice Get the staking contract address for a project
+    /// @notice Get the staking contract address for this project
     /// @dev Queries factory.getProjectContracts(clankerToken).staking
-    /// @param clankerToken The Clanker token address
     /// @return staking The staking contract address
-    function getStakingAddress(address clankerToken) external view returns (address staking);
+    function getStakingAddress() external view returns (address staking);
+
+    /// @notice Get the Clanker token this splitter handles
+    /// @return token The Clanker token address
+    function clankerToken() external view returns (address token);
 
     /// @notice Get the factory address
     /// @return factory The Levr factory address
