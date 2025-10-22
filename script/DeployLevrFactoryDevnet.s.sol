@@ -6,7 +6,7 @@ import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
 import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
-import {LevrFeeSplitter_v1} from '../src/LevrFeeSplitter_v1.sol';
+import {LevrFeeSplitterDeployer_v1} from '../src/LevrFeeSplitterDeployer_v1.sol';
 
 /**
  * @title DeployLevrFactoryDevnet
@@ -115,13 +115,13 @@ contract DeployLevrFactoryDevnet is Script {
         );
         console.log('Factory address verified:', address(factory));
 
-        // Deploy the fee splitter (singleton for all projects)
-        console.log('Deploying LevrFeeSplitter_v1...');
-        LevrFeeSplitter_v1 feeSplitter = new LevrFeeSplitter_v1(
+        // Deploy the fee splitter deployer (creates per-project splitters)
+        console.log('Deploying LevrFeeSplitterDeployer_v1...');
+        LevrFeeSplitterDeployer_v1 feeSplitterDeployer = new LevrFeeSplitterDeployer_v1(
             address(factory),
             address(forwarder)
         );
-        console.log('Fee Splitter deployed at:', address(feeSplitter));
+        console.log('Fee Splitter Deployer deployed at:', address(feeSplitterDeployer));
 
         vm.stopBroadcast();
 
@@ -130,7 +130,7 @@ contract DeployLevrFactoryDevnet is Script {
 
         console.log('=== DEPLOYMENT SUCCESSFUL ===');
         console.log('Factory Address:', factoryAddress);
-        console.log('Fee Splitter Address:', address(feeSplitter));
+        console.log('Fee Splitter Deployer Address:', address(feeSplitterDeployer));
         console.log('Factory Owner (Admin):', deployer);
         console.log('');
 

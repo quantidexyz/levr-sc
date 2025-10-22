@@ -2,13 +2,13 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from 'forge-std/Script.sol';
-import {LevrFeeSplitter_v1} from '../src/LevrFeeSplitter_v1.sol';
+import {LevrFeeSplitterDeployer_v1} from '../src/LevrFeeSplitterDeployer_v1.sol';
 import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 
 /**
  * @title DeployLevrFeeSplitter
- * @notice Production deployment script for LevrFeeSplitter_v1 singleton
- * @dev Deploys the singleton fee splitter contract that manages fee distribution for all Clanker projects
+ * @notice Production deployment script for LevrFeeSplitterDeployer_v1
+ * @dev Deploys the fee splitter DEPLOYER that creates per-project fee splitters
  *
  * This script integrates with the common.mk deployment system.
  *
@@ -39,15 +39,15 @@ import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
  * - Verifies deployer has sufficient ETH balance
  * - Validates factory address exists and is a contract
  * - Confirms trusted forwarder is valid
- * - Tests basic fee splitter functionality
+ * - Tests basic deployer functionality
  * - Outputs deployed address for verification
  *
  * Architecture:
- * The LevrFeeSplitter_v1 is a SINGLETON contract that:
- * - Manages fee distribution for ALL Clanker projects
- * - Each project configures its own splits (identified by clankerToken address)
- * - Only token admins can configure splits for their projects
- * - Anyone can trigger permissionless distribution
+ * The LevrFeeSplitterDeployer_v1 is a DEPLOYER contract that:
+ * - Creates dedicated fee splitters for each project
+ * - Each project gets its own isolated fee splitter instance
+ * - Prevents token mixing between projects (solves WETH/USDC collision)
+ * - Supports deterministic deployment via CREATE2
  * - Supports meta-transactions via trusted forwarder
  */
 contract DeployLevrFeeSplitter is Script {
@@ -66,7 +66,7 @@ contract DeployLevrFeeSplitter is Script {
         require(vm.envExists('FACTORY_ADDRESS'), 'FACTORY_ADDRESS environment variable required');
         address factoryAddress = vm.envAddress('FACTORY_ADDRESS');
 
-        console.log('=== LEVR FEE SPLITTER V1 DEPLOYMENT ===');
+        console.log('=== LEVR FEE SPLITTER DEPLOYER V1 DEPLOYMENT ===');
         console.log('Network Chain ID:', block.chainid);
         console.log('Deployer Address:', deployer);
         console.log('Deployer Balance:', deployer.balance / 1e18, 'ETH');
@@ -140,11 +140,13 @@ contract DeployLevrFeeSplitter is Script {
         console.log('Trusted Forwarder:', trustedForwarder);
         console.log('Deployer:', deployer);
         console.log('');
-        console.log('Fee Splitter Details:');
-        console.log('- Type: Singleton (manages all projects)');
+        console.log('Fee Splitter Deployer Details:');
+        console.log('- Type: Deployer (creates per-project splitters)');
+        console.log('- Architecture: One splitter per project (isolated balances)');
         console.log('- Access Control: Per-project (token admin only)');
         console.log('- Distribution: Permissionless (anyone can trigger)');
         console.log('- Meta-transactions: Enabled (via trusted forwarder)');
+        console.log('- CREATE2 Support: Yes (deterministic addresses)');
         console.log('');
 
         // =======================================================================
@@ -156,10 +158,13 @@ contract DeployLevrFeeSplitter is Script {
 
         vm.startBroadcast(privateKey);
 
-        // Deploy the singleton fee splitter
-        console.log('Deploying LevrFeeSplitter_v1...');
-        LevrFeeSplitter_v1 feeSplitter = new LevrFeeSplitter_v1(factoryAddress, trustedForwarder);
-        console.log('- Fee Splitter deployed at:', address(feeSplitter));
+        // Deploy the fee splitter deployer
+        console.log('Deploying LevrFeeSplitterDeployer_v1...');
+        LevrFeeSplitterDeployer_v1 feeSplitterDeployer = new LevrFeeSplitterDeployer_v1(
+            factoryAddress,
+            trustedForwarder
+        );
+        console.log('- Fee Splitter Deployer deployed at:', address(feeSplitterDeployer));
         console.log('');
 
         vm.stopBroadcast();
@@ -172,16 +177,26 @@ contract DeployLevrFeeSplitter is Script {
 
         // Verify factory configuration
         require(
-            feeSplitter.factory() == factoryAddress,
+            feeSplitterDeployer.factory() == factoryAddress,
             'Factory address mismatch in deployed contract'
         );
-        console.log('[OK] Factory address verified:', feeSplitter.factory());
+        console.log('[OK] Factory address verified:', feeSplitterDeployer.factory());
 
-        // Verify the fee splitter is functional (basic test)
-        // Check that isSplitsConfigured returns false for a random address
+        // Verify trusted forwarder
+        require(
+            feeSplitterDeployer.trustedForwarder() == trustedForwarder,
+            'Trusted forwarder mismatch in deployed contract'
+        );
+        console.log('[OK] Trusted forwarder verified:', feeSplitterDeployer.trustedForwarder());
+
+        // Verify the deployer is functional (basic test)
+        // Check that getSplitter returns zero for a random address
         address randomToken = address(0x1234567890123456789012345678901234567890);
-        bool isConfigured = feeSplitter.isSplitsConfigured(randomToken);
-        require(!isConfigured, 'Unexpected initial state - random token should not be configured');
+        address splitter = feeSplitterDeployer.getSplitter(randomToken);
+        require(
+            splitter == address(0),
+            'Unexpected initial state - random token should not have splitter'
+        );
         console.log('[OK] Basic functionality test passed');
 
         console.log('[OK] All deployment checks passed!');
@@ -194,7 +209,7 @@ contract DeployLevrFeeSplitter is Script {
         console.log('=== DEPLOYMENT SUCCESSFUL ===');
         console.log('');
         console.log('Deployed Contract:');
-        console.log('- LevrFeeSplitter_v1:', address(feeSplitter));
+        console.log('- LevrFeeSplitterDeployer_v1:', address(feeSplitterDeployer));
         console.log('');
         console.log('Configuration:');
         console.log('- Factory:', factoryAddress);
@@ -208,39 +223,47 @@ contract DeployLevrFeeSplitter is Script {
 
         console.log('=== USAGE INSTRUCTIONS ===');
         console.log('');
-        console.log('The LevrFeeSplitter_v1 singleton is now deployed!');
+        console.log('The LevrFeeSplitterDeployer_v1 is now deployed!');
         console.log('');
-        console.log('For Token Admins (per-project configuration):');
+        console.log('Step 1: Deploy Fee Splitter for Your Project');
         console.log('');
-        console.log('1. Configure splits for your project:');
-        console.log('   feeSplitter.configureSplits(clankerToken, splits)');
-        console.log('   - splits must sum to 10,000 bps (100%)');
-        console.log('   - Only token admin can configure');
-        console.log('   - Can reconfigure at any time');
+        console.log('  // Deploy splitter for your Clanker token');
+        console.log('  address splitter = deployer.deploy(clankerToken);');
         console.log('');
-        console.log('2. Update LP locker reward recipient:');
-        console.log('   IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(');
-        console.log('     clankerToken,');
-        console.log('     0, // reward index');
-        console.log('     address(feeSplitter)');
-        console.log('   )');
+        console.log('  // Or use CREATE2 for deterministic address');
+        console.log('  bytes32 salt = keccak256("my-project");');
+        console.log('  address splitter = deployer.deployDeterministic(clankerToken, salt);');
         console.log('');
-        console.log('For Users (permissionless distribution):');
+        console.log('Step 2: Configure Splits (Token Admin Only)');
         console.log('');
-        console.log('1. Distribute single token fees:');
-        console.log('   feeSplitter.distribute(clankerToken, rewardToken)');
+        console.log('  LevrFeeSplitter_v1(splitter).configureSplits([');
+        console.log('    SplitConfig(stakingAddress, 8000),  // 80% to staking');
+        console.log('    SplitConfig(treasuryAddress, 2000)  // 20% to treasury');
+        console.log('  ]);');
         console.log('');
-        console.log('2. Distribute multiple tokens (batch):');
-        console.log('   feeSplitter.distributeBatch(clankerToken, [WETH, token])');
+        console.log('Step 3: Update LP Locker Reward Recipient');
         console.log('');
-        console.log('3. After distribution to staking, trigger manual accrual:');
-        console.log('   ILevrStaking_v1(staking).accrueRewards(rewardToken)');
+        console.log('  IClankerLpLockerMultiple(lpLocker).updateRewardRecipient(');
+        console.log('    clankerToken,');
+        console.log('    0, // reward index');
+        console.log("    address(splitter)  // Your project's splitter");
+        console.log('  );');
+        console.log('');
+        console.log('Step 4: Distribute Fees (Anyone Can Call)');
+        console.log('');
+        console.log('  // Single token distribution');
+        console.log('  LevrFeeSplitter_v1(splitter).distribute(WETH);');
+        console.log('');
+        console.log('  // Batch distribution (gas efficient)');
+        console.log('  LevrFeeSplitter_v1(splitter).distributeBatch([WETH, token]);');
         console.log('');
         console.log('View Functions:');
-        console.log('- feeSplitter.getSplits(clankerToken)');
-        console.log('- feeSplitter.isSplitsConfigured(clankerToken)');
-        console.log('- feeSplitter.pendingFees(clankerToken, rewardToken)');
-        console.log('- feeSplitter.getStakingAddress(clankerToken)');
+        console.log('- deployer.getSplitter(clankerToken)');
+        console.log('- deployer.computeDeterministicAddress(clankerToken, salt)');
+        console.log('- splitter.getSplits()');
+        console.log('- splitter.isSplitsConfigured()');
+        console.log('- splitter.pendingFees(rewardToken)');
+        console.log('- splitter.pendingFeesInclBalance(rewardToken)');
         console.log('');
 
         // =======================================================================
@@ -249,25 +272,44 @@ contract DeployLevrFeeSplitter is Script {
 
         console.log('=== INTEGRATION EXAMPLES ===');
         console.log('');
-        console.log('Example 1: Configure 50/50 split (staking/team)');
+        console.log('Example 1: Complete Setup Flow');
         console.log('');
+        console.log('  // 1. Deploy fee splitter for project');
+        console.log('  address splitter = deployer.deploy(clankerToken);');
+        console.log('');
+        console.log('  // 2. Configure splits');
         console.log('  SplitConfig[] memory splits = new SplitConfig[](2);');
-        console.log('  splits[0] = SplitConfig({');
-        console.log('    receiver: stakingAddress,');
-        console.log('    bps: 5000  // 50%');
-        console.log('  });');
-        console.log('  splits[1] = SplitConfig({');
-        console.log('    receiver: teamWallet,');
-        console.log('    bps: 5000  // 50%');
-        console.log('  });');
-        console.log('  feeSplitter.configureSplits(clankerToken, splits);');
+        console.log('  splits[0] = SplitConfig(stakingAddress, 7000); // 70%');
+        console.log('  splits[1] = SplitConfig(teamWallet, 3000);     // 30%');
+        console.log('  LevrFeeSplitter_v1(splitter).configureSplits(splits);');
         console.log('');
-        console.log('Example 2: Batch distribute WETH + Clanker token fees');
+        console.log('  // 3. Update LP locker to use splitter');
+        console.log('  lpLocker.updateRewardRecipient(clankerToken, 0, splitter);');
         console.log('');
-        console.log('  address[] memory tokens = new address[](2);');
-        console.log('  tokens[0] = WETH;');
-        console.log('  tokens[1] = clankerToken;');
-        console.log('  feeSplitter.distributeBatch(clankerToken, tokens);');
+        console.log('Example 2: Deterministic Deployment + Multicall');
+        console.log('');
+        console.log('  // Predict address');
+        console.log('  bytes32 salt = keccak256("my-project");');
+        console.log('  address predicted = deployer.computeDeterministicAddress(');
+        console.log('    clankerToken,');
+        console.log('    salt');
+        console.log('  );');
+        console.log('');
+        console.log('  // Deploy + configure in ONE transaction via forwarder multicall');
+        console.log('  SingleCall[] memory calls = new SingleCall[](2);');
+        console.log('  calls[0] = SingleCall({');
+        console.log('    target: address(deployer),');
+        console.log('    allowFailure: false,');
+        console.log(
+            '    callData: abi.encodeCall(deployer.deployDeterministic, (clankerToken, salt))'
+        );
+        console.log('  });');
+        console.log('  calls[1] = SingleCall({');
+        console.log('    target: predicted,');
+        console.log('    allowFailure: false,');
+        console.log('    callData: abi.encodeCall(LevrFeeSplitter_v1.configureSplits, (splits))');
+        console.log('  });');
+        console.log('  forwarder.executeMulticall(calls);');
         console.log('');
 
         // =======================================================================
@@ -277,21 +319,23 @@ contract DeployLevrFeeSplitter is Script {
         console.log('=== NEXT STEPS ===');
         console.log('');
         console.log('1. Verify contract on block explorer:');
-        console.log('   - Contract:', address(feeSplitter));
+        console.log('   - Contract:', address(feeSplitterDeployer));
         console.log('   - Network:', networkName);
         console.log('');
         console.log('2. Update frontend configuration:');
-        console.log('   - Add FEE_SPLITTER_ADDRESS to environment');
-        console.log('   - Integrate fee splitter UI for token admins');
-        console.log('   - Add distribution triggers for users');
+        console.log('   - Add FEE_SPLITTER_DEPLOYER_ADDRESS to environment');
+        console.log('   - Integrate deployer UI for project setup');
+        console.log('   - Add fee splitter management UI per project');
         console.log('');
         console.log('3. Document for projects:');
+        console.log('   - How to deploy their fee splitter');
         console.log('   - How to configure splits');
         console.log('   - How to update reward recipient');
         console.log('   - How distributions work');
         console.log('');
         console.log('4. Test with a project:');
         console.log('   - Deploy test Clanker token');
+        console.log('   - Deploy fee splitter via deployer');
         console.log('   - Configure test splits');
         console.log('   - Verify distribution works correctly');
         console.log('');
