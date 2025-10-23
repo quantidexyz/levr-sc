@@ -7,7 +7,7 @@ import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {LevrFeeSplitter_v1} from '../../src/LevrFeeSplitter_v1.sol';
-import {LevrFeeSplitterDeployer_v1} from '../../src/LevrFeeSplitterDeployer_v1.sol';
+import {LevrFeeSplitterFactory_v1} from '../../src/LevrFeeSplitterFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrFeeSplitter_v1} from '../../src/interfaces/ILevrFeeSplitter_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
@@ -30,7 +30,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
     LevrDeployer_v1 internal levrDeployer;
-    LevrFeeSplitterDeployer_v1 internal feeSplitterDeployer;
+    LevrFeeSplitterFactory_v1 internal feeSplitterFactory;
     SwapV4Helper internal swapHelper;
 
     address internal protocolTreasury = address(0xFEE);
@@ -69,8 +69,8 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
             DEFAULT_CLANKER_FACTORY
         );
 
-        // Deploy fee splitter deployer (creates per-project splitters)
-        feeSplitterDeployer = new LevrFeeSplitterDeployer_v1(address(factory), address(forwarder));
+        // Deploy fee splitter factory (creates per-project splitters)
+        feeSplitterFactory = new LevrFeeSplitterFactory_v1(address(factory), address(forwarder));
     }
 
     /**
@@ -104,7 +104,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Helper to deploy fee splitter for a project
      */
     function _deployFeeSplitter() internal returns (LevrFeeSplitter_v1) {
-        address splitter = feeSplitterDeployer.deploy(clankerToken);
+        address splitter = feeSplitterFactory.deploy(clankerToken);
         return LevrFeeSplitter_v1(splitter);
     }
 

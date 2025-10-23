@@ -17,7 +17,7 @@ import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
  * @notice Per-project fee splitter for flexible fee distribution
  * @dev Each Clanker token gets its own dedicated fee splitter instance
  *      This prevents token mixing issues with shared reward tokens (WETH, USDC, etc.)
- *      Deploy via LevrFeeSplitterDeployer_v1
+ *      Deploy via LevrFeeSplitterFactory_v1
  */
 contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, ReentrancyGuard {
     using SafeERC20 for IERC20;

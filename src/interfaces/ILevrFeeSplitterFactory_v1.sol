@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-/// @title Levr Fee Splitter Deployer v1 Interface
-/// @notice Deploys per-project fee splitters for Clanker tokens
+/// @title Levr Fee Splitter Factory v1 Interface
+/// @notice Factory for deploying per-project fee splitters for Clanker tokens
 /// @dev Each project gets its own dedicated fee splitter to avoid shared token balances
-interface ILevrFeeSplitterDeployer_v1 {
+interface ILevrFeeSplitterFactory_v1 {
     // ============ Errors ============
 
     error ZeroAddress();

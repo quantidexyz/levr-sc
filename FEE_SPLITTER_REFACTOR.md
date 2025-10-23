@@ -27,7 +27,7 @@ Refactored to **per-project architecture**:
 - Handles fee distribution for ONE project only
 - Simplified state: no project mappings needed
 
-**2. LevrFeeSplitterDeployer_v1** (New)
+**2. LevrFeeSplitterFactory_v1** (New)
 - Deploys fee splitters for projects
 - Tracks project → splitter mapping
 - Supports CREATE2 for deterministic addresses
@@ -36,13 +36,13 @@ Refactored to **per-project architecture**:
 ### Deployment Flow
 
 ```
-1. Deploy LevrFeeSplitterDeployer (one-time)
+1. Deploy LevrFeeSplitterFactory (one-time)
    ├─ Set factory address
    └─ Set trusted forwarder
 
 2. For each project:
    ├─ Deploy Clanker token (existing flow)
-   ├─ Deploy fee splitter: deployer.deploy(clankerToken)
+   ├─ Deploy fee splitter: factory.deploy(clankerToken)
    └─ Configure splits: splitter.configureSplits([...])
 
 3. Distribute fees:
@@ -85,10 +85,10 @@ contract LevrFeeSplitter_v1 {
 }
 ```
 
-### LevrFeeSplitterDeployer_v1 (New)
+### LevrFeeSplitterFactory_v1 (New)
 
 ```solidity
-contract LevrFeeSplitterDeployer_v1 {
+contract LevrFeeSplitterFactory_v1 {
     address public immutable factory;
     address public immutable trustedForwarder;
     
@@ -112,11 +112,11 @@ contract LevrFeeSplitterDeployer_v1 {
 
 ## Usage Examples
 
-### 1. Deploy Deployer (One-Time)
+### 1. Deploy Factory (One-Time)
 
 ```solidity
-LevrFeeSplitterDeployer_v1 deployer = new LevrFeeSplitterDeployer_v1(
-    address(factory),
+LevrFeeSplitterFactory_v1 factory = new LevrFeeSplitterFactory_v1(
+    address(levrFactory),
     address(forwarder)
 );
 ```
@@ -125,14 +125,14 @@ LevrFeeSplitterDeployer_v1 deployer = new LevrFeeSplitterDeployer_v1(
 
 ```solidity
 // Option A: Simple deployment
-address splitter = deployer.deploy(clankerToken);
+address splitter = factory.deploy(clankerToken);
 
 // Option B: Deterministic deployment with CREATE2
 bytes32 salt = keccak256(abi.encodePacked("my-project"));
-address splitter = deployer.deployDeterministic(clankerToken, salt);
+address splitter = factory.deployDeterministic(clankerToken, salt);
 
 // Option C: Predict address before deployment
-address predicted = deployer.computeDeterministicAddress(clankerToken, salt);
+address predicted = factory.computeDeterministicAddress(clankerToken, salt);
 ```
 
 ### 3. Configure Splits (Token Admin Only)
@@ -213,7 +213,7 @@ feeSplitter.getSplits(clankerToken);
 **New Code**:
 ```solidity
 // Get splitter for this project
-address splitterAddr = deployer.getSplitter(clankerToken);
+address splitterAddr = factory.getSplitter(clankerToken);
 LevrFeeSplitter_v1 splitter = LevrFeeSplitter_v1(splitterAddr);
 
 // No clankerToken parameters!
@@ -227,8 +227,8 @@ splitter.getSplits();
 ## Files Changed
 
 ### New Files
-- `src/LevrFeeSplitterDeployer_v1.sol` - Deployer contract
-- `src/interfaces/ILevrFeeSplitterDeployer_v1.sol` - Deployer interface
+- `src/LevrFeeSplitterFactory_v1.sol` - Factory contract
+- `src/interfaces/ILevrFeeSplitterFactory_v1.sol` - Factory interface
 
 ### Refactored Files
 - `src/LevrFeeSplitter_v1.sol` - Per-project architecture
@@ -291,9 +291,9 @@ splitter.getSplits();
 
 ## Deployment Checklist
 
-- [ ] Deploy `LevrFeeSplitterDeployer_v1` with factory and forwarder addresses
+- [ ] Deploy `LevrFeeSplitterFactory_v1` with factory and forwarder addresses
 - [ ] For each project that wants fee splitting:
-  - [ ] Deploy fee splitter via deployer
+  - [ ] Deploy fee splitter via factory
   - [ ] Configure splits (token admin)
   - [ ] Update LP locker to point to fee splitter (if needed)
   - [ ] Test distribution with small amount first

@@ -2,18 +2,18 @@
 pragma solidity ^0.8.30;
 
 import {LevrFeeSplitter_v1} from './LevrFeeSplitter_v1.sol';
-import {ILevrFeeSplitterDeployer_v1} from './interfaces/ILevrFeeSplitterDeployer_v1.sol';
+import {ILevrFeeSplitterFactory_v1} from './interfaces/ILevrFeeSplitterFactory_v1.sol';
 import {ERC2771ContextBase} from './base/ERC2771ContextBase.sol';
 import {ERC2771Context} from '@openzeppelin/contracts/metatx/ERC2771Context.sol';
 
 /**
- * @title LevrFeeSplitterDeployer_v1
- * @notice Deploys per-project fee splitters for Clanker tokens
+ * @title LevrFeeSplitterFactory_v1
+ * @notice Factory for deploying per-project fee splitters for Clanker tokens
  * @dev Each project gets its own dedicated fee splitter instance to avoid token mixing
  *      This is deployed separately from the factory and is completely optional
  *      Supports meta-transactions via ERC2771 for gasless deployment and multicall
  */
-contract LevrFeeSplitterDeployer_v1 is ILevrFeeSplitterDeployer_v1, ERC2771ContextBase {
+contract LevrFeeSplitterFactory_v1 is ILevrFeeSplitterFactory_v1, ERC2771ContextBase {
     // ============ State Variables ============
 
     /// @notice The Levr factory address
@@ -25,7 +25,7 @@ contract LevrFeeSplitterDeployer_v1 is ILevrFeeSplitterDeployer_v1, ERC2771Conte
     // ============ Constructor ============
 
     /**
-     * @notice Deploy the fee splitter deployer
+     * @notice Deploy the fee splitter factory
      * @param factory_ The Levr factory address
      * @param trustedForwarder_ The ERC2771 forwarder for meta-transactions
      */
@@ -36,7 +36,7 @@ contract LevrFeeSplitterDeployer_v1 is ILevrFeeSplitterDeployer_v1, ERC2771Conte
 
     // ============ Deployment Functions ============
 
-    /// @inheritdoc ILevrFeeSplitterDeployer_v1
+    /// @inheritdoc ILevrFeeSplitterFactory_v1
     function deploy(address clankerToken) external returns (address splitter) {
         if (clankerToken == address(0)) revert ZeroAddress();
         if (splitters[clankerToken] != address(0)) revert AlreadyDeployed();
@@ -50,7 +50,7 @@ contract LevrFeeSplitterDeployer_v1 is ILevrFeeSplitterDeployer_v1, ERC2771Conte
         emit FeeSplitterDeployed(clankerToken, splitter);
     }
 
-    /// @inheritdoc ILevrFeeSplitterDeployer_v1
+    /// @inheritdoc ILevrFeeSplitterFactory_v1
     function deployDeterministic(
         address clankerToken,
         bytes32 salt
@@ -69,7 +69,7 @@ contract LevrFeeSplitterDeployer_v1 is ILevrFeeSplitterDeployer_v1, ERC2771Conte
         emit FeeSplitterDeployed(clankerToken, splitter);
     }
 
-    /// @inheritdoc ILevrFeeSplitterDeployer_v1
+    /// @inheritdoc ILevrFeeSplitterFactory_v1
     function getSplitter(address clankerToken) external view returns (address) {
         return splitters[clankerToken];
     }
@@ -80,7 +80,7 @@ contract LevrFeeSplitterDeployer_v1 is ILevrFeeSplitterDeployer_v1, ERC2771Conte
         return ERC2771Context.trustedForwarder();
     }
 
-    /// @inheritdoc ILevrFeeSplitterDeployer_v1
+    /// @inheritdoc ILevrFeeSplitterFactory_v1
     function computeDeterministicAddress(
         address clankerToken,
         bytes32 salt

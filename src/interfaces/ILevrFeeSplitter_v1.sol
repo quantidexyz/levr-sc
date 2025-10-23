@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 /// @title Levr Fee Splitter v1 Interface
 /// @notice Per-project fee splitter for flexible fee distribution
 /// @dev Each Clanker token gets its own dedicated fee splitter instance
-///      Deploy via LevrFeeSplitterDeployer_v1
+///      Deploy via LevrFeeSplitterFactory_v1
 interface ILevrFeeSplitter_v1 {
     // ============ Structs ============
 

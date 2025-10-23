@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from 'forge-std/Test.sol';
 import {console2} from 'forge-std/console2.sol';
 import {LevrFeeSplitter_v1} from '../../src/LevrFeeSplitter_v1.sol';
-import {LevrFeeSplitterDeployer_v1} from '../../src/LevrFeeSplitterDeployer_v1.sol';
+import {LevrFeeSplitterFactory_v1} from '../../src/LevrFeeSplitterFactory_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
