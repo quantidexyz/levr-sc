@@ -28,6 +28,8 @@ interface ILevrFeeSplitter_v1 {
     error ZeroAddress();
     error ZeroBps();
     error DuplicateStakingReceiver();
+    error DuplicateReceiver();
+    error TooManyReceivers();
     error SplitsNotConfigured();
     error NoPendingFees();
     error NoReceivers();
@@ -76,6 +78,12 @@ interface ILevrFeeSplitter_v1 {
     /// @param token The reward token
     event AutoAccrualFailed(address indexed clankerToken, address indexed token);
 
+    /// @notice Emitted when dust is recovered from the contract
+    /// @param token The token that was recovered
+    /// @param to The address that received the dust
+    /// @param amount The amount of dust recovered
+    event DustRecovered(address indexed token, address indexed to, uint256 amount);
+
     // ============ Admin Functions ============
 
     /// @notice Configure fee splits for this project (only token admin)
@@ -84,6 +92,13 @@ interface ILevrFeeSplitter_v1 {
     ///      At most one split can point to the staking contract
     /// @param splits Array of split configurations
     function configureSplits(SplitConfig[] calldata splits) external;
+
+    /// @notice Recover trapped dust from rounding (only token admin)
+    /// @dev Only allows recovery of tokens that aren't pending distribution
+    ///      This prevents stealing pending fees while allowing dust cleanup
+    /// @param token The token to recover dust from
+    /// @param to The address to send the dust to
+    function recoverDust(address token, address to) external;
 
     // ============ Distribution Functions ============
 

@@ -25,6 +25,7 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
     // ============ Constants ============
 
     uint256 private constant BPS_DENOMINATOR = 10_000; // 100% = 10,000 bps
+    uint256 private constant MAX_RECEIVERS = 20; // Maximum number of receivers to prevent gas bombs
 
     // ============ Immutables ============
 
@@ -80,6 +81,25 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         }
 
         emit SplitsConfigured(clankerToken, splits);
+    }
+
+    /// @inheritdoc ILevrFeeSplitter_v1
+    function recoverDust(address token, address to) external {
+        // Only token admin can recover dust
+        _onlyTokenAdmin();
+        if (to == address(0)) revert ZeroAddress();
+
+        // Get pending fees in locker only (not including current balance)
+        uint256 pendingInLocker = this.pendingFees(token);
+        uint256 balance = IERC20(token).balanceOf(address(this));
+
+        // Can only recover the difference (dust from rounding)
+        // Dust = current balance - fees still pending in locker
+        if (balance > pendingInLocker) {
+            uint256 dust = balance - pendingInLocker;
+            IERC20(token).safeTransfer(to, dust);
+            emit DustRecovered(token, to, dust);
+        }
     }
 
     // ============ Distribution Functions ============
@@ -143,9 +163,13 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
         // If we sent fees to staking, automatically call accrueRewards
         // This makes the fees immediately available without needing a separate transaction
+        // CRITICAL FIX: Wrap in try/catch to prevent distribution revert if accrual fails
         if (sentToStaking) {
-            ILevrStaking_v1(staking).accrueRewards(rewardToken);
-            emit AutoAccrualSuccess(clankerToken, rewardToken);
+            try ILevrStaking_v1(staking).accrueRewards(rewardToken) {
+                emit AutoAccrualSuccess(clankerToken, rewardToken);
+            } catch {
+                emit AutoAccrualFailed(clankerToken, rewardToken);
+            }
         }
     }
 
@@ -253,6 +277,9 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
     function _validateSplits(SplitConfig[] calldata splits) internal view {
         if (splits.length == 0) revert NoReceivers();
 
+        // CRITICAL FIX: Prevent gas bombs with unbounded receiver array
+        if (splits.length > MAX_RECEIVERS) revert TooManyReceivers();
+
         // Get staking address for this project from factory
         address staking = getStakingAddress();
         if (staking == address(0)) revert ProjectNotRegistered();
@@ -266,7 +293,14 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
             totalBps += splits[i].bps;
 
-            // Check if staking contract appears more than once
+            // CRITICAL FIX: Check for duplicate receivers (prevents gaming)
+            for (uint256 j = 0; j < i; j++) {
+                if (splits[i].receiver == splits[j].receiver) {
+                    revert DuplicateReceiver();
+                }
+            }
+
+            // Check if staking contract appears more than once (redundant with above but kept for clarity)
             if (splits[i].receiver == staking) {
                 if (hasStaking) revert DuplicateStakingReceiver();
                 hasStaking = true;
@@ -344,9 +378,13 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         emit Distributed(clankerToken, rewardToken, balance);
 
         // If we sent fees to staking, automatically call accrueRewards
+        // CRITICAL FIX: Wrap in try/catch to prevent distribution revert if accrual fails
         if (sentToStaking) {
-            ILevrStaking_v1(staking).accrueRewards(rewardToken);
-            emit AutoAccrualSuccess(clankerToken, rewardToken);
+            try ILevrStaking_v1(staking).accrueRewards(rewardToken) {
+                emit AutoAccrualSuccess(clankerToken, rewardToken);
+            } catch {
+                emit AutoAccrualFailed(clankerToken, rewardToken);
+            }
         }
     }
 }
