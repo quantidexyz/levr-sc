@@ -29,6 +29,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 public override quorumBps;
     uint16 public override approvalBps;
     uint16 public override minSTokenBpsToSubmit;
+    uint16 public override maxProposalAmountBps;
 
     mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
     address[] private _projectTokens; // Array of all registered project tokens
@@ -225,6 +226,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         quorumBps = cfg.quorumBps;
         approvalBps = cfg.approvalBps;
         minSTokenBpsToSubmit = cfg.minSTokenBpsToSubmit;
+        maxProposalAmountBps = cfg.maxProposalAmountBps;
     }
 
     /// @dev Override trustedForwarder to satisfy both ILevrFactory_v1 and ERC2771Context

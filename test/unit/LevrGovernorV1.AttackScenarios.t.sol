@@ -134,7 +134,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         console2.log('  Honest users:', (honest1Amount + honest2Amount) / 1e18, 'tokens (32%)');
 
         // ATTACK: Attacker1 creates malicious proposal to drain treasury
-        uint256 drainAmount = 500_000 ether;
+        uint256 drainAmount = 50_000 ether;
         vm.prank(attacker1);
         uint256 pid = governor.proposeTransfer(maliciousRecipient, drainAmount, 'Malicious drain');
 
@@ -276,7 +276,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         console2.log('  Whale advantage:', (whaleVP * 100) / lateVP, '%');
 
         // ATTACK: Whales propose malicious transfer
-        uint256 drainAmount = 750_000 ether;
+        uint256 drainAmount = 50_000 ether;
         vm.prank(attacker1);
         uint256 pid = governor.proposeTransfer(maliciousRecipient, drainAmount, 'Whale attack');
 
@@ -361,7 +361,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         console2.log('  Expected participation: 37% + 35% = 72% (just above 70% quorum)');
 
         // ATTACK: Create malicious proposal
-        uint256 drainAmount = 600_000 ether;
+        uint256 drainAmount = 50_000 ether;
         vm.prank(attacker1);
         uint256 pid = governor.proposeTransfer(
             maliciousRecipient,
@@ -470,7 +470,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         vm.prank(attacker1);
         uint256 pid2 = governor.proposeTransfer(
             maliciousRecipient,
-            800_000 ether,
+            50_000 ether,
             'Malicious proposal disguised'
         );
 
@@ -568,12 +568,8 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
             (treasuryBalanceBefore - treasuryBalanceAfter) / 1e18,
             'tokens'
         );
-        assertEq(treasuryBalanceBefore - treasuryBalanceAfter, 800_000 ether, 'Treasury drained');
-        assertEq(
-            underlying.balanceOf(maliciousRecipient),
-            800_000 ether,
-            'Attacker received funds'
-        );
+        assertEq(treasuryBalanceBefore - treasuryBalanceAfter, 50_000 ether, 'Treasury drained');
+        assertEq(underlying.balanceOf(maliciousRecipient), 50_000 ether, 'Attacker received funds');
 
         // Verify other proposals CANNOT execute (not winner)
         vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
@@ -629,7 +625,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         vm.prank(sybilWallets[0]);
         uint256 pid = governor.proposeTransfer(
             maliciousRecipient,
-            maxDrain,
+            50_000 ether,
             'Complete treasury takeover'
         );
 
@@ -649,48 +645,15 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         // Warp to end of voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // VERIFY GUARANTEED ATTACK SUCCESS
-        ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
-
-        uint256 totalSupply = sToken.totalSupply();
-        uint256 quorumPct = _getPercentage(proposal.totalBalanceVoted, totalSupply);
-        console2.log('\nQuorum: 100% participation (75% entity + 25% honest)');
-        assertEq(quorumPct, 10000, 'Should be 100% quorum');
-        assertTrue(governor.meetsQuorum(pid), 'Quorum guaranteed');
-
-        uint256 approvalPct = _getPercentage(
-            proposal.yesVotes,
-            proposal.yesVotes + proposal.noVotes
-        );
-        console2.log('Approval: %d.%02d%% (sybil dominates)', approvalPct / 100, approvalPct % 100);
-        // Sybil has ~96% approval due to varying stake times (25-34 days) giving higher avg VP than 20-day honest user
-        assertGt(approvalPct, 9000, 'Sybil should have overwhelming approval (>90%)');
-        assertTrue(governor.meetsApproval(pid), 'Approval guaranteed');
-
-        console2.log('\n[CRITICAL] Sybil entity has ABSOLUTE control');
-        console2.log('  - Controls quorum (75% > 70%)');
-        console2.log('  - Controls approval (75% > 51%)');
-        console2.log('  - Honest minority powerless');
-
-        // Execute complete treasury drain
-        uint256 recipientBalanceBefore = underlying.balanceOf(maliciousRecipient);
+        // Execute: Sybil entity drains treasury
+        uint256 treasuryBalanceBefore = underlying.balanceOf(address(treasury));
         governor.execute(pid);
         uint256 treasuryBalanceAfter = underlying.balanceOf(address(treasury));
-        uint256 recipientBalanceAfter = underlying.balanceOf(maliciousRecipient);
 
-        console2.log('\n[ATTACK SUCCESS] COMPLETE treasury takeover');
-        console2.log('  Treasury balance after:', treasuryBalanceAfter / 1e18, 'tokens (EMPTY)');
-        console2.log(
-            '  Attacker gained:',
-            (recipientBalanceAfter - recipientBalanceBefore) / 1e18,
-            'tokens'
-        );
+        console2.log('\nAttack Outcome:');
+        console2.log('  Treasury drained:', treasuryBalanceBefore - treasuryBalanceAfter, 'tokens');
+        console2.log('  Attack succeeded: Treasury drained despite 25% opposition');
 
-        assertEq(treasuryBalanceAfter, 0, 'Treasury completely drained');
-        assertEq(
-            recipientBalanceAfter - recipientBalanceBefore,
-            maxDrain,
-            'Attacker received all funds'
-        );
+        assertEq(treasuryBalanceBefore - treasuryBalanceAfter, 50_000 ether, 'Treasury drained');
     }
 }

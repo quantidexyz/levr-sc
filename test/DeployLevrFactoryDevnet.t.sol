@@ -28,7 +28,8 @@ contract DeployLevrFactoryDevnetTest is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 7,
             quorumBps: 7000,
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 100
+            minSTokenBpsToSubmit: 100,
+            maxProposalAmountBps: 500
         });
 
         // Deploy factory with forwarder and deployer logic using helper

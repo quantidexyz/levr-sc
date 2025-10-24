@@ -63,7 +63,8 @@ contract DeployLevrFactoryDevnet is Script {
             maxActiveProposals: 7,
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
-            minSTokenBpsToSubmit: 100 // 1%
+            minSTokenBpsToSubmit: 100, // 1%
+            maxProposalAmountBps: 500 // 5%
         });
 
         console.log('Factory Configuration:');
@@ -75,6 +76,7 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('- Quorum BPS:', config.quorumBps);
         console.log('- Approval BPS:', config.approvalBps);
         console.log('- Min sToken BPS to Submit:', config.minSTokenBpsToSubmit);
+        console.log('- Max Proposal Amount BPS:', config.maxProposalAmountBps);
         console.log('');
 
         vm.startBroadcast(privateKey);
@@ -144,6 +146,7 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('quorumBps:', factory.quorumBps());
         console.log('approvalBps:', factory.approvalBps());
         console.log('minSTokenBpsToSubmit:', factory.minSTokenBpsToSubmit());
+        console.log('maxProposalAmountBps:', factory.maxProposalAmountBps());
         console.log('protocolTreasury:', factory.protocolTreasury());
         console.log('trustedForwarder:', factory.trustedForwarder());
 

@@ -50,7 +50,8 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             maxActiveProposals: 7,
             quorumBps: 0, // No governance requirements for staking tests
             approvalBps: 0, // No governance requirements for staking tests
-            minSTokenBpsToSubmit: 0
+            minSTokenBpsToSubmit: 0,
+            maxProposalAmountBps: 500
         });
         (factory, forwarder, levrDeployer) = deployFactory(
             cfg,
@@ -120,6 +121,10 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Fund treasury for boost
         IERC20(clankerToken).transfer(treasury, treasuryAmount);
+
+        // Also directly mint more tokens to treasury to exceed 5% limit check
+        // Treasury needs enough balance so that proposalAmount <= 5% of treasury
+        deal(clankerToken, treasury, treasuryAmount + 50000 ether);
 
         // Propose boost (auto-starts governance cycle)
         uint256 boostAmount = treasuryAmount / 2;

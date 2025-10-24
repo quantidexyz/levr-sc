@@ -306,6 +306,16 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
+        // Check proposal amount doesn't exceed maximum percentage of treasury balance
+        uint16 maxProposalBps = ILevrFactory_v1(factory).maxProposalAmountBps();
+        if (maxProposalBps > 0) {
+            uint256 treasuryBalance = IERC20(underlying).balanceOf(treasury);
+            uint256 maxProposalAmount = (treasuryBalance * maxProposalBps) / 10_000;
+            if (amount > maxProposalAmount) {
+                revert ProposalAmountExceedsLimit();
+            }
+        }
+
         // Check max active proposals per type
         uint16 maxActive = ILevrFactory_v1(factory).maxActiveProposals();
         if (_activeProposalCount[proposalType] >= maxActive) {

@@ -105,6 +105,9 @@ interface ILevrGovernor_v1 {
     /// @notice Treasury has insufficient balance for proposal amount
     error InsufficientTreasuryBalance();
 
+    /// @notice Proposal amount exceeds maximum allowed percentage of treasury balance
+    error ProposalAmountExceedsLimit();
+
     // ============ Events ============
 
     /// @notice Emitted when a new proposal is created

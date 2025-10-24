@@ -91,7 +91,8 @@ contract LevrFactoryDeployHelper is Test {
             maxActiveProposals: 7,
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
-            minSTokenBpsToSubmit: 100 // 1%
+            minSTokenBpsToSubmit: 100, // 1%
+            maxProposalAmountBps: 500 // 5%
         });
     }
 }

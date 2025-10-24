@@ -40,6 +40,7 @@ import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
  * - QUORUM_BPS: Minimum participation threshold (default: 7000 = 70%)
  * - APPROVAL_BPS: Minimum approval threshold (default: 5100 = 51%)
  * - MIN_STOKEN_BPS_TO_SUBMIT: Min % of sToken supply to propose (default: 100 = 1%)
+ * - MAX_PROPOSAL_AMOUNT_BPS: Max % of sToken supply to propose (default: 500 = 5%)
  * - CLANKER_FACTORY: Clanker factory address (default: auto-selected based on chain ID)
  *
  * Example .env:
@@ -65,6 +66,7 @@ contract DeployLevr is Script {
     uint16 constant DEFAULT_QUORUM_BPS = 7000; // 70%
     uint16 constant DEFAULT_APPROVAL_BPS = 5100; // 51%
     uint16 constant DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT = 100; // 1%
+    uint16 constant DEFAULT_MAX_PROPOSAL_AMOUNT_BPS = 500; // 5%
 
     // Minimum ETH balance required for deployment (0.1 ETH)
     uint256 constant MIN_DEPLOYER_BALANCE = 0.1 ether;
@@ -129,6 +131,10 @@ contract DeployLevr is Script {
             ? uint16(vm.envUint('MIN_STOKEN_BPS_TO_SUBMIT'))
             : DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT;
 
+        uint16 maxProposalAmountBps = vm.envExists('MAX_PROPOSAL_AMOUNT_BPS')
+            ? uint16(vm.envUint('MAX_PROPOSAL_AMOUNT_BPS'))
+            : DEFAULT_MAX_PROPOSAL_AMOUNT_BPS;
+
         // =======================================================================
         // PRE-DEPLOYMENT VALIDATION
         // =======================================================================
@@ -178,6 +184,7 @@ contract DeployLevr is Script {
         require(quorumBps <= 10000, 'Quorum BPS cannot exceed 100%');
         require(approvalBps <= 10000, 'Approval BPS cannot exceed 100%');
         require(minSTokenBpsToSubmit <= 10000, 'Min sToken BPS cannot exceed 100%');
+        require(maxProposalAmountBps <= 10000, 'Max proposal amount BPS cannot exceed 100%');
         require(clankerFactory != address(0), 'Clanker factory cannot be zero address');
 
         // Build factory configuration
@@ -190,7 +197,8 @@ contract DeployLevr is Script {
             maxActiveProposals: maxActiveProposals,
             quorumBps: quorumBps,
             approvalBps: approvalBps,
-            minSTokenBpsToSubmit: minSTokenBpsToSubmit
+            minSTokenBpsToSubmit: minSTokenBpsToSubmit,
+            maxProposalAmountBps: maxProposalAmountBps
         });
 
         console.log('=== DEPLOYMENT CONFIGURATION ===');
@@ -210,6 +218,7 @@ contract DeployLevr is Script {
         console.log('- Quorum BPS:', config.quorumBps);
         console.log('- Approval BPS:', config.approvalBps);
         console.log('- Min sToken BPS to Submit:', config.minSTokenBpsToSubmit);
+        console.log('- Max Proposal Amount BPS:', config.maxProposalAmountBps);
         console.log('');
 
         // =======================================================================
@@ -294,6 +303,10 @@ contract DeployLevr is Script {
         require(factory.quorumBps() == quorumBps, 'Quorum BPS mismatch');
         require(factory.approvalBps() == approvalBps, 'Approval BPS mismatch');
         require(factory.minSTokenBpsToSubmit() == minSTokenBpsToSubmit, 'Min sToken BPS mismatch');
+        require(
+            factory.maxProposalAmountBps() == maxProposalAmountBps,
+            'Max proposal amount BPS mismatch'
+        );
         require(factory.protocolTreasury() == protocolTreasury, 'Protocol treasury mismatch');
         require(factory.trustedForwarder() == address(forwarder), 'Trusted forwarder mismatch');
 
@@ -325,6 +338,7 @@ contract DeployLevr is Script {
         console.log('- Quorum:', quorumBps / 100, '%');
         console.log('- Approval Threshold:', approvalBps / 100, '%');
         console.log('- Min sToken to Propose:', minSTokenBpsToSubmit / 100, '%');
+        console.log('- Max Proposal Amount:', maxProposalAmountBps / 100, '%');
         console.log('');
         console.log('=== NEXT STEPS ===');
         console.log('1. Verify contracts on block explorer (if applicable)');

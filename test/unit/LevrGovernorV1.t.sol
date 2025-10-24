@@ -67,7 +67,8 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 1, // Testing with maxActiveProposals = 1
             quorumBps: 0, // No quorum requirement for this unit test
             approvalBps: 0, // No approval requirement for this unit test
-            minSTokenBpsToSubmit: 0 // No minimum for this test
+            minSTokenBpsToSubmit: 0, // No minimum for this test
+            maxProposalAmountBps: 500 // 5% max
         });
         (LevrFactory_v1 fac, LevrForwarder_v1 fwd, ) = deployFactoryWithDefaultClanker(
             cfg,
@@ -207,13 +208,18 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 7000, // 70% quorum
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 0
+            minSTokenBpsToSubmit: 0,
+            maxProposalAmountBps: 500
         });
         (LevrFactory_v1 fac, , ) = deployFactoryWithDefaultClanker(cfg, address(this));
 
         fac.prepareForDeployment();
         ILevrFactory_v1.Project memory proj = fac.register(address(underlying));
         LevrGovernor_v1 g = LevrGovernor_v1(proj.governor);
+
+        // Fund treasury with enough tokens to support proposals
+        // maxProposalAmountBps = 500 (5%), so to allow 100 ether proposals, need 2000 ether in treasury
+        underlying.mint(proj.treasury, 2000 ether);
 
         // Create multiple stakers so one person can't meet quorum alone
         address alice = address(0x1111);

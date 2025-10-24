@@ -61,7 +61,8 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
             maxActiveProposals: 7,
             quorumBps: 0,
             approvalBps: 0,
-            minSTokenBpsToSubmit: 0
+            minSTokenBpsToSubmit: 0,
+            maxProposalAmountBps: 500
         });
         (factory, forwarder, levrDeployer) = deployFactory(
             cfg,

@@ -18,6 +18,7 @@ interface ILevrFactory_v1 {
         uint16 quorumBps; // Minimum participation threshold (e.g., 7000 = 70%)
         uint16 approvalBps; // Minimum yes-vote threshold (e.g., 5100 = 51%)
         uint16 minSTokenBpsToSubmit; // Min % of sToken supply to submit (e.g., 100 = 1%)
+        uint16 maxProposalAmountBps; // Max proposal amount as % of treasury (e.g., 500 = 5%)
     }
 
     /// @notice Project contract addresses.
@@ -160,4 +161,7 @@ interface ILevrFactory_v1 {
 
     /// @notice Minimum % of sToken supply to submit proposals (basis points, e.g., 100 = 1%).
     function minSTokenBpsToSubmit() external view returns (uint16);
+
+    /// @notice Maximum proposal amount as % of treasury (basis points, e.g., 500 = 5%).
+    function maxProposalAmountBps() external view returns (uint16);
 }

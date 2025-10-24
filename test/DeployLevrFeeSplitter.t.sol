@@ -40,7 +40,8 @@ contract DeployLevrFeeSplitterTest is Test {
             maxActiveProposals: 7,
             quorumBps: 7000,
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 100
+            minSTokenBpsToSubmit: 100,
+            maxProposalAmountBps: 500
         });
 
         factory = new LevrFactory_v1(
