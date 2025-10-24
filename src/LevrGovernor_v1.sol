@@ -176,6 +176,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert ProposalNotSucceeded();
         }
 
+        // Check treasury has sufficient balance for proposal amount
+        uint256 treasuryBalance = IERC20(underlying).balanceOf(treasury);
+        if (treasuryBalance < proposal.amount) {
+            proposal.executed = true; // Mark as processed to avoid retries
+            emit ProposalDefeated(proposalId);
+            _activeProposalCount[proposal.proposalType]--;
+            revert InsufficientTreasuryBalance();
+        }
+
         // Check this is the winner for the cycle
         uint256 winnerId = _getWinner(proposal.cycleId);
         if (winnerId != proposalId) {

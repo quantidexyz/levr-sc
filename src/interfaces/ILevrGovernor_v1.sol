@@ -102,6 +102,9 @@ interface ILevrGovernor_v1 {
     /// @notice Cycle is still active, cannot start new one
     error CycleStillActive();
 
+    /// @notice Treasury has insufficient balance for proposal amount
+    error InsufficientTreasuryBalance();
+
     // ============ Events ============
 
     /// @notice Emitted when a new proposal is created
