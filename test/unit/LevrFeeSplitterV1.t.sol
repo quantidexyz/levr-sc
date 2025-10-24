@@ -413,6 +413,146 @@ contract LevrFeeSplitterV1Test is Test {
         assertEq(token2.balanceOf(bob), 250 ether, 'Bob should get 50% of token2');
     }
 
+    /**
+     * @notice Test that simulates UI scenario: both receivers get both tokens
+     * @dev This test verifies the bug found in UI testing where receivers only got one token type
+     */
+    function test_distributeBatch_bothReceiversGetBothTokens() public {
+        // Setup: Create wrapped ETH token to simulate real scenario
+        MockRewardToken wrappedETH = new MockRewardToken();
+
+        // Configure splits: 60% staking, 40% deployer (tokenAdmin)
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: address(staking), bps: 6000});
+        splits[1] = ILevrFeeSplitter_v1.SplitConfig({receiver: tokenAdmin, bps: 4000});
+
+        vm.prank(tokenAdmin);
+        splitter.configureSplits(splits);
+
+        // Simulate accumulated fees from Clanker token and wrapped ETH
+        uint256 clankerFees = 1000 ether;
+        uint256 wrappedETHFees = 5 ether;
+
+        // Transfer fees to splitter (simulating fee accumulation)
+        clankerToken.transfer(address(splitter), clankerFees);
+        wrappedETH.transfer(address(splitter), wrappedETHFees);
+
+        // Record balances before distribution
+        uint256 stakingClankerBefore = clankerToken.balanceOf(address(staking));
+        uint256 stakingWrappedETHBefore = wrappedETH.balanceOf(address(staking));
+        uint256 deployerClankerBefore = clankerToken.balanceOf(tokenAdmin);
+        uint256 deployerWrappedETHBefore = wrappedETH.balanceOf(tokenAdmin);
+
+        // Distribute both tokens via batch
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(clankerToken);
+        tokens[1] = address(wrappedETH);
+
+        splitter.distributeBatch(tokens);
+
+        // Calculate expected amounts
+        uint256 expectedStakingClanker = (clankerFees * 6000) / 10_000; // 600 ether
+        uint256 expectedDeployerClanker = (clankerFees * 4000) / 10_000; // 400 ether
+        uint256 expectedStakingWrappedETH = (wrappedETHFees * 6000) / 10_000; // 3 ether
+        uint256 expectedDeployerWrappedETH = (wrappedETHFees * 4000) / 10_000; // 2 ether
+
+        // ========================================
+        // CRITICAL ASSERTIONS: Both receivers MUST get BOTH tokens
+        // ========================================
+
+        // Verify staking pool received BOTH tokens
+        assertEq(
+            clankerToken.balanceOf(address(staking)) - stakingClankerBefore,
+            expectedStakingClanker,
+            'Staking MUST receive Clanker token fees'
+        );
+        assertEq(
+            wrappedETH.balanceOf(address(staking)) - stakingWrappedETHBefore,
+            expectedStakingWrappedETH,
+            'Staking MUST receive wrapped ETH fees'
+        );
+
+        // Verify deployer received BOTH tokens
+        assertEq(
+            clankerToken.balanceOf(tokenAdmin) - deployerClankerBefore,
+            expectedDeployerClanker,
+            'Deployer MUST receive Clanker token fees'
+        );
+        assertEq(
+            wrappedETH.balanceOf(tokenAdmin) - deployerWrappedETHBefore,
+            expectedDeployerWrappedETH,
+            'Deployer MUST receive wrapped ETH fees'
+        );
+
+        // Verify splitter is empty after distribution
+        assertEq(
+            clankerToken.balanceOf(address(splitter)),
+            0,
+            'Splitter should have no Clanker tokens left'
+        );
+        assertEq(
+            wrappedETH.balanceOf(address(splitter)),
+            0,
+            'Splitter should have no wrapped ETH left'
+        );
+    }
+
+    /**
+     * @notice Test individual distribute calls for multiple tokens (alternative to batch)
+     * @dev Verifies that calling distribute separately for each token also works correctly
+     */
+    function test_distribute_multipleTokensSequentially_bothReceiversGetBothTokens() public {
+        // Create wrapped ETH token
+        MockRewardToken wrappedETH = new MockRewardToken();
+
+        // Configure splits: 70% staking, 30% deployer
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: address(staking), bps: 7000});
+        splits[1] = ILevrFeeSplitter_v1.SplitConfig({receiver: tokenAdmin, bps: 3000});
+
+        vm.prank(tokenAdmin);
+        splitter.configureSplits(splits);
+
+        // Send fees
+        uint256 clankerFees = 2000 ether;
+        uint256 wrappedETHFees = 10 ether;
+
+        clankerToken.transfer(address(splitter), clankerFees);
+        wrappedETH.transfer(address(splitter), wrappedETHFees);
+
+        // Distribute each token separately
+        splitter.distribute(address(clankerToken));
+        splitter.distribute(address(wrappedETH));
+
+        // Calculate expected amounts
+        uint256 expectedStakingClanker = (clankerFees * 7000) / 10_000; // 1400 ether
+        uint256 expectedDeployerClanker = (clankerFees * 3000) / 10_000; // 600 ether
+        uint256 expectedStakingWrappedETH = (wrappedETHFees * 7000) / 10_000; // 7 ether
+        uint256 expectedDeployerWrappedETH = (wrappedETHFees * 3000) / 10_000; // 3 ether
+
+        // Verify both receivers got both tokens
+        assertEq(
+            clankerToken.balanceOf(address(staking)),
+            expectedStakingClanker,
+            'Staking MUST receive Clanker token fees (sequential)'
+        );
+        assertEq(
+            wrappedETH.balanceOf(address(staking)),
+            expectedStakingWrappedETH,
+            'Staking MUST receive wrapped ETH fees (sequential)'
+        );
+        assertEq(
+            clankerToken.balanceOf(tokenAdmin),
+            expectedDeployerClanker,
+            'Deployer MUST receive Clanker token fees (sequential)'
+        );
+        assertEq(
+            wrappedETH.balanceOf(tokenAdmin),
+            expectedDeployerWrappedETH,
+            'Deployer MUST receive wrapped ETH fees (sequential)'
+        );
+    }
+
     // ============ Dust Recovery Tests (2 tests) ============
 
     function test_recoverDust_onlyRecoversDust() public {
