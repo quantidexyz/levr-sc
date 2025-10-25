@@ -578,9 +578,8 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
 
-        // Can vote during voting window
-        vm.prank(alice);
-        ILevrGovernor_v1(governor).vote(pid1, true);
+        // Note: Intentionally NOT voting on pid1 so it fails quorum
+        // This allows the next proposal to auto-start a new cycle without orphaning pid1
 
         // Warp past voting window (cycle ended)
         vm.warp(block.timestamp + 5 days + 1);
@@ -592,6 +591,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         ILevrGovernor_v1(governor).vote(pid1, true);
 
         // New proposal after cycle ended auto-starts cycle 2
+        // pid1 failed quorum so it's defeated and can be orphaned safely
         vm.prank(alice);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
         assertEq(pid2, 2, 'Second proposal should have ID 2');
