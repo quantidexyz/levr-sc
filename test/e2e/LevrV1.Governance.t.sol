@@ -24,6 +24,7 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IClankerAirdrop} from '../../src/interfaces/external/IClankerAirdrop.sol';
 import {MerkleAirdropHelper} from '../utils/MerkleAirdropHelper.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
+import {console2} from 'forge-std/console2.sol';
 
 contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
@@ -603,5 +604,274 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Verify pid2 is in new cycle
         ILevrGovernor_v1.Proposal memory p2 = ILevrGovernor_v1(governor).getProposal(pid2);
         assertEq(p2.cycleId, 2, 'New proposal should be in cycle 2');
+    }
+
+    // ============ Test 10: Single Proposal State Bug - Meets Quorum & Approval ============
+    // REGRESSION TEST: Validates fix for state contradiction where proposal meets both
+    // quorum and approval but state enum shows Defeated instead of Succeeded
+    //
+    // Scenario:
+    // - Single staker with votes
+    // - Meets quorum (balance participation threshold)
+    // - Meets approval (VP voting threshold)
+    // - State should be "Succeeded" (2), NOT "Defeated" (3)
+    //
+    // Bug manifestation (user report):
+    // - UI shows "Defeated" badge
+    // - No execute button appears
+    // - User warps time past voting, proposal has votes, meets both thresholds
+    // - But getWinner() returns 0 or different ID
+    // - state() returns 3 instead of 2
+    //
+    // Related: https://github.com/xxx/issues/xxx
+
+    function test_SingleProposalStateConsistency_MeetsQuorumAndApproval() public {
+        // Setup: Single staker with votes
+        uint256 stakeAmount = 10 ether;
+        _stakeFor(alice, stakeAmount);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Create single proposal (will auto-start cycle 1)
+        vm.prank(alice);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Get initial proposal state
+        ILevrGovernor_v1.Proposal memory propAfterCreation = ILevrGovernor_v1(governor).getProposal(
+            proposalId
+        );
+        assertEq(propAfterCreation.id, proposalId, 'Proposal should exist');
+        assertEq(propAfterCreation.cycleId, 1, 'Should be in cycle 1');
+
+        // Warp to voting window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Vote YES with high voting power
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(proposalId, true);
+
+        // Get proposal during voting
+        ILevrGovernor_v1.Proposal memory propDuringVoting = ILevrGovernor_v1(governor).getProposal(
+            proposalId
+        );
+
+        // State should be Active (1) during voting
+        assertEq(uint256(propDuringVoting.state), 1, 'State should be Active (1) during voting');
+        assertGt(propDuringVoting.yesVotes, 0, 'Should have yes votes');
+        assertEq(propDuringVoting.noVotes, 0, 'Should have no votes');
+
+        // Warp past voting window (4 days later as in user's scenario)
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Get final proposal state
+        ILevrGovernor_v1.Proposal memory propAfterVoting = ILevrGovernor_v1(governor).getProposal(
+            proposalId
+        );
+
+        // ===== KEY ASSERTIONS FOR BUG DETECTION =====
+
+        // Votes should be preserved
+        assertEq(
+            propAfterVoting.yesVotes,
+            propDuringVoting.yesVotes,
+            'Yes votes should not change'
+        );
+        assertEq(propAfterVoting.noVotes, propDuringVoting.noVotes, 'No votes should not change');
+
+        // Both thresholds should be met
+        assertTrue(propAfterVoting.meetsQuorum, 'Should meet quorum');
+        assertTrue(propAfterVoting.meetsApproval, 'Should meet approval');
+
+        // ===== BUG: This is where the contradiction occurs =====
+        // If meetsQuorum=true AND meetsApproval=true, state MUST be Succeeded (2)
+        // If state is Defeated (3), it's a contract bug
+        uint8 expectedState = 2; // ProposalState.Succeeded
+        assertEq(
+            uint256(propAfterVoting.state),
+            uint256(expectedState),
+            'CRITICAL BUG: state should be Succeeded (2) when both meetsQuorum and meetsApproval are true. '
+            'Got Defeated (3). This causes UI to show wrong badge and no execute button.'
+        );
+
+        // Winner should be this proposal (it's the only one and meets all criteria)
+        uint256 winner = ILevrGovernor_v1(governor).getWinner(1);
+        assertEq(winner, proposalId, 'This proposal should be the cycle winner');
+
+        // Should be executable (treasury has sufficient balance for the boost amount)
+        uint256 treasuryBalance = IERC20(clankerToken).balanceOf(treasury);
+        assertTrue(
+            treasuryBalance >= propAfterVoting.amount,
+            'Treasury should have sufficient balance for execution'
+        );
+
+        // Execute should succeed
+        ILevrGovernor_v1(governor).execute(proposalId);
+
+        // Verify execution
+        ILevrGovernor_v1.Proposal memory propAfterExecution = ILevrGovernor_v1(governor)
+            .getProposal(proposalId);
+        assertTrue(propAfterExecution.executed, 'Proposal should be marked as executed');
+        assertEq(
+            uint256(propAfterExecution.state),
+            4,
+            'State should be Executed (4) after execution'
+        );
+    }
+
+    // ============ Test 11: Cannot Start New Cycle With Executable Proposals ============
+
+    function test_cannotStartNewCycleWithExecutableProposals() public {
+        // Setup: Single user with sufficient voting power
+        _stakeFor(alice, 10 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Create proposal (auto-starts cycle 1)
+        vm.prank(alice);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Warp to voting window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Alice votes YES (100% yes votes = meets approval, 100% participation = meets quorum)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(proposalId, true);
+
+        // Warp past voting window
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Verify proposal is in Succeeded state
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(proposalId);
+        assertEq(uint256(prop.state), 2, 'Proposal should be in Succeeded state (2)');
+        assertFalse(prop.executed, 'Proposal should not be executed yet');
+
+        // CRITICAL: Try to start new cycle while proposal is in Succeeded state
+        // This should REVERT to prevent orphaning the proposal
+        vm.expectRevert(ILevrGovernor_v1.ExecutableProposalsRemaining.selector);
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Verify we're still in cycle 1
+        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 1, 'Should still be in cycle 1');
+
+        // NOW: Execute the proposal
+        ILevrGovernor_v1(governor).execute(proposalId);
+
+        // Verify execution automatically started cycle 2
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            2,
+            'Should be in cycle 2 after execution'
+        );
+
+        // Verify we can no longer call startNewCycle until voting window of cycle 2 ends
+        vm.expectRevert(ILevrGovernor_v1.CycleStillActive.selector);
+        ILevrGovernor_v1(governor).startNewCycle();
+    }
+
+    // ============ Test 12: Can Start New Cycle After Executing All Proposals ============
+
+    function test_canStartNewCycleAfterExecutingProposals() public {
+        // Setup: Multiple proposals, only one is winner
+        _stakeFor(alice, 5 ether);
+        _stakeFor(bob, 10 ether);
+
+        vm.warp(block.timestamp + 10 days);
+
+        // Create two proposals (auto-starts cycle 1)
+        vm.prank(alice);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        vm.prank(bob);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            address(0xBEEF),
+            50 ether,
+            'test'
+        );
+
+        // Warp to voting window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Alice votes YES on pid1, NO on pid2
+        // Bob votes YES on both (pid1 wins with more votes)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid2, false);
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        // Warp past voting window
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Both proposals meet quorum and approval, but only pid1 is winner
+        ILevrGovernor_v1.Proposal memory p1 = ILevrGovernor_v1(governor).getProposal(pid1);
+        ILevrGovernor_v1.Proposal memory p2 = ILevrGovernor_v1(governor).getProposal(pid2);
+
+        assertEq(uint256(p1.state), 2, 'pid1 should be in Succeeded state');
+        assertEq(
+            uint256(p2.state),
+            2,
+            'pid2 should be in Succeeded state (non-winner but succeeded)'
+        );
+
+        // Try to start new cycle - should REVERT because pid1 is Succeeded
+        vm.expectRevert(ILevrGovernor_v1.ExecutableProposalsRemaining.selector);
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        // Execute the winning proposal
+        ILevrGovernor_v1(governor).execute(pid1);
+
+        // Now cycle 2 should be auto-started
+        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should auto-start cycle 2');
+
+        // Verify pid2 is orphaned in cycle 1 (cannot execute in new cycle)
+        ILevrGovernor_v1.Proposal memory p2After = ILevrGovernor_v1(governor).getProposal(pid2);
+        assertEq(p2After.cycleId, 1, 'pid2 should still be in cycle 1');
+        assertEq(uint256(p2After.state), 2, 'pid2 still in Succeeded state but orphaned');
+        assertFalse(p2After.executed, 'pid2 should not be executed');
+    }
+
+    // ============ Test 13: Can Start New Cycle If Proposal Is Defeated ============
+
+    function test_canStartNewCycleIfProposalDefeated() public {
+        // Setup: Create a proposal that will fail quorum (not enough participation)
+        _stakeFor(alice, 5 ether);
+        _stakeFor(bob, 5 ether);
+        _stakeFor(charlie, 5 ether); // Total: 15 ether, alice has 1/3 (33% < 70% quorum)
+
+        vm.warp(block.timestamp + 10 days);
+
+        // Create proposal (auto-starts cycle 1)
+        vm.prank(alice);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+
+        // Warp to voting window
+        vm.warp(block.timestamp + 2 days + 1);
+
+        // Only alice votes (33% participation < 70% quorum requirement)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(proposalId, true);
+
+        // Warp past voting window
+        vm.warp(block.timestamp + 5 days + 1);
+
+        // Proposal should be Defeated (failed quorum)
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(proposalId);
+        assertEq(uint256(prop.state), 3, 'Proposal should be Defeated (failed quorum)');
+        assertFalse(prop.executed, 'Proposal should not be executed');
+
+        // NOW: startNewCycle() should succeed because proposal is Defeated, not Succeeded
+        ILevrGovernor_v1(governor).startNewCycle();
+
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            2,
+            'Should be able to start new cycle'
+        );
     }
 }

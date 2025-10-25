@@ -17,8 +17,8 @@ interface ILevrGovernor_v1 {
     enum ProposalState {
         Pending, // Created, voting not started
         Active, // Voting in progress
-        Defeated, // Quorum or approval not met
         Succeeded, // Eligible for execution
+        Defeated, // Quorum or approval not met
         Executed // Winner executed on-chain
     }
 
@@ -101,6 +101,9 @@ interface ILevrGovernor_v1 {
 
     /// @notice Cycle is still active, cannot start new one
     error CycleStillActive();
+
+    /// @notice Cannot start new cycle while executable proposals exist in current cycle
+    error ExecutableProposalsRemaining();
 
     /// @notice Treasury has insufficient balance for proposal amount
     error InsufficientTreasuryBalance();

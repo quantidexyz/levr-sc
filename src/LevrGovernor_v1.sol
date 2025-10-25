@@ -140,6 +140,25 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         if (_currentCycleId == 0) {
             _startNewCycle();
         } else if (_needsNewCycle()) {
+            // Before starting a new cycle, check if there are any SUCCEEDED proposals
+            // that haven't been executed yet. This prevents orphaning proposals.
+            // We check the state (not dynamic conditions) because:
+            // - If execution failed for any reason, state will be Defeated, not Succeeded
+            // - State reflects the final determination of proposal viability
+            uint256[] memory proposals = _cycleProposals[_currentCycleId];
+            for (uint256 i = 0; i < proposals.length; i++) {
+                uint256 pid = proposals[i];
+                ILevrGovernor_v1.Proposal storage proposal = _proposals[pid];
+
+                // Skip already executed proposals
+                if (proposal.executed) continue;
+
+                // If proposal is in Succeeded state, it can be executed
+                // Prevent cycle advancement to avoid orphaning it
+                if (_state(pid) == ProposalState.Succeeded) {
+                    revert ExecutableProposalsRemaining();
+                }
+            }
             _startNewCycle();
         } else {
             revert CycleStillActive();
