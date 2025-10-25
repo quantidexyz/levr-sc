@@ -51,7 +51,9 @@ import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
  * STREAM_WINDOW_SECONDS=259200
  *
  * Safety checks:
- * - Verifies deployer has sufficient ETH balance
+ * - Validates network is supported (Base mainnet/testnet only)
+ * - Locks required gas amount based on current gas price (with 20% buffer)
+ * - Verifies deployer has sufficient ETH balance before proceeding
  * - Validates all configuration parameters
  * - Confirms factory deployment at predicted address
  * - Outputs all deployed addresses for verification
@@ -68,8 +70,20 @@ contract DeployLevr is Script {
     uint16 constant DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT = 100; // 1%
     uint16 constant DEFAULT_MAX_PROPOSAL_AMOUNT_BPS = 500; // 5%
 
-    // Minimum ETH balance required for deployment (0.1 ETH)
-    uint256 constant MIN_DEPLOYER_BALANCE = 0.1 ether;
+    // Estimated gas costs for deployment (conservative estimates)
+    uint256 constant ESTIMATED_FORWARDER_GAS = 500_000; // ~0.0005 ETH at 1 gwei
+    uint256 constant ESTIMATED_DEPLOYER_GAS = 300_000; // ~0.0003 ETH at 1 gwei
+    uint256 constant ESTIMATED_FACTORY_GAS = 3_000_000; // ~0.003 ETH at 1 gwei
+    uint256 constant ESTIMATED_FEE_SPLITTER_GAS = 500_000; // ~0.0005 ETH at 1 gwei
+    uint256 constant TOTAL_ESTIMATED_GAS =
+        ESTIMATED_FORWARDER_GAS +
+            ESTIMATED_DEPLOYER_GAS +
+            ESTIMATED_FACTORY_GAS +
+            ESTIMATED_FEE_SPLITTER_GAS; // ~4.3M gas
+
+    // Minimum ETH balance required (gas estimate * gas price + 20% buffer)
+    uint256 constant SAFETY_BUFFER_BPS = 2000; // 20% buffer
+    uint256 constant MIN_DEPLOYER_BALANCE = 0.1 ether; // Fallback minimum
 
     /**
      * @notice Get Clanker factory address for the current chain
@@ -160,6 +174,45 @@ contract DeployLevr is Script {
         string memory networkName = block.chainid == 8453 ? 'Base Mainnet' : 'Base Sepolia';
         console.log('Network:', networkName);
         console.log('Clanker Factory (auto-selected):', clankerFactory);
+        console.log('');
+
+        // =======================================================================
+        // GAS REQUIREMENT VALIDATION (Lock Required Amount)
+        // =======================================================================
+
+        console.log('=== GAS REQUIREMENT VALIDATION ===');
+
+        // Calculate required ETH based on current gas price
+        uint256 currentGasPrice = tx.gasprice > 0 ? tx.gasprice : 1 gwei; // Fallback to 1 gwei
+        uint256 estimatedCostWei = TOTAL_ESTIMATED_GAS * currentGasPrice;
+        uint256 requiredWithBuffer = estimatedCostWei +
+            ((estimatedCostWei * SAFETY_BUFFER_BPS) / 10000);
+
+        // Use the higher of calculated requirement or MIN_DEPLOYER_BALANCE
+        uint256 requiredBalance = requiredWithBuffer > MIN_DEPLOYER_BALANCE
+            ? requiredWithBuffer
+            : MIN_DEPLOYER_BALANCE;
+
+        console.log('Current Gas Price:', currentGasPrice / 1 gwei, 'gwei');
+        console.log('Estimated Total Gas:', TOTAL_ESTIMATED_GAS);
+        console.log('Estimated Cost:', estimatedCostWei / 1e18, 'ETH');
+        console.log('Required (with 20% buffer):', requiredBalance / 1e18, 'ETH');
+        console.log('Deployer Balance:', deployer.balance / 1e18, 'ETH');
+
+        // Validate deployer has sufficient ETH (LOCKED CHECK)
+        require(
+            deployer.balance >= requiredBalance,
+            string(
+                abi.encodePacked(
+                    'Insufficient deployer balance - need at least ',
+                    vm.toString(requiredBalance / 1e18),
+                    ' ETH'
+                )
+            )
+        );
+
+        console.log('[OK] Sufficient balance locked for deployment');
+        console.log('');
 
         // Show if protocol treasury is using default
         if (protocolTreasury == deployer) {
@@ -168,12 +221,6 @@ contract DeployLevr is Script {
             console.log('Protocol Treasury:', protocolTreasury);
         }
         console.log('');
-
-        // Validate deployer has sufficient ETH
-        require(
-            deployer.balance >= MIN_DEPLOYER_BALANCE,
-            'Insufficient deployer balance - need at least 0.1 ETH'
-        );
 
         // Validate configuration parameters
         require(protocolFeeBps <= 10000, 'Protocol fee BPS cannot exceed 100%');
