@@ -308,7 +308,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
     /// @notice Test: What if ALL proposals in a cycle fail?
     function test_activeProposalCount_allProposalsFail_permanentGridlock() public {
-        console2.log('\n=== ALL Proposals Fail → Permanent Gridlock? ===\n');
+        console2.log('\n=== ALL Proposals Fail - Permanent Gridlock? ===\n');
 
         vm.warp(block.timestamp + 10 days);
 
@@ -377,7 +377,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
             governor.proposeBoost(3000 ether);
             console2.log('Cannot create new proposal: CONFIRMED GRIDLOCK');
 
-            console2.log('\n🔴 CRITICAL BUG CONFIRMED!');
+            console2.log('\n[CRITICAL BUG CONFIRMED]');
             console2.log('activeProposalCount never resets');
             console2.log('Defeated proposals permanently consume slots');
             console2.log('Eventually hits maxActiveProposals');
@@ -432,7 +432,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
             vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
             governor.proposeBoost(3000 ether);
 
-            console2.log('\n🔴 PERMANENT GRIDLOCK CONFIRMED!');
+            console2.log('\n[PERMANENT GRIDLOCK CONFIRMED]');
             console2.log('Boost proposals are PERMANENTLY BLOCKED');
             console2.log('No recovery mechanism exists');
             console2.log('This proposal type is DEAD FOREVER');
