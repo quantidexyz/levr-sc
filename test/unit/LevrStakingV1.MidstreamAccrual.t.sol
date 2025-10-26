@@ -71,9 +71,9 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         vm.stopPrank();
     }
 
-    /// @notice Test that multiple accruals within the same stream window lose unvested rewards
-    /// @dev THIS TEST WILL FAIL with current implementation - that's the bug!
-    function test_multipleAccrualsWithinStreamWindow_EXPECTED_TO_FAIL() public {
+    /// @notice Test that multiple accruals within the same stream window preserve all rewards
+    /// @dev With the fix, all rewards should be preserved
+    function test_multipleAccrualsWithinStreamWindow() public {
         console2.log('=== MULTIPLE ACCRUALS WITHIN STREAM WINDOW ===\n');
 
         // First accrual: 600K tokens
@@ -112,15 +112,17 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Total claimed:', claimed / 1e18, 'tokens');
         console2.log('Lost:', (totalAccrued - claimed) / 1e18, 'tokens');
 
-        // THIS ASSERTION WILL FAIL - demonstrating the bug
-        // Expected: 601K claimed
-        // Actual: ~201K claimed (400K lost!)
-        vm.expectRevert(); // We expect this to fail
-        assertEq(claimed, totalAccrued, 'Should claim all accrued rewards');
+        // With the fix, should claim all accrued rewards
+        assertApproxEqRel(
+            claimed,
+            totalAccrued,
+            0.001e18,
+            'Should claim all accrued rewards (fix verified)'
+        );
     }
 
-    /// @notice Test that partially vested stream preservation fails
-    function test_partiallyVestedStreamPreservation_EXPECTED_TO_FAIL() public {
+    /// @notice Test that partially vested stream preservation works
+    function test_partiallyVestedStreamPreservation() public {
         console2.log('=== PARTIALLY VESTED STREAM PRESERVATION ===\n');
 
         uint256 accrual = 300_000 * 1e18;
@@ -146,21 +148,17 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Claimable:', claimable / 1e18);
         console2.log('Expected:', (accrual + smallAccrual) / 1e18);
 
-        uint256 unvested = accrual - claimable;
-        console2.log('Unvested (lost):', unvested / 1e18);
-
-        // THIS WILL FAIL - unvested is lost
-        vm.expectRevert();
+        // With the fix, should preserve all rewards
         assertApproxEqRel(
             claimable,
             accrual + smallAccrual,
             0.001e18,
-            'Should preserve unvested rewards'
+            'Should preserve unvested rewards (fix verified)'
         );
     }
 
     /// @notice Test daily accrual frequency (realistic Clanker fee scenario)
-    function test_accrualFrequency_daily_EXPECTED_TO_FAIL() public {
+    function test_accrualFrequency_daily() public {
         console2.log('=== DAILY ACCRUAL FREQUENCY ===\n');
 
         uint256 dailyFees = 10_000 * 1e18;
@@ -197,13 +195,17 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Total claimed:', claimed / 1e18);
         console2.log('Lost:', (totalAccrued - claimed) / 1e18);
 
-        // THIS WILL FAIL - most rewards lost to overlapping streams
-        vm.expectRevert();
-        assertApproxEqRel(claimed, totalAccrued, 0.05e18, 'Should claim most rewards');
+        // With the fix, should claim almost all rewards (within rounding)
+        assertApproxEqRel(
+            claimed,
+            totalAccrued,
+            0.001e18,
+            'Should claim all rewards with daily accruals (fix verified)'
+        );
     }
 
     /// @notice Test hourly accrual frequency (worst case)
-    function test_accrualFrequency_hourly_EXPECTED_TO_FAIL() public {
+    function test_accrualFrequency_hourly() public {
         console2.log('=== HOURLY ACCRUAL FREQUENCY ===\n');
 
         uint256 hourlyFees = 100 * 1e18;
@@ -239,13 +241,17 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Lost:', lost / 1e18);
         console2.log('Loss percentage:', (lost * 100) / totalAccrued, '%');
 
-        // THIS WILL FAIL - catastrophic loss with frequent accruals
-        vm.expectRevert();
-        assertApproxEqRel(claimed, totalAccrued, 0.1e18, 'Should claim most rewards');
+        // With the fix, should claim almost all rewards
+        assertApproxEqRel(
+            claimed,
+            totalAccrued,
+            0.001e18,
+            'Should claim all rewards with hourly accruals (fix verified)'
+        );
     }
 
     /// @notice Test that unvested rewards are not lost (invariant test)
-    function test_unvestedRewardsNotLost_EXPECTED_TO_FAIL() public {
+    function test_unvestedRewardsNotLost() public {
         console2.log('=== UNVESTED REWARDS NOT LOST (INVARIANT) ===\n');
 
         uint256 firstAccrual = 1_000_000 * 1e18;
@@ -305,10 +311,14 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Total claimed:', claimed / 1e18);
         console2.log('Stuck in contract:', stuckRewards / 1e18);
 
-        // INVARIANT: No rewards should be stuck
-        // THIS WILL FAIL
-        vm.expectRevert();
-        assertEq(stuckRewards, 0, 'No rewards should be stuck in contract');
+        // INVARIANT: No rewards should be stuck (fix verified)
+        assertEq(stuckRewards, 0, 'No rewards should be stuck in contract (fix verified)');
+        assertApproxEqRel(
+            claimed,
+            totalAccrued,
+            0.001e18,
+            'Should claim all accrued rewards (fix verified)'
+        );
     }
 
     /// @notice Fuzz test: No rewards should ever be lost regardless of timing
@@ -359,7 +369,7 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
     }
 
     /// @notice Test scenario: Complete first stream before second accrual (should work)
-    function test_accrualAfterStreamComplete_SHOULD_PASS() public {
+    function test_accrualAfterStreamComplete() public {
         console2.log('=== ACCRUAL AFTER STREAM COMPLETE (CORRECT USAGE) ===\n');
 
         // First accrual
@@ -367,16 +377,18 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         underlying.mint(address(staking), firstAccrual);
         staking.accrueRewards(address(underlying));
 
-        // Wait for COMPLETE stream
-        vm.warp(block.timestamp + STREAM_WINDOW + 1);
+        // Wait for COMPLETE stream using streamEnd() to ensure precision
+        uint64 streamEnd1 = staking.streamEnd();
+        vm.warp(streamEnd1 + 1);
 
         // Second accrual (after first completes)
         uint256 secondAccrual = 100_000 * 1e18;
         underlying.mint(address(staking), secondAccrual);
         staking.accrueRewards(address(underlying));
 
-        // Wait for second stream to complete
-        vm.warp(block.timestamp + STREAM_WINDOW + 1);
+        // Wait for second stream to complete using streamEnd()
+        uint64 streamEnd2 = staking.streamEnd();
+        vm.warp(streamEnd2 + 1);
 
         // Claim
         address[] memory tokens = new address[](1);
@@ -393,17 +405,17 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Total accrued:', totalAccrued / 1e18);
         console2.log('Total claimed:', claimed / 1e18);
 
-        // THIS SHOULD PASS - when used correctly, no loss occurs
+        // With proper timing, should claim all rewards
         assertApproxEqRel(
             claimed,
             totalAccrued,
             0.001e18,
-            'Should claim all rewards when streams complete'
+            'Should claim all rewards when streams complete (fix verified)'
         );
     }
 
-    /// @notice Test to demonstrate the exact bug scenario from the issue
-    function test_exactBugReproduction_600K_then_1K() public {
+    /// @notice Test to verify the fix works for the exact bug scenario
+    function test_exactBugReproduction_600K_then_1K_FIXED() public {
         console2.log('=== EXACT BUG REPRODUCTION (600K + 1K) ===\n');
 
         // Initial accrual: 600K
@@ -454,8 +466,13 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Claimed:', claimed / 1e18);
         console2.log('Lost forever:', stuck / 1e18);
 
-        // Verify the bug: should lose ~400K
-        assertApproxEqAbs(stuck, 400_000 * 1e18, 1000 * 1e18, 'Should have ~400K stuck');
-        assertApproxEqAbs(claimed, 201_000 * 1e18, 1000 * 1e18, 'Should claim ~201K');
+        // Verify the FIX: should claim ALL rewards with nothing stuck
+        assertEq(stuck, 0, 'No rewards should be stuck (FIX VERIFIED)');
+        assertApproxEqRel(
+            claimed,
+            initial + midstream,
+            0.001e18,
+            'Should claim all accrued rewards (FIX VERIFIED)'
+        );
     }
 }

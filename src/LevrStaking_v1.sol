@@ -366,9 +366,15 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         ILevrStaking_v1.RewardInfo storage info = _ensureRewardToken(token);
         // Settle current stream up to now before resetting
         _settleStreamingForToken(token);
-        // Reset stream window with new amount only (no remaining carry-over)
-        _resetStreamForToken(token, amount);
+        
+        // FIX: Calculate unvested rewards from current stream
+        uint256 unvested = _calculateUnvested(token);
+        
+        // Reset stream with NEW amount + UNVESTED from previous stream
+        _resetStreamForToken(token, amount + unvested);
+        
         // Increase reserve by newly provided amount only
+        // (unvested is already in reserve from previous accrual)
         _rewardReserve[token] += amount;
         emit RewardsAccrued(token, amount, info.accPerShare);
     }
@@ -476,6 +482,39 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         }
         // Advance last update only when there are stakers
         _lastUpdateByToken[token] = to;
+    }
+
+    /// @notice Calculate unvested rewards from current stream
+    /// @dev Returns the amount of rewards that haven't been distributed yet
+    /// @param token The reward token to check
+    /// @return unvested Amount of unvested rewards (0 if stream is complete or doesn't exist)
+    function _calculateUnvested(address token) internal view returns (uint256 unvested) {
+        uint64 start = _streamStartByToken[token];
+        uint64 end = _streamEndByToken[token];
+        
+        // No active stream
+        if (end == 0 || start == 0) return 0;
+        
+        uint64 now_ = uint64(block.timestamp);
+        
+        // Stream hasn't started yet (shouldn't happen, but be safe)
+        if (now_ < start) return _streamTotalByToken[token];
+        
+        // Stream is complete
+        if (now_ >= end) return 0;
+        
+        // Calculate how much is unvested
+        uint256 total = _streamTotalByToken[token];
+        uint256 duration = end - start;
+        
+        if (duration == 0) return 0;
+        
+        // Calculate vested amount
+        uint256 elapsed = now_ - start;
+        uint256 vested = (total * elapsed) / duration;
+        
+        // Return unvested portion
+        return total > vested ? total - vested : 0;
     }
 
     // ============ Governance Functions ============
