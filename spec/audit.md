@@ -2105,13 +2105,29 @@ When discovering new security findings, vulnerabilities, or architectural concer
 
 **Date:** October 26, 2025  
 **Severity:** CRITICAL  
-**Status:** 🔴 **NEWLY DISCOVERED - REQUIRES IMMEDIATE ATTENTION**  
-**Test Suite:** `test/unit/LevrGovernor_CriticalLogicBugs.t.sol`  
-**Tests:** 4/4 bugs confirmed (100% reproduction rate)
+**Status:** 🔴 **4 CRITICAL BUGS FOUND - DEPLOYMENT BLOCKED**  
+**Test Coverage:** 5/5 bugs confirmed (100% reproduction rate)  
+**Discovery Method:** Systematic user flow mapping
 
 ### Overview
 
-Deep analysis comparing against industry audit findings revealed **4 CRITICAL logic bugs** in the Governor contract that are "obvious in hindsight" similar to the staking midstream accrual issue. These bugs involve **state synchronization issues** where values are read at execution time instead of being snapshot at voting time.
+Deep comparative audit revealed **4 CRITICAL logic bugs** in `LevrGovernor_v1.sol` contract, discovered using the same systematic methodology that would have caught the staking midstream accrual bug.
+
+**Bugs Found:**
+
+1. NEW-C-1: Quorum manipulation via supply increase
+2. NEW-C-2: Quorum manipulation via supply decrease
+3. NEW-C-3: Winner manipulation via config changes
+4. NEW-C-4: Active proposal count never resets between cycles
+
+**Root Causes:**
+
+- Bugs 1-3: State synchronization (values not snapshotted)
+- Bug 4: State management (count not reset between cycles)
+
+**📄 Complete Analysis:** See `spec/GOVERNANCE_CRITICAL_BUGS.md` for full details, attack scenarios, and fixes.
+
+### Quick Summary
 
 ---
 
@@ -2396,14 +2412,17 @@ Minimum balance for 1 VP:
 
 ## Summary of Newly Discovered Bugs
 
-| Bug ID  | Severity    | Description                                   | Status       |
-| ------- | ----------- | --------------------------------------------- | ------------ |
-| NEW-C-1 | 🔴 CRITICAL | Quorum manipulation via post-voting staking   | 🔴 NOT FIXED |
-| NEW-C-2 | 🔴 CRITICAL | Quorum manipulation via post-voting unstaking | 🔴 NOT FIXED |
-| NEW-C-3 | 🔴 CRITICAL | Config changes affect winner determination    | 🔴 NOT FIXED |
-| NEW-M-1 | 🟡 MEDIUM   | VP precision loss for micro stakes            | ℹ️ BY DESIGN |
+| Bug ID  | Severity    | Description                                       | Status       |
+| ------- | ----------- | ------------------------------------------------- | ------------ |
+| NEW-C-1 | 🔴 CRITICAL | Quorum manipulation via post-voting staking       | 🔴 NOT FIXED |
+| NEW-C-2 | 🔴 CRITICAL | Quorum manipulation via post-voting unstaking     | 🔴 NOT FIXED |
+| NEW-C-3 | 🔴 CRITICAL | Config changes affect winner determination        | 🔴 NOT FIXED |
+| NEW-C-4 | 🔴 CRITICAL | Active proposal count never resets between cycles | 🔴 NOT FIXED |
+| NEW-M-1 | 🟡 MEDIUM   | VP precision loss for micro stakes                | ℹ️ BY DESIGN |
 
-**Test Coverage:** 4/4 bugs reproduced and confirmed (100%)
+**Test Coverage:** 5/5 bugs reproduced and confirmed (100%)
+
+**📄 Complete Details:** All bugs, attack scenarios, fixes, and testing requirements are documented in `spec/GOVERNANCE_CRITICAL_BUGS.md` (single source of truth)
 
 ---
 

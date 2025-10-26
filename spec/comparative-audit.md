@@ -1021,25 +1021,30 @@ if (msg.value != totalValue) {
 
 ---
 
-## 🚨 CRITICAL UPDATE: Snapshot Logic Bugs Discovered (October 26, 2025)
+## 🚨 CRITICAL UPDATE: Governor Logic Bugs Discovered (October 26, 2025)
 
-**Following the methodology used to discover the staking midstream accrual bug**, systematic user flow analysis revealed **3 CRITICAL state synchronization bugs** in the Governor contract.
+**Following the methodology used to discover the staking midstream accrual bug**, systematic user flow analysis revealed **4 CRITICAL logic bugs** in the Governor contract.
 
 ### Newly Discovered Critical Bugs
 
-| Bug ID      | Description                                | Severity    | Status    |
-| ----------- | ------------------------------------------ | ----------- | --------- |
-| **NEW-C-1** | Quorum manipulation via supply increase    | 🔴 CRITICAL | NOT FIXED |
-| **NEW-C-2** | Quorum manipulation via supply decrease    | 🔴 CRITICAL | NOT FIXED |
-| **NEW-C-3** | Config changes affect winner determination | 🔴 CRITICAL | NOT FIXED |
+| Bug ID      | Description                                       | Severity    | Status    |
+| ----------- | ------------------------------------------------- | ----------- | --------- |
+| **NEW-C-1** | Quorum manipulation via supply increase           | 🔴 CRITICAL | NOT FIXED |
+| **NEW-C-2** | Quorum manipulation via supply decrease           | 🔴 CRITICAL | NOT FIXED |
+| **NEW-C-3** | Config changes affect winner determination        | 🔴 CRITICAL | NOT FIXED |
+| **NEW-C-4** | Active proposal count never resets between cycles | 🔴 CRITICAL | NOT FIXED |
 
-**Root Cause:** Values read at execution time instead of snapshotted at proposal/voting time.
+**Root Causes:**
+
+- Bugs 1-3: State synchronization (values not snapshotted)
+- Bug 4: State management (count not reset between cycles)
 
 **Impact:**
 
 - Complete governance DOS possible
 - Failed proposals can be revived
 - Winner can be changed by factory owner
+- Permanent gridlock via defeated proposals
 - **Breaks core protocol functionality**
 
 **Comparison to Industry:**
@@ -1064,27 +1069,33 @@ if (msg.value != totalValue) {
 
 ### Required Fixes
 
-See detailed implementation in `CRITICAL_SNAPSHOT_BUGS.md`:
+**📄 Complete fix implementations in `spec/GOVERNANCE_CRITICAL_BUGS.md` (single source of truth)**
 
-1. Add `totalSupplySnapshot` to Proposal struct
-2. Add `quorumBpsSnapshot` and `approvalBpsSnapshot` to Proposal struct
+**Summary:**
+
+1. Add `totalSupplySnapshot` to Proposal struct (fixes C-1, C-2)
+2. Add `quorumBpsSnapshot` and `approvalBpsSnapshot` to Proposal struct (fixes C-3)
 3. Capture snapshots in `_propose()`
 4. Use snapshots in `_meetsQuorum()` and `_meetsApproval()`
+5. **Reset `_activeProposalCount` in `_startNewCycle()`** (fixes C-4) ← 2 lines!
+
+**Total:** ~20 lines of code across 2 files
 
 ### Updated Production Status
 
 ❌ **NOT READY FOR PRODUCTION**
 
-**Reason:** 3 critical governance manipulation vulnerabilities discovered
+**Reason:** 4 critical governance bugs discovered
 
 **Required Before Deployment:**
 
 1. Implement snapshot mechanism (2-4 hours)
-2. Comprehensive snapshot testing (6-12 hours)
-3. Verify no other dynamic state reads (2-4 hours)
-4. **Estimated delay: 1-2 days**
+2. Implement cycle reset logic (30 minutes - just 2 lines!)
+3. Comprehensive testing (16-22 hours)
+4. Review and verification (2-4 hours)
+5. **Estimated delay: 2-3 days**
 
-**Detailed Analysis:** See `spec/CRITICAL_SNAPSHOT_BUGS.md`
+**📄 Single Source of Truth:** `spec/GOVERNANCE_CRITICAL_BUGS.md`
 
 ---
 
