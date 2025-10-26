@@ -175,17 +175,18 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Warp to end of voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Now proposal should NOT meet quorum (75% < 80%)
-        assertFalse(
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL meets quorum
+        // because it uses the 70% threshold from when it was created, not the new 80%
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertTrue(
             ILevrGovernor_v1(governor).meetsQuorum(pid),
-            'Should NOT meet 80% quorum with 75% participation'
+            'Should still meet 70% quorum (snapshot) even though config changed to 80%'
         );
 
-        // Try to execute - should fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Execution should succeed because snapshot protects against config changes
         ILevrGovernor_v1(governor).execute(pid);
 
-        console2.log('[RESULT] Proposal failed due to mid-cycle quorum increase');
+        console2.log('[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes');
     }
 
     // ============ Test 2: Quorum Decrease Mid-Cycle (Allows Previously Failing Proposal) ============
@@ -236,19 +237,19 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Warp to end of voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Now proposal SHOULD meet quorum (20% > 10%)
-        assertTrue(
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL does NOT meet quorum
+        // because it uses the 70% threshold from when it was created, not the new 10%
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertFalse(
             ILevrGovernor_v1(governor).meetsQuorum(pid),
-            'Should meet 10% quorum with 20% participation'
+            'Should NOT meet 70% quorum (snapshot) even though config changed to 10%'
         );
 
-        // Should be able to execute now
+        // Execution should fail because snapshot protects against config changes
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
 
-        ILevrGovernor_v1.Proposal memory proposal = ILevrGovernor_v1(governor).getProposal(pid);
-        assertTrue(proposal.executed, 'Proposal should be executed');
-
-        console2.log('[RESULT] Proposal succeeded due to mid-cycle quorum decrease');
+        console2.log('[RESULT] Proposal still defeated - snapshot protects against mid-cycle config changes');
     }
 
     // ============ Test 3: Approval Threshold Change Mid-Cycle ============
@@ -304,17 +305,18 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Warp to end of voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Now proposal should NOT meet approval (66% < 70%)
-        assertFalse(
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL meets approval
+        // because it uses the 51% threshold from when it was created, not the new 70%
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertTrue(
             ILevrGovernor_v1(governor).meetsApproval(pid),
-            'Should NOT meet 70% approval with 66% yes votes'
+            'Should still meet 51% approval (snapshot) even though config changed to 70%'
         );
 
-        // Try to execute - should fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Execution should succeed because snapshot protects against config changes
         ILevrGovernor_v1(governor).execute(pid);
 
-        console2.log('[RESULT] Proposal failed due to mid-cycle approval increase');
+        console2.log('[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes');
     }
 
     // ============ Test 4: MaxActiveProposals Change Mid-Cycle ============
@@ -801,20 +803,21 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         console2.log('[RECOVERY] Quorum lowered from 70% to 10% to unblock proposal');
 
-        // Now proposal can execute!
-        assertTrue(ILevrGovernor_v1(governor).meetsQuorum(pid), 'Should now meet 10% quorum');
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL does NOT meet quorum
+        // Config changes can no longer be used for recovery (security improvement)
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertFalse(ILevrGovernor_v1(governor).meetsQuorum(pid), 'Should still not meet 70% quorum (snapshot)');
 
+        // Execution fails - config changes cannot unblock stuck proposals
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
 
-        assertTrue(
-            ILevrGovernor_v1(governor).getProposal(pid).executed,
-            'Proposal should execute after quorum lowered'
-        );
+        console2.log('[RESULT] Snapshot protection prevents config-based recovery');
+        console2.log('[RESULT] Must use manual startNewCycle() to recover instead');
 
-        console2.log('[RESULT] Config update successfully recovered stuck proposal');
-        console2.log('[RESULT] New cycle auto-started after execution');
-
-        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should be in cycle 2');
+        // Proper recovery: manually start new cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should be in cycle 2 after manual restart');
     }
 
     // ============ Test 10: Auto-Cycle Creation After Config Update ============

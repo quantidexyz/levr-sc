@@ -43,6 +43,9 @@ interface ILevrGovernor_v1 {
         ProposalState state; // Current state of the proposal (computed)
         bool meetsQuorum; // Whether proposal meets quorum threshold (computed)
         bool meetsApproval; // Whether proposal meets approval threshold (computed)
+        uint256 totalSupplySnapshot; // FIX [NEW-C-1, NEW-C-2]: Snapshot of sToken supply at proposal creation
+        uint16 quorumBpsSnapshot; // FIX [NEW-C-3]: Snapshot of quorum threshold at proposal creation
+        uint16 approvalBpsSnapshot; // FIX [NEW-C-3]: Snapshot of approval threshold at proposal creation
     }
 
     /// @notice Vote receipt for a user on a proposal

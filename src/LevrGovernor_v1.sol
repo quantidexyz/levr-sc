@@ -166,7 +166,11 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         if (!_meetsQuorum(proposalId)) {
             proposal.executed = true; // Mark as processed
             emit ProposalDefeated(proposalId);
-            _activeProposalCount[proposal.proposalType]--;
+            // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
+            // (can be 0 if new cycle already started and reset the count)
+            if (_activeProposalCount[proposal.proposalType] > 0) {
+                _activeProposalCount[proposal.proposalType]--;
+            }
             revert ProposalNotSucceeded();
         }
 
@@ -174,7 +178,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         if (!_meetsApproval(proposalId)) {
             proposal.executed = true; // Mark as processed
             emit ProposalDefeated(proposalId);
-            _activeProposalCount[proposal.proposalType]--;
+            // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
+            if (_activeProposalCount[proposal.proposalType] > 0) {
+                _activeProposalCount[proposal.proposalType]--;
+            }
             revert ProposalNotSucceeded();
         }
 
@@ -183,7 +190,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         if (treasuryBalance < proposal.amount) {
             proposal.executed = true; // Mark as processed to avoid retries
             emit ProposalDefeated(proposalId);
-            _activeProposalCount[proposal.proposalType]--;
+            // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
+            if (_activeProposalCount[proposal.proposalType] > 0) {
+                _activeProposalCount[proposal.proposalType]--;
+            }
             revert InsufficientTreasuryBalance();
         }
 
@@ -202,7 +212,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         // Execute the proposal
         proposal.executed = true;
-        _activeProposalCount[proposal.proposalType]--;
+        // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
+        if (_activeProposalCount[proposal.proposalType] > 0) {
+            _activeProposalCount[proposal.proposalType]--;
+        }
 
         if (proposal.proposalType == ProposalType.BoostStakingPool) {
             ILevrTreasury_v1(treasury).applyBoost(proposal.amount);
@@ -334,6 +347,12 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Create proposal
         proposalId = ++_proposalCount;
 
+        // FIX [NEW-C-1, NEW-C-2, NEW-C-3]: Capture snapshots at proposal creation
+        // to prevent manipulation via supply/config changes after voting
+        uint256 totalSupplySnapshot = IERC20(stakedToken).totalSupply();
+        uint16 quorumBpsSnapshot = ILevrFactory_v1(factory).quorumBps();
+        uint16 approvalBpsSnapshot = ILevrFactory_v1(factory).approvalBps();
+
         _proposals[proposalId] = Proposal({
             id: proposalId,
             proposalType: proposalType,
@@ -351,7 +370,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             cycleId: cycleId,
             state: ProposalState.Pending,
             meetsQuorum: false,
-            meetsApproval: false
+            meetsApproval: false,
+            totalSupplySnapshot: totalSupplySnapshot,
+            quorumBpsSnapshot: quorumBpsSnapshot,
+            approvalBpsSnapshot: approvalBpsSnapshot
         });
 
         _activeProposalCount[proposalType]++;
@@ -384,16 +406,21 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     function _meetsQuorum(uint256 proposalId) internal view returns (bool) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
-        uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
+
+        // FIX [NEW-C-1, NEW-C-2]: Use snapshot instead of current quorum threshold
+        // Prevents manipulation via config changes after proposal creation
+        uint16 quorumBps = proposal.quorumBpsSnapshot;
 
         // If quorum is 0, no participation requirement
         if (quorumBps == 0) return true;
 
+        // FIX [NEW-C-1, NEW-C-2]: Use snapshot instead of current total supply
+        // Prevents manipulation via staking/unstaking after voting ends
         // Quorum uses staked token balance (not VP) to measure participation rate.
         // This two-tier system ensures:
         // 1. Quorum: Democratic participation (all stakers equal)
         // 2. Approval: Time-weighted influence (VP rewards long-term commitment)
-        uint256 totalSupply = IERC20(stakedToken).totalSupply();
+        uint256 totalSupply = proposal.totalSupplySnapshot;
         if (totalSupply == 0) return false;
 
         uint256 requiredQuorum = (totalSupply * quorumBps) / 10_000;
@@ -403,7 +430,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     function _meetsApproval(uint256 proposalId) internal view returns (bool) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
-        uint16 approvalBps = ILevrFactory_v1(factory).approvalBps();
+
+        // FIX [NEW-C-3]: Use snapshot instead of current approval threshold
+        // Prevents manipulation via config changes after proposal creation
+        uint16 approvalBps = proposal.approvalBpsSnapshot;
 
         // If approval is 0, no approval requirement
         if (approvalBps == 0) return true;
@@ -456,6 +486,12 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         uint256 start = block.timestamp;
         uint256 proposalEnd = start + proposalWindow;
         uint256 voteEnd = proposalEnd + votingWindow;
+
+        // FIX [NEW-C-4]: Reset active proposal counts when starting new cycle
+        // Proposals are scoped to cycles, so counts should reset each cycle
+        // This prevents permanent gridlock from defeated proposals consuming slots
+        _activeProposalCount[ProposalType.BoostStakingPool] = 0;
+        _activeProposalCount[ProposalType.TransferToAddress] = 0;
 
         _cycles[cycleId] = Cycle({
             proposalWindowStart: start,
