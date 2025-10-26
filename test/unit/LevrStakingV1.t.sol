@@ -660,4 +660,477 @@ contract LevrStakingV1_UnitTest is Test {
         uint256 vp2 = staking.getVotingPower(address(this));
         assertApproxEqRel(vp2, vp1, 0.0001e18, 'VP preserved with large amounts');
     }
+
+    // ============ Manual Funding & Midstream Accrual Tests ============
+
+    function test_manual_transfer_then_accrueRewards() public {
+        // Setup: User stakes tokens
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        // Create separate reward token
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 5_000 ether);
+
+        // Step 1: Transfer tokens to staking contract
+        rewardToken.transfer(address(staking), 5_000 ether);
+
+        // At this point, rewards are NOT claimable yet
+        (uint256 available, ) = staking.outstandingRewards(address(rewardToken));
+        assertEq(available, 5_000 ether, 'Should show as available but not accounted');
+
+        // Step 2: Call accrueRewards to credit them
+        staking.accrueRewards(address(rewardToken));
+
+        // Now rewards should be streaming
+        assertGt(staking.rewardRatePerSecond(address(rewardToken)), 0, 'Should have reward rate');
+
+        // Claim after 1.5 days (half of 3-day window)
+        vm.warp(block.timestamp + 36 hours);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        // Should receive ~2,500 tokens (half of 5,000 over half window)
+        uint256 claimed = balAfter - balBefore;
+        uint256 expected = 2_500 ether;
+        uint256 tolerance = (expected * 5e15) / 1e18;
+        assertApproxEqAbs(claimed, expected, tolerance, 'Manual transfer + accrue works correctly');
+    }
+
+    function test_midstream_accrual_preserves_unvested_rewards() public {
+        // This is the CRITICAL test for the midstream accrual bug fix
+        // Demonstrates: Manual transfer + accrueRewards() during active stream preserves unvested rewards
+
+        // Setup: User stakes tokens
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 10_000 ether);
+
+        // Initial funding: Transfer 3,000 tokens + accrue
+        rewardToken.transfer(address(staking), 3_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait 1 day (out of 3-day window)
+        // 1/3 vested = 1,000 tokens
+        // 2/3 unvested = 2,000 tokens
+        vm.warp(block.timestamp + 1 days);
+
+        // MIDSTREAM: Send MORE rewards while stream is active
+        // This should preserve the 2,000 unvested tokens
+        rewardToken.transfer(address(staking), 2_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // New stream should have: 2,000 (new) + 2,000 (unvested) = 4,000 tokens
+        // Wait until end of NEW 3-day window
+        vm.warp(block.timestamp + 3 days);
+
+        // Claim all rewards
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        uint256 totalClaimed = balAfter - balBefore;
+
+        // Total rewards should be:
+        // - 1,000 vested from first accrual (before midstream)
+        // - 4,000 from second stream (2,000 new + 2,000 unvested)
+        // = 5,000 total
+        uint256 expected = 5_000 ether;
+        uint256 tolerance = (expected * 1e16) / 1e18; // 1% tolerance for rounding
+
+        assertApproxEqAbs(
+            totalClaimed,
+            expected,
+            tolerance,
+            'Midstream accrual should preserve unvested rewards'
+        );
+    }
+
+    function test_multiple_midstream_accruals_compound_correctly() public {
+        // Test multiple midstream accruals to ensure unvested amounts compound properly
+        // Uses manual transfer + accrueRewards() workflow
+
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 20_000 ether);
+
+        // First accrual: 6,000 tokens
+        rewardToken.transfer(address(staking), 6_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait 1 day (1/3 of window)
+        // Vested: 2,000, Unvested: 4,000
+        vm.warp(block.timestamp + 1 days);
+
+        // Second accrual midstream: 3,000 new
+        // New stream: 3,000 + 4,000 unvested = 7,000
+        rewardToken.transfer(address(staking), 3_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait 1 day (1/3 of new window)
+        // Vested from first: 2,000 (already vested)
+        // Vested from second: 7,000 / 3 ≈ 2,333
+        // Unvested from second: ~4,667
+        vm.warp(block.timestamp + 1 days);
+
+        // Third accrual midstream: 2,000 new
+        // New stream: 2,000 + 4,667 unvested ≈ 6,667
+        rewardToken.transfer(address(staking), 2_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait to end of final window
+        vm.warp(block.timestamp + 3 days);
+
+        // Claim everything
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        // Total funded: 6,000 + 3,000 + 2,000 = 11,000
+        // All should eventually be claimable
+        uint256 totalClaimed = balAfter - balBefore;
+        uint256 expected = 11_000 ether;
+        uint256 tolerance = (expected * 2e16) / 1e18; // 2% tolerance for complex compounding
+
+        assertApproxEqAbs(
+            totalClaimed,
+            expected,
+            tolerance,
+            'Multiple midstream accruals should preserve all rewards'
+        );
+    }
+
+    function test_midstream_accrual_at_stream_end_no_unvested() public {
+        // Edge case: Accrue new rewards AFTER stream has ended (no unvested)
+        // Uses manual transfer + accrueRewards()
+
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 10_000 ether);
+
+        // First accrual: 3,000 tokens
+        rewardToken.transfer(address(staking), 3_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait PAST the entire stream window (all vested, no unvested)
+        vm.warp(block.timestamp + 4 days);
+
+        // Second accrual: should only have the new 2,000 (no unvested to preserve)
+        rewardToken.transfer(address(staking), 2_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait for new stream to complete
+        vm.warp(block.timestamp + 3 days);
+
+        // Claim all
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        // Should get exactly 5,000 (3,000 from first + 2,000 from second)
+        uint256 totalClaimed = balAfter - balBefore;
+        uint256 expected = 5_000 ether;
+        uint256 tolerance = (expected * 5e15) / 1e18; // 0.5% tolerance
+
+        assertApproxEqAbs(
+            totalClaimed,
+            expected,
+            tolerance,
+            'Post-stream accrual should only include new amount'
+        );
+    }
+
+    function test_manual_transfer_without_accrue_not_claimable() public {
+        // Verify that merely transferring tokens doesn't make them claimable
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 5_000 ether);
+
+        // Transfer without accruing
+        rewardToken.transfer(address(staking), 5_000 ether);
+
+        // Wait some time
+        vm.warp(block.timestamp + 1 days);
+
+        // Try to claim - should get nothing
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        assertEq(balAfter - balBefore, 0, 'Should not be able to claim unaccrued rewards');
+
+        // But they should show up as "available"
+        (uint256 available, ) = staking.outstandingRewards(address(rewardToken));
+        assertEq(available, 5_000 ether, 'Should show as available for accrual');
+    }
+
+    function test_manual_transfer_very_early_midstream() public {
+        // Edge case: Manual transfer + accrue immediately after first accrual (almost all unvested)
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 10_000 ether);
+
+        // Initial: 6,000 tokens
+        rewardToken.transfer(address(staking), 6_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait only 1 hour (out of 3-day = 72-hour window)
+        // Vested: 6000 * (1/72) ≈ 83 tokens
+        // Unvested: ~5,917 tokens
+        vm.warp(block.timestamp + 1 hours);
+
+        // Midstream transfer very early
+        rewardToken.transfer(address(staking), 4_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // New stream should preserve almost all of first stream
+        // Wait for full new stream
+        vm.warp(block.timestamp + 3 days);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        uint256 claimed = balAfter - balBefore;
+        // Should get ~10,000 total (small amount vested from first, rest preserved)
+        uint256 expected = 10_000 ether;
+        uint256 tolerance = (expected * 1e16) / 1e18; // 1% tolerance
+
+        assertApproxEqAbs(
+            claimed,
+            expected,
+            tolerance,
+            'Very early midstream should preserve nearly all unvested'
+        );
+    }
+
+    function test_manual_transfer_very_late_midstream() public {
+        // Edge case: Manual transfer + accrue very late in stream (almost all vested)
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 10_000 ether);
+
+        // Initial: 6,000 tokens
+        rewardToken.transfer(address(staking), 6_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait 71 hours (out of 72-hour window)
+        // Vested: 6000 * (71/72) ≈ 5,917 tokens
+        // Unvested: ~83 tokens
+        vm.warp(block.timestamp + 71 hours);
+
+        // Midstream transfer very late
+        rewardToken.transfer(address(staking), 4_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // New stream: 4,000 new + ~83 unvested ≈ 4,083 tokens
+        // Wait for full new stream
+        vm.warp(block.timestamp + 3 days);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        uint256 claimed = balAfter - balBefore;
+        // Should get ~10,000 total
+        uint256 expected = 10_000 ether;
+        uint256 tolerance = (expected * 1e16) / 1e18; // 1% tolerance
+
+        assertApproxEqAbs(
+            claimed,
+            expected,
+            tolerance,
+            'Very late midstream should still preserve small unvested amount'
+        );
+    }
+
+    function test_manual_transfer_exactly_halfway_midstream() public {
+        // Edge case: Manual transfer exactly at 50% of stream
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 10_000 ether);
+
+        // Initial: 4,000 tokens
+        rewardToken.transfer(address(staking), 4_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Wait exactly 1.5 days (half of 3-day window)
+        // Vested: 2,000 tokens
+        // Unvested: 2,000 tokens
+        vm.warp(block.timestamp + 36 hours);
+
+        // Midstream transfer at exactly 50%
+        rewardToken.transfer(address(staking), 6_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // New stream: 6,000 new + 2,000 unvested = 8,000 tokens
+        // Wait for full new stream
+        vm.warp(block.timestamp + 3 days);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        uint256 claimed = balAfter - balBefore;
+        // Should get exactly 10,000 (2,000 vested + 8,000 from new stream)
+        uint256 expected = 10_000 ether;
+        uint256 tolerance = (expected * 1e16) / 1e18; // 1% tolerance
+
+        assertApproxEqAbs(
+            claimed,
+            expected,
+            tolerance,
+            'Exactly halfway midstream should preserve exactly 50% unvested'
+        );
+    }
+
+    function test_manual_transfer_multiple_small_amounts_midstream() public {
+        // Real-world scenario: Multiple small manual transfers throughout stream
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 20_000 ether);
+
+        // Initial: 2,000 tokens
+        rewardToken.transfer(address(staking), 2_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Every 12 hours, add 500 tokens (6 times total)
+        for (uint256 i = 0; i < 6; i++) {
+            vm.warp(block.timestamp + 12 hours);
+            rewardToken.transfer(address(staking), 500 ether);
+            staking.accrueRewards(address(rewardToken));
+        }
+
+        // Wait for final stream to complete
+        vm.warp(block.timestamp + 3 days);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        uint256 claimed = balAfter - balBefore;
+        // Should get 2,000 + (6 * 500) = 5,000 total
+        uint256 expected = 5_000 ether;
+        uint256 tolerance = (expected * 2e16) / 1e18; // 2% tolerance for complex compounding
+
+        assertApproxEqAbs(
+            claimed,
+            expected,
+            tolerance,
+            'Multiple small transfers should compound correctly'
+        );
+    }
+
+    function test_manual_transfer_different_tokens_midstream() public {
+        // Edge case: Multiple different reward tokens with midstream accruals
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        MockERC20 rewardToken1 = new MockERC20('Reward1', 'RWD1');
+        MockERC20 rewardToken2 = new MockERC20('Reward2', 'RWD2');
+
+        rewardToken1.mint(address(this), 10_000 ether);
+        rewardToken2.mint(address(this), 10_000 ether);
+
+        // Token 1: Initial 3,000
+        rewardToken1.transfer(address(staking), 3_000 ether);
+        staking.accrueRewards(address(rewardToken1));
+
+        // Token 2: Initial 2,000
+        rewardToken2.transfer(address(staking), 2_000 ether);
+        staking.accrueRewards(address(rewardToken2));
+
+        // Wait 1 day
+        vm.warp(block.timestamp + 1 days);
+
+        // Token 1: Midstream 2,000
+        rewardToken1.transfer(address(staking), 2_000 ether);
+        staking.accrueRewards(address(rewardToken1));
+
+        // Wait another day
+        vm.warp(block.timestamp + 1 days);
+
+        // Token 2: Midstream 3,000
+        rewardToken2.transfer(address(staking), 3_000 ether);
+        staking.accrueRewards(address(rewardToken2));
+
+        // Wait for all streams to complete
+        vm.warp(block.timestamp + 3 days);
+
+        // Claim both tokens
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(rewardToken1);
+        tokens[1] = address(rewardToken2);
+
+        uint256 bal1Before = rewardToken1.balanceOf(address(this));
+        uint256 bal2Before = rewardToken2.balanceOf(address(this));
+
+        staking.claimRewards(tokens, address(this));
+
+        uint256 bal1After = rewardToken1.balanceOf(address(this));
+        uint256 bal2After = rewardToken2.balanceOf(address(this));
+
+        uint256 claimed1 = bal1After - bal1Before;
+        uint256 claimed2 = bal2After - bal2Before;
+
+        // Token 1: Should get 5,000 total
+        assertApproxEqAbs(
+            claimed1,
+            5_000 ether,
+            50 ether,
+            'Token 1: Midstream should preserve rewards'
+        );
+
+        // Token 2: Should get 5,000 total
+        assertApproxEqAbs(
+            claimed2,
+            5_000 ether,
+            50 ether,
+            'Token 2: Midstream should preserve rewards independently'
+        );
+    }
 }
