@@ -10,3 +10,4 @@ alwaysApply: true
 - **Always** run relevent test cases/files/folders.
 - **Intelligently** determine if a test is written just to make the test pass, even when the source code is actually incorrect.
 - **Always** define and import errors/events/enums/structs from interfaces.
+- **Always** put analysis md's to the spec folder.
