@@ -537,9 +537,18 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         governor.vote(pid, true);
         console2.log('Alice can vote on existing proposal: SUCCESS');
 
-        // Try to create new proposal (should fail)
-        vm.warp(block.timestamp + 10 days); // New cycle
-        governor.startNewCycle();
+        // FIX: Bob (90% of supply) needs to vote too to meet 70% quorum
+        vm.prank(bob);
+        governor.vote(pid, true);
+        console2.log('Bob also voted (now 100% participation)');
+
+        // Execute the proposal (auto-starts cycle 2)
+        vm.warp(block.timestamp + 5 days + 1); // End of voting window
+        governor.execute(pid);
+        console2.log('Proposal executed (auto-starts cycle 2)');
+
+        // Now in cycle 2, try to create new proposal (should fail - Alice only has 10%, needs 20%)
+        vm.warp(block.timestamp + 1 days); // Into proposal window
 
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
@@ -761,15 +770,37 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         governor.execute(pid1);
         console2.log('Proposal 1 executed, cycle 2 started');
 
-        // Immediately create and execute proposal 2
+        // FIX: Create proposal immediately, then warp to voting window
         vm.prank(alice);
         uint256 pid2 = governor.proposeBoost(1000 ether);
 
-        vm.warp(block.timestamp + 2 days + 1);
+        ILevrGovernor_v1.Proposal memory p2 = governor.getProposal(pid2);
+        console2.log('Proposal 2 created at:', block.timestamp);
+        console2.log('Voting starts at:', p2.votingStartsAt);
+        console2.log('Voting ends at:', p2.votingEndsAt);
+
+        // Wait for voting window to start (proposal window = 2 days)
+        vm.warp(p2.votingStartsAt + 1);
+        console2.log('Warped to:', block.timestamp);
+
+        // Double-check the proposal state
+        p2 = governor.getProposal(pid2);
+        console2.log('Proposal state before vote:', uint(p2.state));
+        console2.log('Block timestamp:', block.timestamp);
+        console2.log('Voting starts at:', p2.votingStartsAt);
+        console2.log('Voting ends at (double-check):', p2.votingEndsAt);
+        console2.log('Is block.timestamp < votingStartsAt?', block.timestamp < p2.votingStartsAt);
+        console2.log('Is block.timestamp > votingEndsAt?', block.timestamp > p2.votingEndsAt);
+
+        // Check Alice's VP
+        uint256 aliceVP = staking.getVotingPower(alice);
+        console2.log('Alice voting power:', aliceVP);
+
         vm.prank(alice);
         governor.vote(pid2, true);
 
-        vm.warp(block.timestamp + 5 days + 1);
+        // Wait for voting window to end
+        vm.warp(p2.votingEndsAt + 1);
         governor.execute(pid2);
 
         console2.log('Proposal 2 executed successfully');
