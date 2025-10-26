@@ -735,7 +735,7 @@ If the winning proposal's execution reverted, it would prevent the winning propo
 // LevrGovernor_v1.sol:150-206 (before fix)
 function execute(uint256 proposalId) external nonReentrant {
     // ... quorum and approval checks ...
-    
+
     // Execute without validating treasury has funds
     if (proposal.proposalType == ProposalType.BoostStakingPool) {
         ILevrTreasury_v1(treasury).applyBoost(proposal.amount);  // ← Could revert
@@ -754,7 +754,7 @@ Added treasury balance validation before execution. If the treasury has insuffic
 ```solidity
 function execute(uint256 proposalId) external nonReentrant {
     // ... existing quorum/approval checks ...
-    
+
     // MEDIUM FIX [M-6]: Validate treasury has sufficient balance for proposal amount
     uint256 treasuryBalance = IERC20(underlying).balanceOf(treasury);
     if (treasuryBalance < proposal.amount) {
@@ -763,7 +763,7 @@ function execute(uint256 proposalId) external nonReentrant {
         _activeProposalCount[proposal.proposalType]--;
         revert InsufficientTreasuryBalance();
     }
-    
+
     // Now safe to execute - funds are available
     if (proposal.proposalType == ProposalType.BoostStakingPool) {
         ILevrTreasury_v1(treasury).applyBoost(proposal.amount);
@@ -790,11 +790,11 @@ Cycle 1:
   → execute() fails with InsufficientTreasuryBalance
   → Proposal A marked as defeated
   → activeProposalCount decremented
-  
+
 - Proposal B: 10M tokens (also meets quorum/approval)
   → execute() succeeds because treasury has 100M
   → Treasury transfers 10M to recipients
-  
+
 Result: Governance continues, funds properly distributed
 ```
 
@@ -912,6 +912,7 @@ This section documents the behavior and security implications of updating factor
 The governance system uses an **immutable cycle-based architecture** that protects proposal timelines from config changes:
 
 **Level 1: Cycle** (created once, immutable)
+
 ```solidity
 // In _startNewCycle() - reads config ONCE
 uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds(); // Read from config
@@ -926,6 +927,7 @@ _cycles[cycleId] = Cycle({
 ```
 
 **Level 2: Proposal** (copies from cycle, not config)
+
 ```solidity
 // In _propose() - reads FROM CYCLE, not from config
 Cycle memory cycle = _cycles[cycleId]; // Load existing cycle (line 280)
@@ -949,6 +951,7 @@ _proposals[proposalId] = Proposal({
 **Finding**: Once a cycle is created, all proposals in that cycle share identical `votingStartsAt` and `votingEndsAt` timestamps, regardless of config changes.
 
 **Mechanism**:
+
 - Cycle timestamps calculated once in `_startNewCycle()` (line 427)
 - Values stored permanently in `_cycles[cycleId]` mapping (lines 437-442)
 - Proposals copy from cycle, not from factory config (lines 322-323)
@@ -956,6 +959,7 @@ _proposals[proposalId] = Proposal({
 **Impact**: **NO VULNERABILITY** - Config changes cannot break proposal timelines
 
 **Critical Test Case**: Two proposals in same cycle after config update
+
 ```
 T0: Proposal 1 created (config: 2d proposal + 5d voting)
     → Cycle 1 stores: proposalWindowEnd = T0+2d, votingWindowEnd = T0+7d
@@ -972,6 +976,7 @@ Result: Both proposals have IDENTICAL timestamps
 ```
 
 **Test Coverage**:
+
 - ✅ `test_config_update_two_proposals_same_cycle_different_configs()` - Verifies identical timestamps
 - ✅ `test_detailed_trace_cycle_vs_proposal_timestamps()` - Visual proof with console logs
 - ✅ `test_config_update_affects_auto_created_cycle()` - Verifies new cycles use new config
@@ -985,6 +990,7 @@ Result: Both proposals have IDENTICAL timestamps
 **Recovery Mechanisms**:
 
 1. **Manual Recovery** (permissionless):
+
    ```solidity
    // Anyone can call after voting window ends (line 137)
    function startNewCycle() external {
@@ -1011,6 +1017,7 @@ Result: Both proposals have IDENTICAL timestamps
 3. **Execution reverts** → Cycle marked executed, can still use manual startNewCycle to move on
 
 **Example Flow**:
+
 ```
 Cycle 1: Proposal fails quorum (20% participation < 70% requirement)
 ↓
@@ -1021,6 +1028,7 @@ Governance continues normally
 ```
 
 **Test Coverage**:
+
 - ✅ `test_recovery_from_failed_cycle_manual()` - Manual recovery via startNewCycle()
 - ✅ `test_recovery_from_failed_cycle_auto()` - Auto-recovery via next proposal
 - ✅ `test_recovery_via_quorum_decrease()` - Config update can unblock stuck proposals
@@ -1034,6 +1042,7 @@ Governance continues normally
 **Finding**: `quorumBps` and `approvalBps` are read **dynamically at execution time**, allowing config changes to affect in-progress proposals.
 
 **Mechanism**:
+
 ```solidity
 // In _meetsQuorum() and _meetsApproval():
 uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();     // Read at execution (line 364)
@@ -1052,21 +1061,25 @@ uint16 approvalBps = ILevrFactory_v1(factory).approvalBps(); // Read at executio
 **Security Analysis**:
 
 ✅ **Not a vulnerability** - This is intentional design for governance flexibility:
+
 - Allows community to adjust thresholds based on participation trends
 - Prevents proposals from being stuck if thresholds were set incorrectly
 - Factory owner can lower thresholds to recover from gridlock
 
 ⚠️ **Factory Owner Responsibility**:
+
 - Communicate threshold changes before applying
 - Avoid increasing thresholds during active voting periods
 - Consider timing updates for between cycles
 
 **IMPORTANT**: If threshold increases block proposals, use recovery mechanisms:
+
 1. Lower thresholds to unblock (see Test 9: `test_recovery_via_quorum_decrease()`)
 2. Manual cycle restart with `startNewCycle()` (see Test 8)
 3. Auto-recovery by creating new proposal (see Test 8 auto variant)
 
 **Test Coverage**:
+
 - ✅ `test_config_update_quorum_increase_mid_cycle_fails_execution()`
 - ✅ `test_config_update_quorum_decrease_mid_cycle_allows_execution()`
 - ✅ `test_config_update_approval_increase_mid_cycle_fails_execution()`
@@ -1079,6 +1092,7 @@ uint16 approvalBps = ILevrFactory_v1(factory).approvalBps(); // Read at executio
 **Finding**: `maxActiveProposals` and `minSTokenBpsToSubmit` are validated **at proposal creation time only**.
 
 **Mechanism**:
+
 ```solidity
 // In _propose():
 uint16 maxActive = ILevrFactory_v1(factory).maxActiveProposals();     // Line 301
@@ -1088,17 +1102,20 @@ uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit(); // Line 29
 **Impact**: **SAFE** - Existing proposals unaffected by constraint changes
 
 **Behavior**:
+
 - Proposals created under old limits remain valid
 - New proposals use updated constraints
 - Proposers who met old requirements can still vote/execute
 
 **Example**:
+
 - User has 25% of tokens, creates proposal (minStake = 1%)
 - Config updated to minStake = 30%
 - User's existing proposal can still execute
 - User cannot create NEW proposals (25% < 30%)
 
 **Test Coverage**:
+
 - ✅ `test_config_update_maxActiveProposals_affects_new_proposals_only()`
 - ✅ `test_config_update_minStake_affects_new_proposals_only()`
 
@@ -1107,12 +1124,14 @@ uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit(); // Line 29
 ### Best Practices for Config Updates
 
 #### DO:
+
 - ✅ Update config **between cycles** (after voting window ends)
 - ✅ Communicate threshold changes to community in advance
 - ✅ Lower thresholds gradually if proposals are stuck
 - ✅ Use new config changes to improve governance participation
 
 #### AVOID:
+
 - ❌ Raising quorum/approval during active voting without warning
 - ❌ Drastic threshold changes mid-cycle
 - ❌ Expecting window duration changes to extend existing cycles
@@ -1123,21 +1142,22 @@ uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit(); // Line 29
 
 **Total Config Update Tests**: 11/11 passing (100% success rate)
 
-| Test | Scenario | Result |
-|------|----------|--------|
-| Test 1 | Quorum increase mid-cycle | ✅ Blocks execution as expected |
-| Test 2 | Quorum decrease mid-cycle | ✅ Allows execution as expected |
-| Test 3 | Approval increase mid-cycle | ✅ Blocks execution as expected |
-| Test 4 | MaxActiveProposals reduction | ✅ Affects new proposals only |
-| Test 5 | MinStake increase | ✅ Affects new proposals only |
-| Test 6 | Two proposals same cycle | ✅ Share identical timestamps |
-| Test 7 | Detailed timestamp trace | ✅ Proves immutability |
-| Test 8 | Manual cycle recovery | ✅ Anyone can restart governance |
-| Test 8b | Auto cycle recovery | ✅ Next proposal auto-recovers |
-| Test 9 | Config update aids recovery | ✅ Quorum decrease unblocks |
-| Test 10 | Auto-cycle after config update | ✅ Uses new config |
+| Test    | Scenario                       | Result                           |
+| ------- | ------------------------------ | -------------------------------- |
+| Test 1  | Quorum increase mid-cycle      | ✅ Blocks execution as expected  |
+| Test 2  | Quorum decrease mid-cycle      | ✅ Allows execution as expected  |
+| Test 3  | Approval increase mid-cycle    | ✅ Blocks execution as expected  |
+| Test 4  | MaxActiveProposals reduction   | ✅ Affects new proposals only    |
+| Test 5  | MinStake increase              | ✅ Affects new proposals only    |
+| Test 6  | Two proposals same cycle       | ✅ Share identical timestamps    |
+| Test 7  | Detailed timestamp trace       | ✅ Proves immutability           |
+| Test 8  | Manual cycle recovery          | ✅ Anyone can restart governance |
+| Test 8b | Auto cycle recovery            | ✅ Next proposal auto-recovers   |
+| Test 9  | Config update aids recovery    | ✅ Quorum decrease unblocks      |
+| Test 10 | Auto-cycle after config update | ✅ Uses new config               |
 
 **Combined Governance Test Results**: 20/20 passing
+
 - 9 original governance tests
 - 11 config update & recovery tests
 
@@ -1146,6 +1166,7 @@ uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit(); // Line 29
 ### Conclusion on Config Updates
 
 ✅ **The governance system is architecturally sound** regarding config updates:
+
 - Proposal timelines protected by immutable cycle storage
 - No race conditions or timestamp divergence possible within a cycle
 - Dynamic thresholds provide flexibility while maintaining security
@@ -1246,6 +1267,7 @@ function unstake(uint256 amount, address to) external nonReentrant returns (uint
 **Formula:** `newTime = oldTime × (remainingBalance / originalBalance)`
 
 **Example:**
+
 - User has 1000 tokens staked for 100 days (VP = 100,000 token-days)
 - User unstakes 300 tokens (30%)
 - Result: 700 tokens with 70 days accumulated (VP = 49,000 token-days)
@@ -1254,6 +1276,7 @@ function unstake(uint256 amount, address to) external nonReentrant returns (uint
 This approach prevents gaming via partial unstakes while maintaining fairness for users who legitimately need to withdraw portions of their stake. The proportional reduction ensures that users can't cycle unstake/restake to reset their time without penalty.
 
 **Anti-Gaming Benefits:**
+
 - Prevents unstake/restake cycling to maintain time accumulation
 - Fair penalty proportional to unstake amount
 - Full unstake still resets to 0 (for users exiting completely)
@@ -1289,17 +1312,20 @@ staking.accrueRewards(address(rewardToken));
 **Key Findings:**
 
 ✅ **Midstream Accrual Preservation:**
+
 - Unvested rewards from active streams are correctly preserved when new rewards are accrued
 - Works at any point in the stream: early (1 hour in), middle (halfway), late (71/72 hours)
 - Multiple successive midstream accruals compound correctly
 - No reward loss regardless of timing
 
 ✅ **Multi-Token Independence:**
+
 - Different reward tokens maintain independent streams
 - Midstream accrual of one token doesn't affect others
 - Each token's unvested amounts tracked separately
 
 ✅ **Real-World Scenarios:**
+
 - Multiple small transfers throughout stream (e.g., every 12 hours) compound correctly
 - Post-stream accrual (after window ends) works without preserving unvested (correct behavior)
 - Transfers without accrual are safely detected as "available but unaccounted"
@@ -1349,6 +1375,7 @@ staking.accrueRewards(address(rewardToken));
 **Implementation Details:**
 
 The `_creditRewards()` internal function correctly:
+
 1. Settles current stream up to current timestamp
 2. Calculates unvested rewards via `_calculateUnvested()`
 3. Resets stream with new amount + unvested amount
@@ -1359,13 +1386,13 @@ The `_creditRewards()` internal function correctly:
 function _creditRewards(address token, uint256 amount) internal {
     ILevrStaking_v1.RewardInfo storage info = _ensureRewardToken(token);
     _settleStreamingForToken(token);
-    
+
     // Calculate unvested rewards from current stream
     uint256 unvested = _calculateUnvested(token);
-    
+
     // Reset stream with NEW amount + UNVESTED from previous stream
     _resetStreamForToken(token, amount + unvested);
-    
+
     // Increase reserve by newly provided amount only
     _rewardReserve[token] += amount;
     emit RewardsAccrued(token, amount, info.accPerShare);
@@ -1399,6 +1426,7 @@ The manual transfer + `accrueRewards()` workflow is **production-ready** for fun
 Comparative analysis against well-audited industry protocols (Synthetix, Curve, MasterChef, Convex) reveals that Levr has **superior protection** against several known attack vectors.
 
 **Protocols Compared:**
+
 1. Synthetix StakingRewards (Sigma Prime audit)
 2. Curve VotingEscrow (Trail of Bits audit)
 3. SushiSwap MasterChef V2 (PeckShield audit)
@@ -1422,6 +1450,7 @@ function getVotingPower(address user) external view returns (uint256) {
 ```
 
 **Test Result:** ✅ `test_timestampManipulation_noImpact()` - 15-second manipulation = 0 VP gain
+
 - Miners can manipulate timestamp ±15 seconds
 - In our system: 15 seconds / 86400 = 0.0001736 days
 - After normalization: rounds to 0 in VP calculation
@@ -1432,6 +1461,7 @@ function getVotingPower(address user) external view returns (uint256) {
 MasterChef V2 had vulnerabilities where users could flash loan stake/unstake in same block to claim rewards. Our time-weighted design provides complete protection.
 
 **Test Results:**
+
 - ✅ `test_flashLoan_zeroVotingPower()` - Same-block stake gives exactly 0 VP
 - ✅ After 1 second: <100 token-days VP (negligible vs months of staking)
 
@@ -1459,21 +1489,23 @@ function _settleStreamingForToken(address token) internal {
 
 **Comparison Matrix:**
 
-| Protocol | Coverage | Status | Key Advantage |
-|----------|----------|--------|---------------|
-| Synthetix | 100% | ✅ **Better** | Stream pause preserves rewards |
-| Curve | 100% | ✅ **Better** | Immune to timestamp manipulation |
-| MasterChef | 100% | ✅ **Better** | Flash loan immunity (0 VP) |
-| Convex | 100% | ✅ Similar | Multi-reward support |
+| Protocol   | Coverage | Status        | Key Advantage                    |
+| ---------- | -------- | ------------- | -------------------------------- |
+| Synthetix  | 100%     | ✅ **Better** | Stream pause preserves rewards   |
+| Curve      | 100%     | ✅ **Better** | Immune to timestamp manipulation |
+| MasterChef | 100%     | ✅ **Better** | Flash loan immunity (0 VP)       |
+| Convex     | 100%     | ✅ Similar    | Multi-reward support             |
 
 **Overall Security Posture:**
 
 Our contract **exceeds industry standards** in 3 critical areas:
+
 1. Timestamp manipulation (immune vs mitigated)
 2. Flash loan attacks (immune vs vulnerable)
 3. Reward preservation (pauses vs loss)
 
 **Test Coverage Summary:**
+
 - ✅ 40 staking unit tests (100% passing)
   - 24 governance VP tests
   - 10 manual transfer/midstream tests
@@ -1674,7 +1706,7 @@ The Levr V1 protocol has undergone comprehensive security auditing and testing. 
 **Critical Issues (3/3 resolved):**
 
 1. ✅ PreparedContracts mapping cleanup vulnerability
-2. ✅ Initialization protection 
+2. ✅ Initialization protection
 3. ✅ ProposalState enum order (Oct 24, 2025)
 
 **High Severity Issues (3/3 resolved):**
@@ -1716,6 +1748,7 @@ The Levr V1 protocol has undergone comprehensive security auditing and testing. 
 
 **Recommendation:**
 Before mainnet deployment:
+
 1. Update frontend ABI imports to reflect new ProposalState enum order
 2. Verify all UI components correctly interpret proposal states
 3. Conduct final integration testing with frontend
@@ -1738,12 +1771,14 @@ Before mainnet deployment:
 Comprehensive security audit of the LevrFeeSplitter_v1 contract identified and resolved **1 CRITICAL**, **2 HIGH**, and **1 MEDIUM** severity issues. All vulnerabilities have been fixed with comprehensive test coverage.
 
 **Security Improvements:**
+
 - ✅ Auto-accrual revert vulnerability fixed (try/catch protection)
 - ✅ Duplicate receiver validation added (prevents gaming)
 - ✅ Gas bomb protection added (MAX_RECEIVERS = 20)
 - ✅ Dust recovery mechanism implemented (safe fee cleanup)
 
 **Test Results:**
+
 - ✅ 18/18 unit tests passing
 - ✅ 7/7 E2E tests passing
 - ✅ **Total: 25/25 tests passing (100% success rate)**
@@ -1790,6 +1825,7 @@ if (sentToStaking) {
 **Impact:** Distribution completes successfully even if accrual fails. Fees still reach all receivers, and manual accrual can be triggered later.
 
 **Tests Passed:**
+
 - ✅ `test_distribute_autoAccrualSuccess()` - Verifies successful accrual path
 - ✅ `test_distribute_autoAccrualFails_continuesDistribution()` - **Verifies fix: distribution continues despite accrual failure**
 
@@ -1814,9 +1850,9 @@ The `_validateSplits()` function only checked for duplicate staking receivers, n
 for (uint256 i = 0; i < splits.length; i++) {
     if (splits[i].receiver == address(0)) revert ZeroAddress();
     if (splits[i].bps == 0) revert ZeroBps();
-    
+
     totalBps += splits[i].bps;
-    
+
     // Only checks staking duplication, not general duplicates
     if (splits[i].receiver == staking) {
         if (hasStaking) revert DuplicateStakingReceiver();
@@ -1839,6 +1875,7 @@ for (uint256 j = 0; j < i; j++) {
 ```
 
 **Tests Passed:**
+
 - ✅ `test_configureSplits_duplicateReceiver_reverts()` - Verifies duplicate detection
 
 ---
@@ -1869,6 +1906,7 @@ if (splits.length > MAX_RECEIVERS) revert TooManyReceivers();
 **Rationale:** 20 receivers provides ample flexibility while keeping gas costs reasonable (~300k gas maximum for distribution).
 
 **Tests Passed:**
+
 - ✅ `test_configureSplits_tooManyReceivers_reverts()` - Verifies 21 receivers rejected
 
 ---
@@ -1911,11 +1949,13 @@ function recoverDust(address token, address to) external {
 ```
 
 **Safety Features:**
+
 - Only token admin can call
 - Cannot steal pending fees (only recovers dust after distribution)
 - Emits event for transparency
 
 **Tests Passed:**
+
 - ✅ `test_recoverDust_roundingDust_recovered()` - Verifies dust recovery works
 - ✅ `test_recoverDust_onlyRecoversDust()` - Verifies cannot steal pending fees
 - ✅ `test_recoverDust_onlyTokenAdmin()` - Verifies access control
@@ -1927,6 +1967,7 @@ function recoverDust(address token, address to) external {
 #### Unit Tests (18 tests) - `test/unit/LevrFeeSplitterV1.t.sol`
 
 **Split Configuration (6 tests):**
+
 1. ✅ `test_configureSplits_validConfig_succeeds()` - Valid 50/50 split
 2. ✅ `test_configureSplits_invalidTotal_reverts()` - Total != 100%
 3. ✅ `test_configureSplits_zeroReceiver_reverts()` - Zero address
@@ -1934,25 +1975,13 @@ function recoverDust(address token, address to) external {
 5. ✅ `test_configureSplits_duplicateReceiver_reverts()` - Duplicate non-staking
 6. ✅ `test_configureSplits_tooManyReceivers_reverts()` - Exceeds MAX_RECEIVERS
 
-**Access Control (2 tests):**
-7. ✅ `test_configureSplits_onlyTokenAdmin()` - Non-admin reverts
-8. ✅ `test_recoverDust_onlyTokenAdmin()` - Non-admin reverts
+**Access Control (2 tests):** 7. ✅ `test_configureSplits_onlyTokenAdmin()` - Non-admin reverts 8. ✅ `test_recoverDust_onlyTokenAdmin()` - Non-admin reverts
 
-**Distribution Logic (6 tests):**
-9. ✅ `test_distribute_splitsCorrectly()` - Verify percentages
-10. ✅ `test_distribute_emitsEvents()` - All events emitted
-11. ✅ `test_distribute_zeroBalance_returns()` - No-op on zero fees
-12. ✅ `test_distribute_autoAccrualSuccess()` - Accrual succeeds
-13. ✅ `test_distribute_autoAccrualFails_continuesDistribution()` - **Accrual fails but distribution completes** ⭐
-14. ✅ `test_distributeBatch_multipleTokens()` - Batch works correctly
+**Distribution Logic (6 tests):** 9. ✅ `test_distribute_splitsCorrectly()` - Verify percentages 10. ✅ `test_distribute_emitsEvents()` - All events emitted 11. ✅ `test_distribute_zeroBalance_returns()` - No-op on zero fees 12. ✅ `test_distribute_autoAccrualSuccess()` - Accrual succeeds 13. ✅ `test_distribute_autoAccrualFails_continuesDistribution()` - **Accrual fails but distribution completes** ⭐ 14. ✅ `test_distributeBatch_multipleTokens()` - Batch works correctly
 
-**Dust Recovery (2 tests):**
-15. ✅ `test_recoverDust_onlyRecoversDust()` - Can't steal pending fees
-16. ✅ `test_recoverDust_roundingDust_recovered()` - Recovers actual dust
+**Dust Recovery (2 tests):** 15. ✅ `test_recoverDust_onlyRecoversDust()` - Can't steal pending fees 16. ✅ `test_recoverDust_roundingDust_recovered()` - Recovers actual dust
 
-**View Functions (2 tests):**
-17. ✅ `test_pendingFeesInclBalance_includesBalance()` - Correct calculation
-18. ✅ `test_isSplitsConfigured_validatesTotal()` - Returns correct state
+**View Functions (2 tests):** 17. ✅ `test_pendingFeesInclBalance_includesBalance()` - Correct calculation 18. ✅ `test_isSplitsConfigured_validatesTotal()` - Returns correct state
 
 #### E2E Tests (7 tests) - `test/e2e/LevrV1.FeeSplitter.t.sol`
 
@@ -1968,18 +1997,19 @@ function recoverDust(address token, address to) external {
 
 ### Security Improvements Summary
 
-| Issue | Severity | Status | Fix |
-|-------|----------|--------|-----|
-| Auto-accrual revert | CRITICAL | ✅ Fixed | Try/catch protection |
-| Duplicate receivers | HIGH | ✅ Fixed | Validation loop added |
-| Gas bomb attack | HIGH | ✅ Fixed | MAX_RECEIVERS = 20 |
-| Dust accumulation | MEDIUM | ✅ Fixed | recoverDust() function |
+| Issue               | Severity | Status   | Fix                    |
+| ------------------- | -------- | -------- | ---------------------- |
+| Auto-accrual revert | CRITICAL | ✅ Fixed | Try/catch protection   |
+| Duplicate receivers | HIGH     | ✅ Fixed | Validation loop added  |
+| Gas bomb attack     | HIGH     | ✅ Fixed | MAX_RECEIVERS = 20     |
+| Dust accumulation   | MEDIUM   | ✅ Fixed | recoverDust() function |
 
 ---
 
 ### Gas Optimization
 
 **Distribution Gas Costs:**
+
 - 2 receivers: ~185k gas
 - 3 receivers: ~247k gas
 - 4 receivers: ~298k gas
@@ -2025,6 +2055,7 @@ The LevrFeeSplitter_v1 contract has undergone comprehensive security analysis an
 When discovering new security findings, vulnerabilities, or architectural concerns:
 
 **✅ DO:**
+
 - Update **this audit.md file** with new findings
 - Add findings to appropriate severity section (Critical, High, Medium, Low, Informational)
 - Include test coverage information
@@ -2033,11 +2064,13 @@ When discovering new security findings, vulnerabilities, or architectural concer
 - Add entry to conclusion section
 
 **❌ DON'T:**
+
 - Create separate markdown files for individual findings
 - Create summary files that duplicate audit content
 - Leave findings undocumented in code comments only
 
 **Template for New Findings:**
+
 ```markdown
 ### [X-N] Finding Title
 
@@ -2056,6 +2089,7 @@ When discovering new security findings, vulnerabilities, or architectural concer
 [How it was fixed or why it's not an issue]
 
 **Tests Passed:**
+
 - ✅ [Test names validating the fix]
 ```
 
@@ -2063,6 +2097,433 @@ When discovering new security findings, vulnerabilities, or architectural concer
 
 **Audit performed by:** AI Security Audit  
 **Contact:** For questions about this audit, consult the development team.  
+**Disclaimer:** This audit does not guarantee the absence of vulnerabilities and should be supplemented with professional auditing services.
+
+---
+
+## 🚨 NEWLY DISCOVERED CRITICAL LOGIC BUGS (October 26, 2025)
+
+**Date:** October 26, 2025  
+**Severity:** CRITICAL  
+**Status:** 🔴 **NEWLY DISCOVERED - REQUIRES IMMEDIATE ATTENTION**  
+**Test Suite:** `test/unit/LevrGovernor_CriticalLogicBugs.t.sol`  
+**Tests:** 4/4 bugs confirmed (100% reproduction rate)
+
+### Overview
+
+Deep analysis comparing against industry audit findings revealed **4 CRITICAL logic bugs** in the Governor contract that are "obvious in hindsight" similar to the staking midstream accrual issue. These bugs involve **state synchronization issues** where values are read at execution time instead of being snapshot at voting time.
+
+---
+
+### [NEW-C-1] Quorum Manipulation via Supply Increase (Post-Voting Staking)
+
+**Contract:** `LevrGovernor_v1.sol`  
+**Severity:** 🔴 **CRITICAL**  
+**Impact:** Executable proposals can be blocked by staking after voting ends  
+**Status:** 🔴 **CONFIRMED - NOT FIXED**
+
+**Description:**
+
+Total supply is checked at EXECUTION time (line 396), not at voting snapshot time. An attacker can stake large amounts AFTER voting ends to increase the total supply, making proposals that met quorum during voting fail quorum at execution.
+
+**Vulnerable Code:**
+
+```solidity
+// LevrGovernor_v1.sol:385-402
+function _meetsQuorum(uint256 proposalId) internal view returns (bool) {
+    ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
+    uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
+
+    if (quorumBps == 0) return true;
+
+    // ⚠️ CRITICAL BUG: totalSupply is read at EXECUTION time, not vote snapshot time
+    uint256 totalSupply = IERC20(stakedToken).totalSupply(); // Line 396
+    if (totalSupply == 0) return false;
+
+    uint256 requiredQuorum = (totalSupply * quorumBps) / 10_000;
+
+    return proposal.totalBalanceVoted >= requiredQuorum;
+}
+```
+
+**Attack Scenario:**
+
+```
+T0: Cycle starts
+    - Total supply: 800 sTokens
+    - Quorum requirement: 70% of 800 = 560 sTokens
+
+T1: Proposal created for 1000 ether boost
+
+T2: Alice (500 sTokens) and Bob (300 sTokens) vote YES
+    - Total votes: 800 sTokens
+    - Quorum check: 800 >= 560 ✅ MEETS QUORUM
+
+T3: Voting window ends
+    - Proposal state: Succeeded (ready to execute)
+
+T4: ATTACK - Charlie stakes 1000 sTokens
+    - New total supply: 1800 sTokens
+    - New quorum requirement: 70% of 1800 = 1260 sTokens
+
+T5: Try to execute proposal
+    - Quorum check: 800 >= 1260 ❌ FAILS
+    - Proposal was executable, now permanently blocked!
+    - Charlie can prevent any proposal from executing
+```
+
+**Test Result:**
+
+```
+✅ test_CRITICAL_quorumManipulation_viaSupplyIncrease() PASSED
+
+BUG CONFIRMED: Proposal no longer meets quorum!
+800 votes < 1260 required (44.4% < 70%)
+Proposal was executable, now is not!
+CRITICAL: Supply manipulation can block proposal execution!
+```
+
+**Impact:**
+
+- **Governance DOS**: Any whale can block proposal execution by staking after voting
+- **Permanent gridlock**: Proposals that won fairly cannot be executed
+- **Attack cost**: Requires capital but tokens can be unstaked immediately after blocking
+- **Severity**: Breaks core governance functionality
+
+---
+
+### [NEW-C-2] Quorum Manipulation via Supply Decrease (Post-Voting Unstaking)
+
+**Contract:** `LevrGovernor_v1.sol`  
+**Severity:** 🔴 **CRITICAL**  
+**Impact:** Failing proposals can be made executable by unstaking  
+**Status:** 🔴 **CONFIRMED - NOT FIXED**
+
+**Description:**
+
+The inverse of NEW-C-1. An attacker can UNSTAKE large amounts after voting to DECREASE total supply, making proposals that failed quorum during voting meet quorum at execution.
+
+**Attack Scenario:**
+
+```
+T0: Cycle starts
+    - Total supply: 1500 sTokens
+    - Quorum requirement: 70% of 1500 = 1050 sTokens
+
+T1: Proposal created (attacker's malicious proposal)
+
+T2: Only 500 sTokens vote (attacker controls these)
+    - Quorum check: 500 >= 1050 ❌ DOES NOT MEET QUORUM
+    - Proposal should fail
+
+T3: Voting window ends
+    - Proposal state: Defeated (not executable)
+
+T4: ATTACK - Attacker unstakes 900 sTokens
+    - New total supply: 600 sTokens
+    - New quorum requirement: 70% of 600 = 420 sTokens
+
+T5: Try to execute proposal
+    - Quorum check: 500 >= 420 ✅ NOW MEETS QUORUM
+    - Proposal that failed can now execute!
+```
+
+**Test Result:**
+
+```
+✅ test_quorumManipulation_viaSupplyDecrease() PASSED
+
+BUG CONFIRMED: Proposal NOW meets quorum!
+500 votes >= 420 required (83% >= 70%)
+Charlie can manipulate quorum by unstaking!
+```
+
+**Impact:**
+
+- **Governance manipulation**: Failed proposals can be revived
+- **Minority control**: Small voting group can pass proposals by lowering supply
+- **Combined with C-1**: Attacker can block good proposals and pass bad ones
+
+---
+
+### [NEW-C-3] Config Changes Affect Winner Determination
+
+**Contract:** `LevrGovernor_v1.sol`  
+**Severity:** 🔴 **CRITICAL**  
+**Impact:** Factory owner can change which proposal wins by updating config  
+**Status:** 🔴 **CONFIRMED - NOT FIXED**
+
+**Description:**
+
+Winner determination (line 428) reads approval/quorum thresholds from factory at EXECUTION time. Factory owner can change `approvalBps` or `quorumBps` AFTER voting ends to change which proposal is considered the winner.
+
+**Vulnerable Code:**
+
+```solidity
+// LevrGovernor_v1.sol:419-437
+function _getWinner(uint256 cycleId) internal view returns (uint256 winnerId) {
+    uint256[] memory proposals = _cycleProposals[cycleId];
+    uint256 maxYesVotes = 0;
+
+    for (uint256 i = 0; i < proposals.length; i++) {
+        uint256 pid = proposals[i];
+        ILevrGovernor_v1.Proposal storage proposal = _proposals[pid];
+
+        // ⚠️ CRITICAL BUG: Reads config at EXECUTION time
+        if (_meetsQuorum(pid) && _meetsApproval(pid)) { // Line 428
+            if (proposal.yesVotes > maxYesVotes) {
+                maxYesVotes = proposal.yesVotes;
+                winnerId = pid;
+            }
+        }
+    }
+
+    return winnerId; // Returns 0 if no winner
+}
+
+function _meetsApproval(uint256 proposalId) internal view returns (bool) {
+    ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
+    // ⚠️ Read at execution time!
+    uint16 approvalBps = ILevrFactory_v1(factory).approvalBps(); // Line 406
+
+    if (approvalBps == 0) return true;
+
+    uint256 totalVotes = proposal.yesVotes + proposal.noVotes;
+    if (totalVotes == 0) return false;
+
+    uint256 requiredApproval = (totalVotes * approvalBps) / 10_000;
+
+    return proposal.yesVotes >= requiredApproval;
+}
+```
+
+**Attack Scenario:**
+
+```
+T0: Two proposals created in same cycle
+    - Proposal 1: 60% yes votes
+    - Proposal 2: 100% yes votes (but fewer total votes)
+    - Current approval threshold: 51%
+
+T1: Both proposals meet 51% approval
+    - Winner: Proposal 1 (more total yes votes)
+
+T2: ATTACK - Factory owner updates config
+    - New approval threshold: 70%
+
+T3: Winner determination at execution time:
+    - Proposal 1: 60% < 70% - NO LONGER MEETS APPROVAL
+    - Proposal 2: 100% >= 70% - STILL MEETS APPROVAL
+    - Winner changes to Proposal 2!
+```
+
+**Test Result:**
+
+```
+✅ test_winnerDetermination_configManipulation() PASSED
+
+BUG CONFIRMED: Config change affected winner determination!
+Proposal 1 was leading, but config change made it invalid
+```
+
+**Impact:**
+
+- **Centralization risk**: Factory owner can manipulate governance outcomes
+- **Unpredictable execution**: Winner can change between voting and execution
+- **Trust violation**: Community votes become meaningless if config can change
+
+---
+
+### [NEW-M-1] Voting Power Precision Loss for Small Stakes
+
+**Contract:** `LevrStaking_v1.sol`  
+**Severity:** 🟡 **MEDIUM**  
+**Impact:** Small stakes have 0 voting power permanently  
+**Status:** 🔴 **CONFIRMED - BY DESIGN**
+
+**Description:**
+
+VP normalization `/ (1e18 * 86400)` causes precision loss for small stakes. Stakes below ~86.4 trillion wei never accumulate voting power, even after years.
+
+**Code:**
+
+```solidity
+// LevrStaking_v1.sol:523-535
+function getVotingPower(address user) external view returns (uint256 votingPower) {
+    uint256 startTime = stakeStartTime[user];
+    if (startTime == 0) return 0;
+
+    uint256 balance = _staked[user];
+    if (balance == 0) return 0;
+
+    uint256 timeStaked = block.timestamp - startTime;
+
+    // ⚠️ Normalization causes precision loss
+    // VP = (balance * timeStaked) / (1e18 * 86400)
+    // For small balances, this rounds to 0
+    return (balance * timeStaked) / (1e18 * 86400);
+}
+```
+
+**Test Result:**
+
+```
+✅ test_votingPower_precisionLoss() PASSED
+
+Alice staked: 1 wei
+After 1 year: VP = 0
+```
+
+**Analysis:**
+
+For VP >= 1:
+
+- `(balance * timeStaked) >= (1e18 * 86400)`
+- `balance >= (1e18 * 86400) / timeStaked`
+
+Minimum balance for 1 VP:
+
+- After 1 day: `1e18 * 86400 / 86400 = 1e18 wei = 1 token`
+- After 1 year: `1e18 * 86400 / 31536000 ≈ 2.7e12 wei = 0.0000027 tokens`
+
+**Impact:**
+
+- **Micro stakes excluded**: Users with < 0.000003 tokens cannot vote (even after years)
+- **By design**: Trade-off for human-readable VP numbers
+- **Low severity**: Affects only dust amounts (<$0.01 at reasonable token prices)
+
+---
+
+## Summary of Newly Discovered Bugs
+
+| Bug ID  | Severity    | Description                                   | Status       |
+| ------- | ----------- | --------------------------------------------- | ------------ |
+| NEW-C-1 | 🔴 CRITICAL | Quorum manipulation via post-voting staking   | 🔴 NOT FIXED |
+| NEW-C-2 | 🔴 CRITICAL | Quorum manipulation via post-voting unstaking | 🔴 NOT FIXED |
+| NEW-C-3 | 🔴 CRITICAL | Config changes affect winner determination    | 🔴 NOT FIXED |
+| NEW-M-1 | 🟡 MEDIUM   | VP precision loss for micro stakes            | ℹ️ BY DESIGN |
+
+**Test Coverage:** 4/4 bugs reproduced and confirmed (100%)
+
+---
+
+## Required Fixes
+
+### Fix for NEW-C-1 & NEW-C-2: Snapshot Total Supply at Vote Time
+
+**Recommendation:** Store `totalSupply` snapshot when voting starts, use snapshot for quorum calculations.
+
+**Implementation:**
+
+```solidity
+// Add to Proposal struct
+struct Proposal {
+    // ... existing fields ...
+    uint256 totalSupplySnapshot; // NEW: Snapshot of sToken supply at voting start
+}
+
+// Update _propose() to capture snapshot
+function _propose(...) internal returns (uint256 proposalId) {
+    // ... existing code ...
+
+    uint256 totalSupplySnapshot = IERC20(stakedToken).totalSupply();
+
+    _proposals[proposalId] = Proposal({
+        // ... existing fields ...
+        totalSupplySnapshot: totalSupplySnapshot
+    });
+}
+
+// Update _meetsQuorum() to use snapshot
+function _meetsQuorum(uint256 proposalId) internal view returns (bool) {
+    ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
+    uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
+
+    if (quorumBps == 0) return true;
+
+    // FIX: Use snapshot instead of current supply
+    uint256 totalSupply = proposal.totalSupplySnapshot;
+    if (totalSupply == 0) return false;
+
+    uint256 requiredQuorum = (totalSupply * quorumBps) / 10_000;
+
+    return proposal.totalBalanceVoted >= requiredQuorum;
+}
+```
+
+### Fix for NEW-C-3: Snapshot Config at Proposal Creation
+
+**Recommendation:** Store `quorumBps` and `approvalBps` in each proposal at creation time.
+
+**Implementation:**
+
+```solidity
+// Add to Proposal struct
+struct Proposal {
+    // ... existing fields ...
+    uint16 quorumBps; // NEW: Snapshot of quorum threshold
+    uint16 approvalBps; // NEW: Snapshot of approval threshold
+}
+
+// Update _propose() to capture config
+function _propose(...) internal returns (uint256 proposalId) {
+    // ... existing code ...
+
+    uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
+    uint16 approvalBps = ILevrFactory_v1(factory).approvalBps();
+
+    _proposals[proposalId] = Proposal({
+        // ... existing fields ...
+        quorumBps: quorumBps,
+        approvalBps: approvalBps
+    });
+}
+
+// Update _meetsQuorum() to use snapshot
+function _meetsQuorum(uint256 proposalId) internal view returns (bool) {
+    ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
+    // FIX: Use snapshot instead of current config
+    uint16 quorumBps = proposal.quorumBps;
+
+    if (quorumBps == 0) return true;
+    // ... rest of function
+}
+
+// Update _meetsApproval() similarly
+function _meetsApproval(uint256 proposalId) internal view returns (bool) {
+    ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
+    // FIX: Use snapshot instead of current config
+    uint16 approvalBps = proposal.approvalBps;
+
+    if (approvalBps == 0) return true;
+    // ... rest of function
+}
+```
+
+---
+
+## Updated Production Readiness Status
+
+❌ **NOT READY FOR PRODUCTION DEPLOYMENT** (changed from ✅)
+
+**Critical Issues Found:**
+
+- 🔴 3 NEW CRITICAL governance manipulation vulnerabilities
+- 🟡 1 MEDIUM precision loss issue (by design, acceptable)
+
+**Required Before Deployment:**
+
+1. ⚠️ Fix NEW-C-1, NEW-C-2, NEW-C-3 with snapshot mechanism
+2. ⚠️ Add comprehensive tests for snapshot behavior
+3. ⚠️ Verify all state reads use snapshots not current values
+4. ⚠️ Consider formal verification of governance invariants
+
+**Previous Status:** All 12 original audit issues resolved ✅  
+**New Status:** 3 critical logic bugs discovered 🔴  
+**Recommendation:** **DO NOT DEPLOY** until snapshot fixes are implemented and tested
+
+---
+
 **Disclaimer:** This audit does not guarantee the absence of vulnerabilities and should be supplemented with professional auditing services.
 
 ---
@@ -2096,6 +2557,7 @@ enum ProposalState {
 The contract's `_state()` function correctly returned "Succeeded" for proposals meeting quorum/approval, but because the enum had Succeeded and Defeated in swapped positions, the numeric value 3 mapped to "Defeated" instead of "Succeeded" in the ABI and frontend interpretation.
 
 **Where it was used:**
+
 - Line 333 in `LevrGovernor_v1.sol`: Initializing proposals with `state: Proposal State.Pending`
 - Frontend UI layer expecting Succeeded = 2, Defeated = 3
 - Governance status badges and execute button visibility logic
@@ -2131,6 +2593,7 @@ The user correctly identified that their proposal met all voting requirements bu
 **File:** `/packages/levr-sdk/contracts/src/interfaces/ILevrGovernor_v1.sol`
 
 **Change:**
+
 ```solidity
 // CORRECT (after fix)
 enum ProposalState {
@@ -2143,6 +2606,7 @@ enum ProposalState {
 ```
 
 **Files Modified:**
+
 1. `src/interfaces/ILevrGovernor_v1.sol` - Fixed enum order
 2. `src/LevrGovernor_v1.sol` - Updated initialization to use `ProposalState.Pending` enum constant
 3. `test/e2e/LevrV1.Governance.t.sol` - Updated treasury balance check in test
@@ -2152,8 +2616,9 @@ enum ProposalState {
 **New Test:** `test_SingleProposalStateConsistency_MeetsQuorumAndApproval`
 
 This test reproduces the exact scenario from the bug report:
+
 1. Create single proposal during proposal window
-2. Vote YES during voting window  
+2. Vote YES during voting window
 3. Warp time 4 days forward past voting window
 4. Verify state is Succeeded (2), not Defeated (3)
 5. Verify proposal is eligible for execution
@@ -2168,6 +2633,7 @@ This test reproduces the exact scenario from the bug report:
 To prevent similar enum ordering issues in the future:
 
 1. **Add compile-time assertions** for enum values:
+
 ```solidity
 // Add this to contract or test file
 function _validateProposalStateEnum() internal pure {
@@ -2182,6 +2648,7 @@ function _validateProposalStateEnum() internal pure {
 2. **Add explicit test coverage** for each enum value in governance state transitions
 
 3. **Document enum values** in code comments:
+
 ```solidity
 enum ProposalState {
     Pending,     // value: 0 - Proposal created, voting not started
@@ -2196,13 +2663,13 @@ enum ProposalState {
 
 **Status After Fix:**
 
-| Component | Before | After |
-|-----------|--------|-------|
-| Proposal state consistency | ❌ Broken | ✅ Fixed |
-| Governance voting | ❌ Broken | ✅ Fixed |
-| UI status badges | ❌ Wrong | ✅ Correct |
-| Execute button visibility | ❌ Hidden | ✅ Visible |
-| Test coverage | ❌ 127 passing | ✅ 128 passing |
+| Component                  | Before         | After          |
+| -------------------------- | -------------- | -------------- |
+| Proposal state consistency | ❌ Broken      | ✅ Fixed       |
+| Governance voting          | ❌ Broken      | ✅ Fixed       |
+| UI status badges           | ❌ Wrong       | ✅ Correct     |
+| Execute button visibility  | ❌ Hidden      | ✅ Visible     |
+| Test coverage              | ❌ 127 passing | ✅ 128 passing |
 
 **User Experience:**
 
@@ -2218,6 +2685,7 @@ enum ProposalState {
 This enum fix is backwards-incompatible with any frontend or indexing service that assumes the old enum ordering. Ensure all systems expecting the old enum values are updated simultaneously.
 
 **Deployment Steps:**
+
 1. ✅ Deploy updated contracts with fixed enum
 2. ✅ Update frontend ABI imports to match new enum order
 3. ✅ Update any off-chain indexing if applicable
@@ -2239,6 +2707,7 @@ A protection mechanism was implemented to prevent the `startNewCycle()` function
 ### Problem Statement
 
 **Scenario:**
+
 - Cycle 1 has 2 proposals: Boost (winner) and Transfer (loser)
 - Both proposals meet quorum and approval (state: Succeeded)
 - Boost proposal is executed, which auto-starts Cycle 2
@@ -2253,6 +2722,7 @@ Anyone could call `startNewCycle()` before executing a Succeeded proposal, orpha
 ### Implementation
 
 **Error Definition** (`ILevrGovernor_v1.sol`):
+
 ```solidity
 error ExecutableProposalsRemaining();
 ```
@@ -2292,41 +2762,44 @@ This ensures that proposals cannot be orphaned regardless of how cycle advanceme
 ### Test Coverage
 
 **Test 1: `test_cannotStartNewCycleWithExecutableProposals()`**
+
 - Creates a proposal that meets quorum and approval (state: Succeeded)
 - Attempts `startNewCycle()` → Reverts with `ExecutableProposalsRemaining`
 - Executes the proposal → Cycle 2 auto-starts ✅
 
 **Test 2: `test_canStartNewCycleAfterExecutingProposals()`**
+
 - Creates 2 proposals (both Succeeded, only one wins)
 - Attempts `startNewCycle()` → Reverts (winner not executed)
 - Executes winner proposal → Cycle 2 auto-starts
 - Verifies loser is orphaned in Cycle 1 (intended behavior) ✅
 
 **Test 3: `test_canStartNewCycleIfProposalDefeated()` (NEW!)**
+
 - Creates a proposal that fails quorum (state: Defeated)
 - Calls `startNewCycle()` → Succeeds!
 - Cycle advances to Cycle 2 ✅
 
 ### Behavior Matrix
 
-| Scenario | Voting Window | Proposal State | `startNewCycle()` Result |
-|----------|---------------|----------------|-------------------------|
-| Voting active | Yes | N/A | ❌ Reverts: `CycleStillActive()` |
-| Voting ended | No | Succeeded | ❌ Reverts: `ExecutableProposalsRemaining()` |
-| Voting ended | No | Defeated | ✅ Starts new cycle |
-| Voting ended | No | Executed | ✅ Starts new cycle |
-| Voting ended, all executed | No | N/A | ✅ Starts new cycle |
+| Scenario                   | Voting Window | Proposal State | `startNewCycle()` Result                     |
+| -------------------------- | ------------- | -------------- | -------------------------------------------- |
+| Voting active              | Yes           | N/A            | ❌ Reverts: `CycleStillActive()`             |
+| Voting ended               | No            | Succeeded      | ❌ Reverts: `ExecutableProposalsRemaining()` |
+| Voting ended               | No            | Defeated       | ✅ Starts new cycle                          |
+| Voting ended               | No            | Executed       | ✅ Starts new cycle                          |
+| Voting ended, all executed | No            | N/A            | ✅ Starts new cycle                          |
 
 ### Impact
 
 **Status After Fix:**
 
-| Component | Before | After |
-|-----------|--------|-------|
-| Proposal orphaning | ❌ Possible | ✅ Prevented |
-| Manual cycle skip | ❌ Possible | ✅ Prevented |
-| Execution failure handling | N/A | ✅ Allows cycle advance |
-| Test coverage | 128 tests | ✅ 131 tests |
+| Component                  | Before      | After                   |
+| -------------------------- | ----------- | ----------------------- |
+| Proposal orphaning         | ❌ Possible | ✅ Prevented            |
+| Manual cycle skip          | ❌ Possible | ✅ Prevented            |
+| Execution failure handling | N/A         | ✅ Allows cycle advance |
+| Test coverage              | 128 tests   | ✅ 131 tests            |
 
 ### User Experience
 
@@ -2338,6 +2811,7 @@ This ensures that proposals cannot be orphaned regardless of how cycle advanceme
 ### Tests Passed
 
 All governance tests pass (139/139 total):
+
 - ✅ 13 governance E2E tests (including 3 new/updated)
 - ✅ 11 config update tests
 - ✅ 40 staking unit tests (including 10 manual transfer/midstream + 6 industry comparison tests)

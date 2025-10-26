@@ -1,0 +1,892 @@
+# Levr Protocol User Flows - Comprehensive Map
+
+**Date:** October 26, 2025  
+**Purpose:** Complete mapping of all user interactions to systematically identify edge cases  
+**Status:** Living Document
+
+---
+
+## Table of Contents
+
+1. [Project Registration Flows](#project-registration-flows)
+2. [Staking Flows](#staking-flows)
+3. [Governance Flows](#governance-flows)
+4. [Treasury Flows](#treasury-flows)
+5. [Fee Splitter Flows](#fee-splitter-flows)
+6. [Forwarder Flows](#forwarder-flows)
+7. [Cross-Contract Flows](#cross-contract-flows)
+
+---
+
+## Project Registration Flows
+
+### Flow 1: Standard Registration (Prepare → Register)
+
+**Actors:** Token Admin (owner of Clanker token)
+
+**Steps:**
+
+1. Token Admin calls `factory.prepareForDeployment()`
+   - Factory creates Treasury and Staking contracts
+   - Stores addresses in `_preparedContracts[msg.sender]`
+2. Token Admin calls `factory.register(clankerToken)`
+   - Validates caller is token admin
+   - Retrieves prepared contracts
+   - **Deletes** prepared contracts from mapping
+   - Delegatecalls to LevrDeployer
+   - Deploys Governor, StakedToken
+   - Initializes all contracts
+   - Stores project in registry
+
+**State Changes:**
+
+- Treasury: `governor = address(0)` → `governor = deployedGovernor`
+- Staking: `underlying = address(0)` → `underlying = clankerToken`
+- Factory: `_preparedContracts[caller]` deleted
+- Factory: `_projects[clankerToken]` populated
+- Factory: `_projectTokens` array grows
+
+**Edge Cases to Test:**
+
+- ❓ What if Treasury.initialize() is called twice?
+- ❓ What if Staking.initialize() is called twice?
+- ❓ What if register() is called twice for same token?
+- ❓ What if prepared contracts are used for multiple tokens?
+- ❓ What if someone else tries to use prepared contracts?
+
+---
+
+### Flow 2: Registration Without Preparation
+
+**Actors:** Token Admin
+
+**Steps:**
+
+1. Token Admin calls `factory.register(clankerToken)` WITHOUT calling `prepareForDeployment()`
+2. Factory retrieves `_preparedContracts[caller]` → all zero addresses
+3. Delegatecall to deployer with zero addresses
+4. Deployer's initialize calls should fail with zero addresses
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Registration fails appropriately
+- ❓ What if deployer logic doesn't validate zero addresses properly?
+
+---
+
+## Staking Flows
+
+### Flow 3: First-Time Staking
+
+**Actors:** User (any address with underlying tokens)
+
+**Steps:**
+
+1. User approves Staking contract for `amount`
+2. User calls `staking.stake(amount)`
+   - Settles all streaming rewards (no-op for new user)
+   - Sets `stakeStartTime[user] = block.timestamp`
+   - Transfers underlying tokens from user to staking
+   - Increases `_escrowBalance[underlying]`
+   - Increases `_rewardDebt` for all reward tokens
+   - Increases `_staked[user]` and `_totalStaked`
+   - Mints sTokens to user
+3. User now has:
+   - `_staked[user] = amount`
+   - `sToken.balanceOf(user) = amount`
+   - `stakeStartTime[user] = block.timestamp`
+   - Voting Power = 0 (just staked)
+
+**State Changes:**
+
+- `_totalStaked` increases
+- `_escrowBalance[underlying]` increases
+- User receives sTokens
+- User's reward debt initialized
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Cannot stake 0
+- ✅ Tested: Reward debt properly initialized
+- ❓ What if stake during active reward stream?
+- ❓ What if \_totalStaked was 0 before stake?
+- ❓ What if stake amount causes overflow?
+
+---
+
+### Flow 4: Subsequent Staking (Adding to Position)
+
+**Actors:** User (already has staked balance)
+
+**Steps:**
+
+1. User calls `staking.stake(additionalAmount)`
+   - Settles streaming (user may receive rewards)
+   - **Calculates weighted average timestamp** to preserve VP
+   - Old VP: `oldBalance × timeAccumulated`
+   - New start time: `now - (oldBalance × timeAccumulated) / newTotalBalance`
+   - Transfers tokens
+   - Updates balances and debt
+   - Mints additional sTokens
+
+**VP Preservation Formula:**
+
+```
+Old VP = oldBalance × (now - oldStartTime)
+New VP should equal Old VP immediately after stake
+New VP = newBalance × (now - newStartTime)
+Therefore: newStartTime = now - (oldBalance × timeAccumulated) / newBalance
+```
+
+**Edge Cases to Test:**
+
+- ✅ Tested: VP preservation on additional stake
+- ❓ What if time overflow in weighted average calculation?
+- ❓ What if division by zero in newTotalBalance?
+- ❓ What if stake immediately after unstake?
+- ❓ What if stake during voting period? (VP used in vote is snapshot at vote time... or is it?)
+
+---
+
+### Flow 5: Partial Unstaking
+
+**Actors:** User (has staked balance)
+
+**Steps:**
+
+1. User calls `staking.unstake(partialAmount, recipient)`
+   - Settles streaming (claims pending rewards)
+   - Settles user's rewards for all tokens
+   - Reduces `_staked[user]`
+   - Burns sTokens
+   - Reduces `_escrowBalance[underlying]`
+   - Transfers underlying to recipient
+   - **Proportionally reduces time accumulation**
+   - New time = oldTime × (remainingBalance / originalBalance)
+
+**VP Reduction Formula:**
+
+```
+Before: 1000 tokens × 100 days = 100,000 token-days VP
+Unstake: 300 tokens (30%)
+After: 700 tokens × 70 days = 49,000 token-days VP (70% of original VP)
+```
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Proportional VP reduction
+- ❓ What if unstake amount > staked balance?
+- ❓ What if unstake causes \_totalStaked = 0?
+- ❓ What if unstake during active reward stream?
+- ❓ What if escrow balance < unstake amount?
+- ❓ What if unstake to zero address?
+- ❓ What if rounding error in proportional calculation?
+
+---
+
+### Flow 6: Full Unstaking
+
+**Actors:** User (has staked balance)
+
+**Steps:**
+
+1. User calls `staking.unstake(entireBalance, recipient)`
+   - Settles streaming
+   - Claims all rewards
+   - **Resets stakeStartTime to 0**
+   - Burns all sTokens
+   - Transfers all underlying to recipient
+2. User now has:
+   - `_staked[user] = 0`
+   - `stakeStartTime[user] = 0`
+   - Voting Power = 0
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Full unstake resets VP to 0
+- ❓ What if user tries to vote after full unstake?
+- ❓ What if user had voted and then full unstakes?
+- ❓ What if last person unstakes during reward stream?
+
+---
+
+### Flow 7: Claiming Rewards
+
+**Actors:** User (has staked balance with pending rewards)
+
+**Steps:**
+
+1. User calls `staking.claimRewards([rewardTokens], recipient)`
+   - For each reward token:
+     - Calls `_settle(token, user, recipient, userBalance)`
+     - Settles streaming for that token
+     - Calculates: `accumulated = (balance × accPerShare) / ACC_SCALE`
+     - Calculates: `pending = accumulated - rewardDebt`
+     - Transfers pending rewards to recipient
+     - Decreases `_rewardReserve[token]`
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Cannot claim more than reserve
+- ❓ What if reserve < pending due to rounding?
+- ❓ What if claim empty array of tokens?
+- ❓ What if claim for token that doesn't exist?
+- ❓ What if claim when \_totalStaked = 0?
+- ❓ What if multiple users claim simultaneously?
+
+---
+
+### Flow 8: Reward Accrual (Manual Transfer + Accrue)
+
+**Actors:** Anyone (permissionless)
+
+**Steps:**
+
+1. Someone transfers reward tokens to staking contract
+2. Anyone calls `staking.accrueRewards(token)`
+   - Tries to claim from ClankerFeeLocker (if exists)
+   - Calculates available unaccounted rewards
+   - Calls `_creditRewards(token, amount)`
+   - Settles current stream
+   - **Calculates unvested rewards from current stream**
+   - Resets stream with: `newAmount + unvested`
+   - Increases reserve by `newAmount` only
+
+**Midstream Accrual:**
+
+```
+Stream 1: 3000 tokens over 3 days (starts T0)
+At T0+1day: 1000 vested, 2000 unvested
+Transfer + accrue 2000 more tokens
+Stream 2: 4000 tokens over 3 days (2000 new + 2000 unvested)
+Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
+```
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Midstream accrual preserves unvested
+- ✅ Tested: Multiple midstream accruals
+- ❓ What if accrue when \_totalStaked = 0?
+- ❓ What if accrue after stream ended?
+- ❓ What if accrue before stream started?
+- ❓ What if transfer but forget to call accrue?
+- ❓ What if unvested calculation overflows?
+
+---
+
+### Flow 9: Treasury Boost (Pull from Treasury)
+
+**Actors:** Governor contract (via executed proposal)
+
+**Steps:**
+
+1. Governor calls `treasury.applyBoost(amount)`
+2. Treasury approves Staking for `amount`
+3. Treasury calls `staking.accrueFromTreasury(underlying, amount, true)`
+4. Staking pulls tokens from Treasury
+5. Staking credits rewards (same as Flow 8)
+6. Treasury resets approval to 0
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Approval reset after boost
+- ❓ What if accrueFromTreasury reverts?
+- ❓ What if treasury has insufficient balance?
+- ❓ What if approval fails?
+- ❓ What if boost amount = 0?
+
+---
+
+## Governance Flows
+
+### Flow 10: Proposal Creation (Auto-Start Cycle)
+
+**Actors:** Staker with sufficient balance and VP
+
+**Steps:**
+
+1. User calls `governor.proposeBoost(amount)` or `governor.proposeTransfer(recipient, amount, description)`
+2. Governor checks if new cycle needed (`_currentCycleId == 0 || _needsNewCycle()`)
+3. If needed: **Auto-starts new cycle**
+   - Reads `proposalWindowSeconds` and `votingWindowSeconds` FROM FACTORY
+   - Creates cycle with calculated timestamps
+   - Stores in `_cycles[cycleId]`
+4. Reads cycle timestamps (NOT from factory)
+5. Validates:
+   - Proposal window is open
+   - User has minimum stake (reads FROM FACTORY)
+   - Amount doesn't exceed max (reads FROM FACTORY, uses current treasury balance)
+   - Not too many active proposals (reads FROM FACTORY)
+   - User hasn't proposed this type in this cycle
+6. Creates proposal:
+   - Copies `votingStartsAt` and `votingEndsAt` FROM CYCLE
+   - Sets initial vote counts to 0
+   - Stores proposal
+
+**Critical State Reads:**
+
+- ✅ `votingStartsAt`, `votingEndsAt`: Read from cycle (IMMUTABLE) ✅
+- ❌ `minSTokenBpsToSubmit`: Read from factory (DYNAMIC) ⚠️
+- ❌ `maxProposalAmountBps`: Read from factory (DYNAMIC) ⚠️
+- ❌ `maxActiveProposals`: Read from factory (DYNAMIC) ⚠️
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Auto-start cycle when none exists
+- ✅ Tested: Multiple proposals in same cycle
+- ❓ What if factory config changes between proposal creation and voting?
+- ❓ What if treasury balance decreases after proposal creation?
+- ❓ What if user's balance decreases after creating proposal?
+- ❓ What if cycle window = 0?
+- ❓ What if uint256 overflow in timestamp calculations?
+
+---
+
+### Flow 11: Voting on Proposal
+
+**Actors:** Staker with VP > 0
+
+**Steps:**
+
+1. User calls `governor.vote(proposalId, support)`
+2. Validates:
+   - Voting window is active (compares `block.timestamp` to proposal timestamps)
+   - User hasn't voted yet
+3. **Reads voting power from staking contract** (CURRENT VP, not snapshot)
+4. Reads user's sToken balance (CURRENT balance, not snapshot)
+5. Updates proposal:
+   - `yesVotes` or `noVotes` += VP
+   - `totalBalanceVoted` += sToken balance
+6. Records vote receipt
+
+**Critical State Reads:**
+
+- ❌ `getVotingPower(voter)`: Read at VOTE time (can change if user stakes/unstakes) ⚠️
+- ❌ `balanceOf(voter)`: Read at VOTE time (can change) ⚠️
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Cannot vote twice
+- ✅ Tested: Cannot vote with 0 VP
+- ❓ What if user votes, then transfers sTokens to another address?
+- ❓ What if user votes, then unstakes, then someone else votes?
+- ❓ What if user's VP decreases between vote and execution?
+- ❓ What if voting windows overlap due to config changes?
+- ❓ What if vote after proposal executed?
+- ❓ What if yesVotes + noVotes overflow?
+
+---
+
+### Flow 12: Proposal Execution
+
+**Actors:** Anyone (permissionless)
+
+**Steps:**
+
+1. Anyone calls `governor.execute(proposalId)`
+2. Validates:
+   - Voting window has ended
+   - Not already executed
+   - **Meets quorum** (reads CURRENT totalSupply) ⚠️
+   - **Meets approval** (reads CURRENT approval threshold) ⚠️
+   - **Treasury has balance** (reads CURRENT balance)
+   - Is winner (checks CURRENT quorum/approval for all proposals) ⚠️
+   - Cycle not already executed
+3. Marks proposal and cycle as executed
+4. Executes action (boost or transfer)
+5. **Auto-starts new cycle**
+
+**Critical State Reads:**
+
+- ❌ `totalSupply`: Read at EXECUTION time (can change after voting) 🔴 BUG
+- ❌ `quorumBps`: Read at EXECUTION time (can change) 🔴 BUG
+- ❌ `approvalBps`: Read at EXECUTION time (can change) 🔴 BUG
+- ❌ `treasuryBalance`: Read at EXECUTION time (can decrease) ⚠️
+
+**Edge Cases to Test:**
+
+- 🔴 CRITICAL: Supply manipulation after voting (NEW-C-1, NEW-C-2)
+- 🔴 CRITICAL: Config changes affect winner (NEW-C-3)
+- ✅ Tested: Treasury balance validation
+- ❓ What if execution reverts (e.g., transfer to malicious contract)?
+- ❓ What if multiple proposals meet same yesVotes?
+- ❓ What if winner = 0 (no proposals met quorum)?
+- ❓ What if auto-start new cycle fails?
+- ❓ What if two people try to execute simultaneously?
+
+---
+
+### Flow 13: Manual Cycle Advancement
+
+**Actors:** Anyone (permissionless)
+
+**Steps:**
+
+1. Anyone calls `governor.startNewCycle()`
+2. Validates:
+   - Either no cycle exists OR current cycle has ended
+   - **No executable proposals remain** (checks each proposal's state)
+3. Starts new cycle
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Cannot start during active cycle
+- ✅ Tested: Cannot start with executable proposals
+- ❓ What if \_checkNoExecutableProposals() loops through 100+ proposals?
+- ❓ What if state check is expensive (calls factory multiple times)?
+- ❓ What if cycleId overflows?
+
+---
+
+## Treasury Flows
+
+### Flow 14: Treasury Transfer (via Governance)
+
+**Actors:** Governor contract
+
+**Steps:**
+
+1. Winning proposal executed by anyone
+2. Governor calls `treasury.transfer(recipient, amount)`
+3. Treasury validates:
+   - Caller is governor
+   - Reentrancy guard active
+4. Transfers tokens to recipient using SafeERC20
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Only governor can transfer
+- ✅ Tested: Reentrancy protection
+- ❓ What if transfer to malicious contract that reverts?
+- ❓ What if transfer amount > balance?
+- ❓ What if transfer to zero address?
+- ❓ What if underlying token has transfer fees?
+- ❓ What if underlying token is pausable and paused?
+
+---
+
+### Flow 15: Treasury Boost (via Governance)
+
+**Actors:** Governor contract
+
+**Steps:**
+
+1. Governor calls `treasury.applyBoost(amount)`
+2. Treasury:
+   - Gets staking address from factory
+   - Approves staking for `amount`
+   - Calls `staking.accrueFromTreasury(underlying, amount, true)`
+   - Staking pulls tokens
+   - **Resets approval to 0**
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Approval reset after boost
+- ❓ What if accrueFromTreasury reverts?
+- ❓ What if staking address changes in factory?
+- ❓ What if staking contract is malicious?
+- ❓ What if amount = 0?
+- ❓ What if boost twice in same transaction?
+
+---
+
+## Fee Splitter Flows
+
+### Flow 16: Fee Splitter Configuration
+
+**Actors:** Token Admin
+
+**Steps:**
+
+1. Token Admin calls `feeSplitter.configureSplits([{receiver, bps}, ...])`
+2. Validates:
+   - Caller is token admin
+   - No zero addresses
+   - No zero bps
+   - Total bps = 10000 (100%)
+   - **No duplicate receivers**
+   - **Not more than MAX_RECEIVERS (20)**
+3. Stores splits configuration
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Duplicate receiver detection
+- ✅ Tested: Too many receivers blocked
+- ❓ What if configure during active distribution?
+- ❓ What if configure to include malicious receiver?
+- ❓ What if staking address changes after configuration?
+- ❓ What if configure with empty array?
+
+---
+
+### Flow 17: Fee Distribution
+
+**Actors:** Anyone (permissionless)
+
+**Steps:**
+
+1. Fees accumulate in fee locker or fee splitter contract
+2. Anyone calls `feeSplitter.distribute(rewardToken)`
+3. Claims from ClankerFeeLocker (if exists)
+4. Gets balance of rewardToken in splitter
+5. For each split:
+   - Calculates: `amount = (balance × bps) / 10000`
+   - Transfers amount to receiver (SafeERC20)
+   - If receiver is staking: sets `sentToStaking = true`
+6. If sent to staking: **Auto-calls staking.accrueRewards()** (try/catch)
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Auto-accrual try/catch protection
+- ✅ Tested: Dust recovery mechanism
+- ❓ What if distribution with splits not configured?
+- ❓ What if balance = 0?
+- ❓ What if rounding leaves dust in contract?
+- ❓ What if transfer to receiver fails?
+- ❓ What if one receiver is a contract that reverts?
+- ❓ What if distribute same token twice quickly?
+
+---
+
+## Forwarder Flows
+
+### Flow 18: Meta-Transaction Multicall
+
+**Actors:** User (signing meta-transaction off-chain)
+
+**Steps:**
+
+1. User signs EIP-712 message off-chain
+2. Relayer calls `forwarder.executeMulticall([calls])`
+3. Validates: `msg.value == sum(call.value)` for all calls
+4. For each call:
+   - If target is forwarder: check selector is `executeTransaction` only
+   - If target is external: append `msg.sender` to calldata (ERC2771)
+   - Execute call
+   - Store result
+5. Returns all results
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Value mismatch detection
+- ✅ Tested: Recursive multicall blocked
+- ✅ Tested: Reentrancy protection
+- ❓ What if calls array is very long (gas bomb)?
+- ❓ What if one call fails and allowFailure = false?
+- ❓ What if target doesn't trust forwarder?
+- ❓ What if call data is malformed?
+
+---
+
+### Flow 19: Direct Transaction via Forwarder
+
+**Actors:** Forwarder (internal call only)
+
+**Steps:**
+
+1. During executeMulticall, if target is forwarder
+2. Calls `forwarder.executeTransaction(target, data)`
+3. Validates: `msg.sender == address(this)`
+4. Executes call to target WITHOUT appending sender
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Direct calls blocked
+- ❓ What if target is forwarder itself?
+- ❓ What if recursion depth exceeds limits?
+
+---
+
+## Cross-Contract Flows
+
+### Flow 20: Complete Governance Cycle (Proposal → Vote → Execute → Boost)
+
+**Actors:** Multiple users
+
+**Steps:**
+
+1. **T0**: Alice stakes 1000 tokens (gets 1000 sTokens, VP = 0)
+2. **T0 + 10 days**: Alice has VP = (1000 × 10) / (1e18 × 86400) token-days
+3. **T1**: Alice creates proposal for 5000 token boost
+   - Auto-starts Cycle 1
+   - Proposal window: T1 to T1+2days
+   - Voting window: T1+2days to T1+7days
+4. **T1 + 2.5 days**: Bob (also staker) votes YES
+5. **T1 + 3 days**: Alice votes YES
+6. **T1 + 7.5 days**: Anyone executes proposal
+   - Checks quorum (uses CURRENT totalSupply) ⚠️
+   - Checks approval (uses CURRENT approvalBps) ⚠️
+   - Governor calls treasury.applyBoost(5000)
+   - Treasury approves staking for 5000
+   - Staking pulls tokens and credits rewards
+   - Approval reset to 0
+   - Auto-starts Cycle 2
+
+**State Progression:**
+
+```
+T0: Staking begins
+T0+10d: VP accumulates
+T1: Proposal created (cycle starts)
+T1+2d: Voting starts
+T1+3d: Votes cast
+T1+7d: Voting ends
+T1+7.5d: Execution
+```
+
+**Critical Edge Cases:**
+
+- 🔴 What if Charlie stakes between T1+7d and T1+7.5d? (Supply manipulation)
+- 🔴 What if factory config changes between T1+7d and T1+7.5d? (Config manipulation)
+- ❓ What if Alice unstakes after voting?
+- ❓ What if treasury runs out of funds?
+- ❓ What if boost reverts?
+- ❓ What if no one executes the proposal?
+
+---
+
+### Flow 21: Competing Proposals (Winner Determination)
+
+**Actors:** Multiple stakers
+
+**Steps:**
+
+1. **T0**: Alice proposes Boost(1000) - Proposal 1
+2. **T0 + 1 day**: Bob proposes Boost(2000) - Proposal 2
+3. **T0 + 2 days**: Voting starts
+4. **T0 + 3 days**:
+   - Proposal 1 gets 600 yes votes
+   - Proposal 2 gets 800 yes votes
+5. **T0 + 7 days**: Voting ends
+6. **T0 + 7.5 days**: Execute proposal
+   - Winner determination: loops through proposals
+   - For each: checks `_meetsQuorum(pid) && _meetsApproval(pid)` (uses CURRENT state) ⚠️
+   - Winner = proposal with most yes votes
+   - Only winner can execute
+
+**Critical Edge Cases:**
+
+- 🔴 What if factory config changes before execution? (Changes who meets threshold)
+- 🔴 What if supply changes before execution? (Changes quorum denominator)
+- ❓ What if two proposals have same yes votes?
+- ❓ What if all proposals fail quorum?
+- ❓ What if winner is executed but other proposals still meet quorum?
+
+---
+
+### Flow 22: Failed Proposal Recovery
+
+**Actors:** Anyone
+
+**Steps:**
+
+1. **Scenario**: All proposals in cycle fail quorum or approval
+2. Voting window ends
+3. No proposals are executable
+4. **Recovery Option A**: Anyone calls `governor.startNewCycle()`
+   - Checks no executable proposals
+   - Starts new cycle
+5. **Recovery Option B**: Next proposer creates proposal
+   - Auto-starts new cycle
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Manual recovery via startNewCycle
+- ✅ Tested: Auto recovery via next proposal
+- ❓ What if someone tries to execute failed proposal?
+- ❓ What if startNewCycle called before voting ends?
+
+---
+
+## Systematic Edge Case Categories
+
+### Category A: State Synchronization Issues (Like Midstream Accrual Bug)
+
+**Pattern:** Value read at Time B instead of Time A, leading to incorrect behavior.
+
+**Identified Issues:**
+
+1. 🔴 **NEW-C-1**: Quorum uses CURRENT totalSupply (execution time) instead of SNAPSHOT (voting start time)
+2. 🔴 **NEW-C-2**: Same as above, reverse direction
+3. 🔴 **NEW-C-3**: Winner determination uses CURRENT config instead of SNAPSHOT (proposal creation time)
+4. ❓ **UNKNOWN**: Treasury balance checked at execution, not at proposal creation
+5. ❓ **UNKNOWN**: VP read at vote time, not snapshotted
+6. ❓ **UNKNOWN**: sToken balance read at vote time, not snapshotted
+
+**Questions to Answer:**
+
+- Should total supply be snapshotted at cycle start or proposal creation?
+- Should config (quorum/approval) be snapshotted per cycle or per proposal?
+- Should treasury balance be validated at creation or only at execution?
+- Should VP and balance be snapshotted at vote time?
+
+---
+
+### Category B: Boundary Conditions
+
+**Pattern:** Zero values, overflow, underflow, first/last operations.
+
+**To Test:**
+
+1. ❓ First stake when \_totalStaked = 0
+2. ❓ Last unstake when \_totalStaked → 0
+3. ❓ First proposal in new cycle
+4. ❓ Last proposal before cycle ends
+5. ❓ Vote at exact moment voting starts/ends
+6. ❓ Execute at exact moment voting ends
+7. ❓ Stake/unstake amount = 0
+8. ❓ Proposal amount = 0
+9. ❓ Treasury balance = 0
+10. ❓ Reward token list = empty
+11. ❓ Reward token list = 100+ tokens
+12. ❓ Uint256 max values
+
+---
+
+### Category C: Ordering Dependencies
+
+**Pattern:** Order of operations matters, creates race conditions.
+
+**To Test:**
+
+1. ❓ Vote → Unstake → Execute (does unstake affect quorum?)
+2. ❓ Propose → Config Change → Vote → Execute
+3. ❓ Stake → Vote → Transfer sToken → Someone else stakes those tokens
+4. ❓ Multiple proposals execution order
+5. ❓ Distribute → Accrue vs Accrue → Distribute
+6. ❓ Boost → Stake vs Stake → Boost
+7. ❓ Two users stake simultaneously (same block)
+8. ❓ Two proposals executed back-to-back
+
+---
+
+### Category D: Access Control & Authorization
+
+**Pattern:** Who can call what and when?
+
+**To Test:**
+
+1. ✅ Only token admin can register
+2. ✅ Only governor can transfer/boost
+3. ✅ Only factory can initialize
+4. ✅ Anyone can propose (if minimum stake met)
+5. ✅ Anyone can vote (if VP > 0)
+6. ✅ Anyone can execute (if proposal succeeded)
+7. ❓ Can anyone call startNewCycle during active cycle?
+8. ❓ Can non-admin configure fee splitter?
+9. ❓ Can anyone recover dust?
+
+---
+
+### Category E: Reentrancy & External Calls
+
+**Pattern:** External calls that could reenter.
+
+**To Test:**
+
+1. ✅ Treasury.transfer → malicious receiver reenters
+2. ✅ Treasury.applyBoost → malicious staking reenters
+3. ❓ Staking.unstake → malicious token reenters
+4. ❓ FeeSplitter.distribute → malicious receiver reenters
+5. ❓ Governor.execute → malicious treasury reenters
+6. ❓ Forwarder.executeMulticall → recursive call
+7. ❓ Multiple external calls in sequence
+
+---
+
+### Category F: Precision & Rounding
+
+**Pattern:** Division causing loss of precision or dust accumulation.
+
+**To Test:**
+
+1. 🔴 VP calculation with micro stakes (NEW-M-1)
+2. ❓ Reward distribution with small \_totalStaked
+3. ❓ Fee split calculation leaving dust
+4. ❓ Stream vesting with very short windows
+5. ❓ Quorum calculation rounding
+6. ❓ accPerShare overflow with huge rewards
+7. ❓ Time calculations near uint64 max
+
+---
+
+### Category G: Configuration Changes
+
+**Pattern:** Dynamic config affecting active operations.
+
+**Identified Issues:**
+
+1. 🔴 Config changes affect quorum/approval checks (NEW-C-3)
+2. ✅ Config changes don't affect cycle timestamps (SAFE)
+3. ❓ Config changes affect proposal creation constraints
+4. ❓ Stream window changes affect active streams?
+
+---
+
+### Category H: Token-Specific Behaviors
+
+**Pattern:** Different token implementations behaving differently.
+
+**To Test:**
+
+1. ❓ Fee-on-transfer tokens as underlying
+2. ❓ Rebasing tokens as underlying
+3. ❓ Pausable tokens as underlying
+4. ❓ Tokens with blocklist as underlying
+5. ❓ Tokens that revert on zero transfer
+6. ❓ Tokens with non-standard decimals
+7. ❓ Tokens with transfer hooks
+
+---
+
+## Priority Testing Matrix
+
+### 🔴 CRITICAL - Test Immediately
+
+1. **Supply manipulation during execution window** (NEW-C-1, NEW-C-2) - CONFIRMED
+2. **Config manipulation affecting winner** (NEW-C-3) - CONFIRMED
+3. VP/Balance snapshot issues during voting
+4. Treasury balance decrease between creation and execution
+5. Reward reserve accounting bugs
+6. Escrow balance vs actual balance mismatch
+
+### 🟡 HIGH - Test Soon
+
+7. First/last staker edge cases
+8. Proposal execution revert handling
+9. Stream window edge cases
+10. Multiple simultaneous operations
+11. Fee-on-transfer token compatibility
+12. Gas limits with many proposals/tokens
+
+### 🟢 MEDIUM - Test Eventually
+
+13. Precision loss scenarios
+14. Event emission completeness
+15. View function consistency
+16. UI integration edge cases
+
+---
+
+## Next Steps
+
+1. ✅ Create this USER_FLOWS.md document
+2. ⏭️ For each flow category, create systematic tests
+3. ⏭️ Focus on state synchronization (Category A) first
+4. ⏭️ Test boundary conditions (Category B)
+5. ⏭️ Test ordering dependencies (Category C)
+6. ⏭️ Document all findings in audit.md
+7. ⏭️ Implement fixes for all CRITICAL bugs
+8. ⏭️ Retest after fixes
+
+---
+
+**Methodology:** This document uses a systematic approach to ensure NO edge cases are missed by:
+
+1. Mapping ALL user flows
+2. Identifying state changes for each flow
+3. Categorizing edge cases by pattern
+4. Prioritizing by criticality
+5. Testing systematically
+
+This is superior to ad-hoc testing as it ensures comprehensive coverage.
