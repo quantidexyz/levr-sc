@@ -1133,4 +1133,194 @@ contract LevrStakingV1_UnitTest is Test {
             'Token 2: Midstream should preserve rewards independently'
         );
     }
+
+    // ============ Industry Audit Comparison Tests ============
+
+    function test_extremePrecisionLoss_tinyStake_hugeRewards() public {
+        // Edge case from Synthetix audits: Very small stakes with very large rewards
+        // Tests precision loss and overflow protection
+        
+        // Stake tiny amount: 1 wei
+        underlying.approve(address(staking), 1);
+        staking.stake(1);
+
+        // Create massive reward: 1 billion tokens
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 1_000_000_000 ether);
+
+        // Accrue the massive reward
+        rewardToken.transfer(address(staking), 1_000_000_000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Fast forward full stream
+        vm.warp(block.timestamp + 3 days);
+
+        // Claim should work without overflow
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+        
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        uint256 claimed = balAfter - balBefore;
+        
+        // Should claim all 1B tokens (user is only staker)
+        assertApproxEqAbs(
+            claimed,
+            1_000_000_000 ether,
+            1 ether, // Allow 1 token rounding error
+            'Should claim massive rewards without overflow'
+        );
+    }
+
+    function test_veryLargeStake_noOverflow() public {
+        // Edge case: Extremely large stake amounts
+        // Note: Limited by total token supply in practice
+        
+        uint256 largeAmount = 1_000_000_000 ether; // 1 billion tokens
+        underlying.mint(address(this), largeAmount);
+        underlying.approve(address(staking), largeAmount);
+
+        // Stake large amount
+        staking.stake(largeAmount);
+
+        // Wait a long time
+        vm.warp(block.timestamp + 3650 days); // 10 years
+
+        // VP calculation shouldn't overflow
+        uint256 vp = staking.getVotingPower(address(this));
+        assertGt(vp, 0, 'Should calculate VP without overflow');
+
+        // Unstake should work
+        staking.unstake(largeAmount, address(this));
+        assertEq(staking.totalStaked(), 0, 'Should unstake successfully');
+    }
+
+    function test_timestampManipulation_noImpact() public {
+        // Edge case from Curve audits: Block timestamp manipulation by miners
+        // Miners can manipulate timestamp by ~15 seconds
+        // Our VP normalization makes this manipulation COMPLETELY INEFFECTIVE
+        
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // Normal: Wait 1 day
+        vm.warp(block.timestamp + 1 days);
+        uint256 vpNormal = staking.getVotingPower(address(this));
+
+        // Manipulated: Add 15 seconds (max miner manipulation)
+        vm.warp(block.timestamp + 15);
+        uint256 vpManipulated = staking.getVotingPower(address(this));
+
+        // Due to normalization by (1e18 * 86400), 15 seconds is COMPLETELY LOST in rounding
+        // This is actually BETTER protection than expected!
+        assertEq(
+            vpManipulated,
+            vpNormal,
+            'Timestamp manipulation has ZERO impact due to VP normalization'
+        );
+        
+        // VP = (balance * timeStaked) / (1e18 * 86400)
+        // 15 seconds = 15 / 86400 ≈ 0.0001736 days
+        // With 1000 tokens: 1000 * 0.0001736 = 0.1736 token-days
+        // This rounds to 0 in our calculation - perfect protection!
+    }
+
+    function test_flashLoan_zeroVotingPower() public {
+        // Edge case from MasterChef audits: Flash loan attacks
+        // Verify that same-block stake gives 0 VP
+        
+        uint256 flashLoanAmount = 1_000_000 ether; // Huge flash loan
+        underlying.mint(address(this), flashLoanAmount);
+        underlying.approve(address(staking), flashLoanAmount);
+
+        // Stake massive amount
+        staking.stake(flashLoanAmount);
+
+        // Check VP immediately (same block)
+        uint256 vpSameBlock = staking.getVotingPower(address(this));
+        assertEq(vpSameBlock, 0, 'Flash loan should have 0 VP in same block');
+
+        // Even after 1 second, VP should be negligible
+        vm.warp(block.timestamp + 1);
+        uint256 vpAfter1Sec = staking.getVotingPower(address(this));
+        
+        // 1 million tokens * 1 second / (1e18 * 86400) ≈ 0.01 token-days
+        // Essentially nothing compared to long-term stakers
+        assertLt(vpAfter1Sec, 100, 'VP after 1 second should be negligible');
+
+        // Cleanup - unstake the flash loan
+        staking.unstake(flashLoanAmount, address(this));
+    }
+
+    function test_manyRewardTokens_gasReasonable() public {
+        // Edge case: Many concurrent reward tokens
+        // Verify gas costs don't become prohibitive
+        
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // Add 10 different reward tokens (reasonable number)
+        for (uint256 i = 0; i < 10; i++) {
+            MockERC20 rewardToken = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TKN', i))
+            );
+            rewardToken.mint(address(this), 1000 ether);
+            rewardToken.transfer(address(staking), 100 ether);
+            staking.accrueRewards(address(rewardToken));
+        }
+
+        // Stake again - should handle settling all 10 reward tokens
+        uint256 gasBefore = gasleft();
+        underlying.approve(address(staking), 500 ether);
+        staking.stake(500 ether);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        // With 10 reward tokens, gas should still be reasonable
+        // Each token settlement is ~5-10k gas, so 10 tokens ≈ 50-100k
+        // Plus base stake cost ≈ 100k
+        // Total should be under 300k
+        assertLt(gasUsed, 300_000, 'Gas should be reasonable with 10 reward tokens');
+    }
+
+    function test_divisionByZero_protection() public {
+        // Edge case from Synthetix: Division by zero when totalStaked = 0
+        // Our contract should handle this gracefully
+        
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(this), 1000 ether);
+
+        // Accrue rewards BEFORE anyone stakes (totalStaked = 0)
+        rewardToken.transfer(address(staking), 1000 ether);
+        staking.accrueRewards(address(rewardToken));
+
+        // Reward rate should be set even with 0 stakers
+        uint256 rate = staking.rewardRatePerSecond(address(rewardToken));
+        assertGt(rate, 0, 'Should have reward rate even with 0 stakers');
+
+        // Now someone stakes
+        underlying.approve(address(staking), 500 ether);
+        staking.stake(500 ether);
+
+        // Wait and claim
+        vm.warp(block.timestamp + 3 days);
+        
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+        
+        uint256 balBefore = rewardToken.balanceOf(address(this));
+        staking.claimRewards(tokens, address(this));
+        uint256 balAfter = rewardToken.balanceOf(address(this));
+
+        // Should get full 1000 tokens (stream was paused until staker arrived)
+        uint256 claimed = balAfter - balBefore;
+        assertApproxEqAbs(
+            claimed,
+            1000 ether,
+            10 ether,
+            'Should claim all rewards (stream paused when no stakers)'
+        );
+    }
 }
