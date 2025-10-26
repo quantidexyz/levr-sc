@@ -2125,9 +2125,16 @@ Deep comparative audit revealed **4 CRITICAL logic bugs** in `LevrGovernor_v1.so
 - Bugs 1-3: State synchronization (values not snapshotted)
 - Bug 4: State management (count not reset between cycles)
 
-**📄 Complete Analysis:** See `spec/GOVERNANCE_CRITICAL_BUGS.md` for full details, attack scenarios, and fixes.
+### Methodology
 
-### Quick Summary
+These bugs were discovered using systematic user flow mapping - the same approach that would have caught the staking midstream accrual bug. The process involved:
+
+1. **User Flow Mapping:** Documented all 22 possible user interactions (see `USER_FLOWS.md`)
+2. **Edge Case Categorization:** Organized by pattern (synchronization, boundaries, ordering, etc.)
+3. **Critical Questions:** "What if X changes between step A and B?"
+4. **User Insight:** "Shouldn't the count reset when the cycle changes?" (led to bug #4)
+
+**Test Coverage:** All bugs confirmed with 100% reproduction rate in test suite.
 
 ---
 
@@ -2422,15 +2429,110 @@ Minimum balance for 1 VP:
 
 **Test Coverage:** 5/5 bugs reproduced and confirmed (100%)
 
-**📄 Complete Details:** All bugs, attack scenarios, fixes, and testing requirements are documented in `spec/GOVERNANCE_CRITICAL_BUGS.md` (single source of truth)
+---
+
+### [NEW-C-4] Active Proposal Count Never Resets Between Cycles
+
+**Contract:** `LevrGovernor_v1.sol`  
+**Severity:** 🔴 CRITICAL  
+**Impact:** Permanent governance gridlock  
+**Status:** 🔴 **CONFIRMED - NOT FIXED**  
+**Discovered via:** User's insightful question: "Shouldn't the count reset when the cycle changes?"
+
+**Description:**
+
+`_activeProposalCount` is a GLOBAL mapping that never resets when starting new cycles. The user's intuition was correct - it SHOULD reset, but the code doesn't do it.
+
+**Why This Is a Bug:**
+
+Proposals are scoped to cycles (via `proposal.cycleId`). Winner determination is per-cycle (`_getWinner(cycleId)` only checks that cycle's proposals). Once a cycle ends, its proposals can NEVER execute in future cycles (they're stuck in the old cycle).
+
+**But:** They still count as "active" globally because the count never resets!
+
+**Vulnerable Code:**
+
+```solidity
+// Line 43: Global mapping (not per-cycle!)
+mapping(ILevrGovernor_v1.ProposalType => uint256) private _activeProposalCount;
+
+// Lines 450-468: _startNewCycle() does NOT reset the count
+function _startNewCycle() internal {
+    uint256 cycleId = ++_currentCycleId;
+    _cycles[cycleId] = Cycle({...});
+    // ❌ NO CODE TO RESET _activeProposalCount
+    emit CycleStarted(...);
+}
+```
+
+**Attack Scenario:**
+
+```
+CYCLE 1:
+  - Create 10 boost proposals (maxActiveProposals = 10)
+  - All fail quorum
+  - Count = 10
+
+CYCLE 2 STARTS:
+  - startNewCycle() called
+  - ❌ Count NOT reset, still = 10
+  - Try to create new proposal
+  - Check: 10 >= 10 → MaxProposalsReached
+  - **BLOCKED forever!**
+
+Result: Boost governance PERMANENTLY DEAD
+```
+
+**Why This Is CRITICAL:**
+
+| Aspect | NEW-C-4 vs Other Bugs |
+|--------|-----------------------|
+| Attack Cost | **ZERO** (happens organically) |
+| Can Happen Naturally | **YES** (proposals fail sometimes) |
+| Permanent | **FOREVER** (no recovery) |
+| Recovery Mechanism | **NONE** |
+
+**NEW-C-4 is the WORST** because it requires no attack - just normal proposal failures over time lead to permanent gridlock.
+
+**Resolution:**
+
+Add 2 lines to `_startNewCycle()` to reset the count:
+
+```solidity
+function _startNewCycle() internal {
+    uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds();
+    uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds();
+
+    uint256 cycleId = ++_currentCycleId;
+
+    // FIX [NEW-C-4]: Reset counts - proposals are scoped to cycles
+    _activeProposalCount[ProposalType.BoostStakingPool] = 0;
+    _activeProposalCount[ProposalType.TransferToAddress] = 0;
+
+    _cycles[cycleId] = Cycle({...});
+    emit CycleStarted(...);
+}
+```
+
+**Tests Required:**
+
+- ✅ `test_CRITICAL_activeProposalCount_neverDecrementedOnDefeat()` - Confirms bug
+- ⏭️ `test_activeCount_resetsOnNewCycle()` - Verify fix
+- ⏭️ `test_activeCount_defeatedProposalsDontBlockNewCycle()` - Multi-cycle test
 
 ---
 
-## Required Fixes
+## Complete Fix Implementation (All 4 Bugs)
 
-### Fix for NEW-C-1 & NEW-C-2: Snapshot Total Supply at Vote Time
+### Summary
 
-**Recommendation:** Store `totalSupply` snapshot when voting starts, use snapshot for quorum calculations.
+**Files to Modify:** 2 files  
+**Lines of Code:** ~20 lines  
+**Complexity:** Medium (snapshots) + Trivial (reset)  
+**Estimated Time:** 3-5 hours implementation + 16-22 hours testing
+
+### Fix for NEW-C-1 & NEW-C-2: Snapshot Total Supply
+
+**File:** `src/interfaces/ILevrGovernor_v1.sol` + `src/LevrGovernor_v1.sol`
 
 **Implementation:**
 
@@ -2472,7 +2574,7 @@ function _meetsQuorum(uint256 proposalId) internal view returns (bool) {
 
 ### Fix for NEW-C-3: Snapshot Config at Proposal Creation
 
-**Recommendation:** Store `quorumBps` and `approvalBps` in each proposal at creation time.
+**File:** Same as above (add to Proposal struct, capture in `_propose()`)
 
 **Implementation:**
 
@@ -2521,25 +2623,128 @@ function _meetsApproval(uint256 proposalId) internal view returns (bool) {
 
 ---
 
+### Complete Fix Code (Copy-Paste Ready)
+
+```solidity
+// ========================================
+// FILE: src/interfaces/ILevrGovernor_v1.sol
+// ========================================
+// Add these 3 fields to Proposal struct:
+
+struct Proposal {
+    // ... existing 17 fields ...
+    uint256 totalSupplySnapshot;    // Snapshot of sToken supply at proposal creation
+    uint16 quorumBpsSnapshot;       // Snapshot of quorum threshold at proposal creation
+    uint16 approvalBpsSnapshot;     // Snapshot of approval threshold at proposal creation
+}
+
+// ========================================
+// FILE: src/LevrGovernor_v1.sol
+// ========================================
+
+// 1. In _propose() function, add before creating proposal:
+uint256 totalSupplySnapshot = IERC20(stakedToken).totalSupply();
+uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
+uint16 approvalBps = ILevrFactory_v1(factory).approvalBps();
+
+// Then add to Proposal struct initialization:
+_proposals[proposalId] = Proposal({
+    // ... existing fields ...
+    totalSupplySnapshot: totalSupplySnapshot,
+    quorumBpsSnapshot: quorumBps,
+    approvalBpsSnapshot: approvalBps
+});
+
+// 2. In _meetsQuorum() function, replace:
+// OLD: uint16 quorumBps = ILevrFactory_v1(factory).quorumBps();
+// NEW: uint16 quorumBps = proposal.quorumBpsSnapshot;
+
+// OLD: uint256 totalSupply = IERC20(stakedToken).totalSupply();
+// NEW: uint256 totalSupply = proposal.totalSupplySnapshot;
+
+// 3. In _meetsApproval() function, replace:
+// OLD: uint16 approvalBps = ILevrFactory_v1(factory).approvalBps();
+// NEW: uint16 approvalBps = proposal.approvalBpsSnapshot;
+
+// 4. In _startNewCycle() function, add after cycleId increment:
+_activeProposalCount[ProposalType.BoostStakingPool] = 0;
+_activeProposalCount[ProposalType.TransferToAddress] = 0;
+```
+
+---
+
+## Industry Comparative Analysis Results
+
+### Additional Contracts vs Industry Standards
+
+**Test Suite:** `test/unit/LevrComparativeAudit.t.sol` (14/14 passing)
+
+**Governor Tests (4/4):**
+- ✅ Flash loan vote manipulation blocked (better than Compound)
+- ✅ Proposal ID collision impossible
+- ✅ Double voting blocked  
+- ✅ Proposal spam dual-layer rate limiting (better than industry)
+
+**Treasury Tests (3/3):**
+- ✅ Reentrancy protection (matches Gnosis Safe v1.3+)
+- ✅ Access control robust
+- ✅ Approval auto-reset (better than Gnosis Safe)
+
+**Factory Tests (3/3):**
+- ✅ Preparation front-running blocked (better than Uniswap)
+- ✅ Prepared contracts cleanup (fixes C-1)
+- ✅ Double registration prevented
+
+**Forwarder Tests (3/3):**
+- ✅ executeTransaction access control (matches OZ)
+- ✅ Recursive multicall blocked (better than OZ/GSN)
+- ✅ Value mismatch validation (better than OZ/GSN)
+
+**FeeSplitter Tests (1/1):**
+- ✅ SafeERC20 architecture (matches PaymentSplitter)
+
+### Summary: 5 Areas Where We Exceed Industry
+
+1. Flash loan immunity (time-weighted VP)
+2. Forwarder value validation
+3. Treasury auto-approval reset
+4. Factory preparation anti-front-running
+5. Dual-layer spam protection
+
+### Where We're Below Standard (Governor):
+
+❌ Missing snapshot mechanism (ALL major governors have this)  
+❌ Missing cycle count reset (standard practice)
+
+---
+
 ## Updated Production Readiness Status
 
-❌ **NOT READY FOR PRODUCTION DEPLOYMENT** (changed from ✅)
+❌ **NOT READY FOR PRODUCTION DEPLOYMENT**
 
 **Critical Issues Found:**
 
-- 🔴 3 NEW CRITICAL governance manipulation vulnerabilities
+- 🔴 4 NEW CRITICAL governance bugs
 - 🟡 1 MEDIUM precision loss issue (by design, acceptable)
 
 **Required Before Deployment:**
 
-1. ⚠️ Fix NEW-C-1, NEW-C-2, NEW-C-3 with snapshot mechanism
-2. ⚠️ Add comprehensive tests for snapshot behavior
-3. ⚠️ Verify all state reads use snapshots not current values
-4. ⚠️ Consider formal verification of governance invariants
+1. ⚠️ Implement snapshot mechanism (NEW-C-1, C-2, C-3) - 3-4 hours
+2. ⚠️ Implement cycle reset logic (NEW-C-4) - 30 minutes
+3. ⚠️ Comprehensive testing - 16-22 hours
+4. ⚠️ Regression testing - 2-4 hours
+5. ⚠️ Consider external professional audit
 
-**Previous Status:** All 12 original audit issues resolved ✅  
-**New Status:** 3 critical logic bugs discovered 🔴  
-**Recommendation:** **DO NOT DEPLOY** until snapshot fixes are implemented and tested
+**Status Summary:**
+
+| Aspect | Before Deep Audit | After Deep Audit | After Fixes (Est.) |
+|--------|------------------|------------------|---------------------|
+| Original Issues | 12 found | 12 fixed ✅ | 12 fixed ✅ |
+| New Issues | 0 | 4 critical 🔴 | 4 fixed ✅ |
+| Production Ready | ✅ Yes | ❌ No | ✅ Yes |
+| Timeline | Ready now | +2-3 days | Ready |
+
+**Recommendation:** **DO NOT DEPLOY** until all 4 fixes implemented and tested (est. 2-3 days)
 
 ---
 

@@ -1095,11 +1095,11 @@ if (msg.value != totalValue) {
 4. Review and verification (2-4 hours)
 5. **Estimated delay: 2-3 days**
 
-**📄 Single Source of Truth:** `spec/GOVERNANCE_CRITICAL_BUGS.md`
+**📄 Complete Analysis:** All findings consolidated in `spec/audit.md` (single source of truth)
 
 ---
 
-**Prepared by:** AI Security Analysis  
+**Prepared by:** AI Security Analysis + User Insights  
 **References:**
 
 - Synthetix Audit by Sigma Prime
