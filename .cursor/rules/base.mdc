@@ -1,13 +1,48 @@
 ---
-description:
-globs:
 alwaysApply: true
 ---
+
+## Testing Rules
 
 - **Always** run tests in -vvv verbose mode.
 - **Always** tests handle fork internally.
 - **Never** pass fork url in test command.
 - **Always** run relevent test cases/files/folders.
 - **Intelligently** determine if a test is written just to make the test pass, even when the source code is actually incorrect.
+
+## Code Organization Rules
+
 - **Always** define and import errors/events/enums/structs from interfaces.
 - **Always** put analysis md's to the spec folder.
+
+## Documentation & Spec Folder Usage
+
+### When Adding New Analysis or Findings
+
+- **Primary audit document:** Always update `spec/AUDIT.md` for security findings
+- **Historical bugs:** Add to `spec/HISTORICAL_FIXES.md` once bugs are fixed
+- **Future features:** Add to `spec/FUTURE_ENHANCEMENTS.md` for proposed improvements
+- **Feature changes:** Add to `spec/CHANGELOG.md` for version tracking
+- **User flows:** Update `spec/USER_FLOWS.md` when documenting interaction patterns
+- **Test documentation:** Add to `spec/TESTING.md` for test utilities and strategies
+
+### Quick Reference Guide
+
+Use `spec/README.md` or `spec/QUICK_START.md` as entry points to find the right document.
+
+**Common lookups:**
+
+- Security status → `spec/AUDIT.md`
+- Governance mechanics → `spec/gov.md`
+- Fee distribution → `spec/fee-splitter.md`
+- Past bugs & lessons → `spec/HISTORICAL_FIXES.md`
+- Industry comparison → `spec/comparative-AUDIT.md`
+- Testing approach → `spec/TESTING.md`
+
+### Documentation Best Practices
+
+- **Never** create duplicate documentation files for the same topic
+- **Always** consolidate related information into existing spec files
+- **Use archive/** folder only for detailed historical reference
+- **Update** existing docs rather than creating new summary files
+- **Reference** the consolidated spec structure (see `spec/CONSOLIDATION_MAP.md` for mapping)
