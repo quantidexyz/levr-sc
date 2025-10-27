@@ -1984,15 +1984,12 @@ function recoverDust(address token, address to) external {
 
 **Dust Recovery (2 tests):** 15. ✅ `test_recoverDust_onlyRecoversDust()` - Can't steal pending fees 16. ✅ `test_recoverDust_roundingDust_recovered()` - Recovers actual dust
 
-**View Functions (2 tests):**
-17. ✅ `test_pendingFeesInclBalance_includesBalance()` - Correct calculation
-18. ✅ `test_isSplitsConfigured_validatesTotal()` - Returns correct state
-19. ✅ `test_distributeBatch_bothReceiversGetBothTokens()` - Multi-token batch verification
-20. ✅ `test_distribute_multipleTokensSequentially_bothReceiversGetBothTokens()` - Sequential distribution
+**View Functions (2 tests):** 17. ✅ `test_pendingFeesInclBalance_includesBalance()` - Correct calculation 18. ✅ `test_isSplitsConfigured_validatesTotal()` - Returns correct state 19. ✅ `test_distributeBatch_bothReceiversGetBothTokens()` - Multi-token batch verification 20. ✅ `test_distribute_multipleTokensSequentially_bothReceiversGetBothTokens()` - Sequential distribution
 
 **New Edge Case Tests (47 tests)** - `test/unit/LevrFeeSplitter_MissingEdgeCases.t.sol`
 
 **Factory Edge Cases (7 tests):**
+
 1. ✅ Weak validation for unregistered tokens
 2. ✅ Double deployment prevention
 3. ✅ Same salt for different tokens
@@ -2001,61 +1998,21 @@ function recoverDust(address token, address to) external {
 6. ✅ Same salt same token rejection
 7. ✅ Zero salt deployment
 
-**Configuration Edge Cases (6 tests):**
-8. ✅ Reconfigure to empty array rejection
-9. ✅ Receiver is splitter itself (creates stuck funds)
-10. ✅ Receiver is factory address
-11. ✅ BPS overflow with uint16.max
-12. ✅ Total BPS arithmetic overflow
-13. ✅ Admin change mid-lifecycle
+**Configuration Edge Cases (6 tests):** 8. ✅ Reconfigure to empty array rejection 9. ✅ Receiver is splitter itself (creates stuck funds) 10. ✅ Receiver is factory address 11. ✅ BPS overflow with uint16.max 12. ✅ Total BPS arithmetic overflow 13. ✅ Admin change mid-lifecycle
 
-**Distribution Edge Cases (9 tests):**
-14. ✅ 1 wei distribution (all amounts round to 0)
-15. ✅ Minimal distribution with rounding
-16. ✅ totalDistributed overflow protection
-17. ✅ Reconfigure immediately after distribution
-18. ✅ Batch with duplicate tokens
-19. ✅ Batch with empty array
-20. ✅ Batch with 100 tokens (gas test)
-21. ✅ 10001 wei distribution (exact dust calculation)
-22. ✅ Single receiver (no dust possible)
+**Distribution Edge Cases (9 tests):** 14. ✅ 1 wei distribution (all amounts round to 0) 15. ✅ Minimal distribution with rounding 16. ✅ totalDistributed overflow protection 17. ✅ Reconfigure immediately after distribution 18. ✅ Batch with duplicate tokens 19. ✅ Batch with empty array 20. ✅ Batch with 100 tokens (gas test) 21. ✅ 10001 wei distribution (exact dust calculation) 22. ✅ Single receiver (no dust possible)
 
-**Dust Recovery Edge Cases (4 tests):**
-23. ✅ All balance is recoverable dust
-24. ✅ Zero address recipient rejection
-25. ✅ No dust scenario (graceful handling)
-26. ✅ Never-distributed token recovery
+**Dust Recovery Edge Cases (4 tests):** 23. ✅ All balance is recoverable dust 24. ✅ Zero address recipient rejection 25. ✅ No dust scenario (graceful handling) 26. ✅ Never-distributed token recovery
 
-**Auto-Accrual Edge Cases (3 tests):**
-27. ✅ Multiple staking receivers prevented
-28. ✅ Batch auto-accrual for multiple tokens
-29. ✅ All receivers are staking (100% to staking)
-30. ✅ No staking receiver (no auto-accrual)
+**Auto-Accrual Edge Cases (3 tests):** 27. ✅ Multiple staking receivers prevented 28. ✅ Batch auto-accrual for multiple tokens 29. ✅ All receivers are staking (100% to staking) 30. ✅ No staking receiver (no auto-accrual)
 
-**State Consistency Edge Cases (4 tests):**
-31. ✅ Distribution state accumulation
-32. ✅ Multiple reconfigurations (state cleanup)
-33. ✅ totalDistributed persists across reconfigurations
-34. ✅ pendingFees consistency
+**State Consistency Edge Cases (4 tests):** 31. ✅ Distribution state accumulation 32. ✅ Multiple reconfigurations (state cleanup) 33. ✅ totalDistributed persists across reconfigurations 34. ✅ pendingFees consistency
 
-**Metadata & External Dependencies (4 tests):**
-35. ✅ Distribute without metadata
-36. ✅ getStakingAddress for unregistered project
-37. ✅ collectRewards revert handling
-38. ✅ Fee locker claim revert handling
+**Metadata & External Dependencies (4 tests):** 35. ✅ Distribute without metadata 36. ✅ getStakingAddress for unregistered project 37. ✅ collectRewards revert handling 38. ✅ Fee locker claim revert handling
 
-**Cross-Contract Interaction (2 tests):**
-39. ✅ Staking address change (CRITICAL FINDING)
-40. ✅ Distribute without configuration
+**Cross-Contract Interaction (2 tests):** 39. ✅ Staking address change (CRITICAL FINDING) 40. ✅ Distribute without configuration
 
-**Arithmetic Edge Cases (8 tests):**
-41. ✅ Uneven split with prime number balance
-42. ✅ Max receivers with minimum BPS
-43. ✅ BPS sum = 9999 (off by 1)
-44. ✅ BPS sum = 10001 (off by 1)
-45. ✅ Exact calculation with 10001 wei
-46. ✅ Single receiver (no rounding dust)
-47. ✅ Prime number distribution with dust
+**Arithmetic Edge Cases (8 tests):** 41. ✅ Uneven split with prime number balance 42. ✅ Max receivers with minimum BPS 43. ✅ BPS sum = 9999 (off by 1) 44. ✅ BPS sum = 10001 (off by 1) 45. ✅ Exact calculation with 10001 wei 46. ✅ Single receiver (no rounding dust) 47. ✅ Prime number distribution with dust
 
 #### E2E Tests (7 tests) - `test/e2e/LevrV1.FeeSplitter.t.sol`
 
@@ -2175,7 +2132,7 @@ T2: distribute() called
     - Checks: split.receiver (0xAAA) == staking (0xCCC)? → FALSE
     - sentToStaking = false
     - NO auto-accrual called!
-    
+
 Result: Fees sent to old staking, but NOT accrued!
 ```
 
@@ -2257,7 +2214,7 @@ Result: 300 tokens stuck in splitter forever
 ```solidity
 function _validateSplits(SplitConfig[] calldata splits) internal view {
     // ... existing validation ...
-    
+
     for (uint256 i = 0; i < splits.length; i++) {
         if (splits[i].receiver == address(this)) {
             revert CannotSendToSelf(); // New error
@@ -2316,11 +2273,13 @@ function distributeBatch(address[] calldata rewardTokens) external nonReentrant 
 ### FeeSplitter Edge Case Summary
 
 **Total Tests:** 74 (100% passing)
+
 - 20 original unit tests
-- 47 new edge case tests  
+- 47 new edge case tests
 - 7 E2E integration tests
 
 **New Findings:**
+
 - 🟡 3 MEDIUM severity (documented, workarounds exist)
 - ✅ 0 CRITICAL (all previous critical issues remain fixed)
 - ✅ 0 HIGH (all previous high issues remain fixed)
@@ -2510,11 +2469,13 @@ Snapshot-based calculation immune to supply manipulation
 ```
 
 **Verification Tests:**
+
 - ✅ `test_snapshot_quorum_check_uses_snapshot_not_current()` - Verifies snapshot immunity
 - ✅ `test_snapshot_immune_to_extreme_supply_manipulation()` - 1000x supply increase handled
 - ✅ `test_edgeCase_executeOldProposalAfterCountReset_underflowProtection()` - Cross-cycle execution safe
 
 **Impact (Before Fix):**
+
 - **Governance DOS**: Any whale could block proposal execution by staking after voting
 - **Permanent gridlock**: Proposals that won fairly couldn't be executed
 - **Attack cost**: Required capital but tokens could be unstaked immediately after
@@ -2574,10 +2535,12 @@ Supply manipulation prevented by snapshot mechanism
 ```
 
 **Verification Tests:**
+
 - ✅ `test_snapshot_immune_to_supply_drain_attack()` - Massive unstaking doesn't affect quorum
 - ✅ `test_snapshot_quorum_check_uses_snapshot_not_current()` - Uses snapshot, not current supply
 
 **Impact (Before Fix):**
+
 - **Governance manipulation**: Failed proposals could be revived
 - **Minority control**: Small voting group could pass proposals by lowering supply
 - **Combined with C-1**: Attacker could block good proposals and pass bad ones
@@ -2657,11 +2620,13 @@ Winner determination stable across config changes
 ```
 
 **Verification Tests:**
+
 - ✅ `test_snapshot_immune_to_config_winner_manipulation()` - Config changes don't affect winner
 - ✅ `test_snapshot_winner_determination_stable()` - Winner stable across config AND supply changes
 - ✅ `test_edgeCase_multipleRapidConfigUpdates()` - Multiple rapid config updates handled correctly
 
 **Impact (Before Fix):**
+
 - **Centralization risk**: Factory owner could manipulate governance outcomes
 - **Unpredictable execution**: Winner could change between voting and execution
 - **Trust violation**: Community votes could become meaningless
@@ -2800,6 +2765,7 @@ Can create new proposal: CONFIRMED
 ```
 
 **Verification Tests:**
+
 - ✅ `test_activeProposalCount_acrossCycles_isGlobal()` - Verifies count resets to 0
 - ✅ `test_activeProposalCount_allProposalsFail_permanentGridlock()` - No gridlock after reset
 - ✅ `test_REALISTIC_organicGridlock_scenario()` - Multi-cycle recovery works
@@ -2810,6 +2776,7 @@ Can create new proposal: CONFIRMED
 Count reset implemented in `_startNewCycle()` function. Each new cycle starts with fresh count = 0, preventing gridlock from accumulated defeated proposals.
 
 **Benefits:**
+
 - ✅ Prevents permanent gridlock from organic proposal failures
 - ✅ Each cycle has independent proposal slots
 - ✅ No attack cost (was most dangerous bug - happened naturally)
@@ -2976,27 +2943,32 @@ _activeProposalCount[ProposalType.TransferToAddress] = 0;
 **Test Suite:** `test/unit/LevrComparativeAudit.t.sol` (14/14 passing)
 
 **Governor Tests (4/4):**
+
 - ✅ Flash loan vote manipulation blocked (better than Compound)
 - ✅ Proposal ID collision impossible
-- ✅ Double voting blocked  
+- ✅ Double voting blocked
 - ✅ Proposal spam dual-layer rate limiting (better than industry)
 
 **Treasury Tests (3/3):**
+
 - ✅ Reentrancy protection (matches Gnosis Safe v1.3+)
 - ✅ Access control robust
 - ✅ Approval auto-reset (better than Gnosis Safe)
 
 **Factory Tests (3/3):**
+
 - ✅ Preparation front-running blocked (better than Uniswap)
 - ✅ Prepared contracts cleanup (fixes C-1)
 - ✅ Double registration prevented
 
 **Forwarder Tests (3/3):**
+
 - ✅ executeTransaction access control (matches OZ)
 - ✅ Recursive multicall blocked (better than OZ/GSN)
 - ✅ Value mismatch validation (better than OZ/GSN)
 
 **FeeSplitter Tests (1/1):**
+
 - ✅ SafeERC20 architecture (matches PaymentSplitter)
 
 ### Summary: 5 Areas Where We Exceed Industry
@@ -3069,12 +3041,14 @@ A systematic edge case analysis was conducted on the LevrGovernor_v1 contract fo
 The factory allows `quorumBps` and `approvalBps` to be set to any uint16 value (0 to 65535), but valid BPS should be 0 to 10000 (0% to 100%). If set above 10000, proposals become mathematically impossible to execute.
 
 **Example:**
+
 - `quorumBps = 15000` (150% participation required - impossible!)
 - Creates proposal → snapshots 15000
 - Even with 100% participation, proposal fails quorum
 - Governance permanently broken until config fixed
 
 **Test Coverage:**
+
 - ✅ `test_edgeCase_invalidBps_snapshotBehavior()` - Demonstrates invalid BPS impact
 - ✅ `test_edgeCase_extremeBpsValues_uint16Max()` - Tests uint16.max (65535)
 
@@ -3105,6 +3079,7 @@ function updateConfig(FactoryConfig memory newConfig) external onlyOwner {
 If `minSTokenBpsToSubmit = 0` and `totalSupply = 0`, anyone can create proposals even though no one has staked. These proposals can never be voted on (no one has VP) and will never execute.
 
 **Test Coverage:**
+
 - ✅ `test_edgeCase_zeroTotalSupplySnapshot_actuallySucceeds()` - Demonstrates behavior
 
 **Recommendation:**
@@ -3131,6 +3106,7 @@ require(totalSupply > 0, "NO_STAKERS");
 VP normalization formula `(balance * timeStaked) / (1e18 * 86400)` causes precision loss. Stakes below ~2.7e12 wei never accumulate voting power, even after years.
 
 **Test Coverage:**
+
 - ✅ `test_edgeCase_voteWithZeroVP_precisionLoss()` - Verifies 1000 wei stake has 0 VP after 10+ days
 - ✅ `test_edgeCase_minimalSupplyWithMaxQuorum()` - Verifies 1 wei stake has 0 VP after 10+ days
 - ✅ `test_votingPower_precisionLoss()` - Original test showing 1 wei has 0 VP after 1 year
@@ -3182,7 +3158,7 @@ This is an intentional trade-off for human-readable VP numbers. At current token
 #### Additional Edge Cases
 
 21. ✅ **Three-way tie resolution** - Lowest ID wins on 3-way tie
-22. ✅ **Four-way tie resolution** - Lowest ID wins on 4-way tie  
+22. ✅ **Four-way tie resolution** - Lowest ID wins on 4-way tie
 23. ✅ **No winner scenario** - All proposals defeated handled gracefully
 24. ✅ **Cycle boundary handling** - Auto-start after cycle ends works correctly
 25. ✅ **Proposal amount validation** - Amount checked at creation, balance at execution
@@ -3196,15 +3172,15 @@ This is an intentional trade-off for human-readable VP numbers. At current token
 
 **Governor Unit Tests:** 66 tests total (100% passing)
 
-| Test Suite                           | Tests | Status      | Coverage                        |
-| ------------------------------------ | ----- | ----------- | ------------------------------- |
-| LevrGovernor_SnapshotEdgeCases       | 18    | ✅ Passing  | Snapshot mechanism validation   |
-| LevrGovernor_ActiveCountGridlock     | 4     | ✅ Passing  | Count reset verification        |
-| LevrGovernor_CriticalLogicBugs       | 4     | ✅ Passing  | Bug reproduction & fix validation |
-| LevrGovernor_OtherLogicBugs          | 11    | ✅ Passing  | Additional logic edge cases     |
-| LevrGovernorV1.AttackScenarios       | 5     | ✅ Passing  | Real-world attack scenarios     |
-| LevrGovernorV1 (original)            | 4     | ✅ Passing  | Basic functionality             |
-| **LevrGovernor_MissingEdgeCases**    | **20**| ✅ **NEW**  | **Newly discovered edge cases** |
+| Test Suite                        | Tests  | Status     | Coverage                          |
+| --------------------------------- | ------ | ---------- | --------------------------------- |
+| LevrGovernor_SnapshotEdgeCases    | 18     | ✅ Passing | Snapshot mechanism validation     |
+| LevrGovernor_ActiveCountGridlock  | 4      | ✅ Passing | Count reset verification          |
+| LevrGovernor_CriticalLogicBugs    | 4      | ✅ Passing | Bug reproduction & fix validation |
+| LevrGovernor_OtherLogicBugs       | 11     | ✅ Passing | Additional logic edge cases       |
+| LevrGovernorV1.AttackScenarios    | 5      | ✅ Passing | Real-world attack scenarios       |
+| LevrGovernorV1 (original)         | 4      | ✅ Passing | Basic functionality               |
+| **LevrGovernor_MissingEdgeCases** | **20** | ✅ **NEW** | **Newly discovered edge cases**   |
 
 **Combined with E2E Tests:** 20+ governance E2E tests (config updates, full cycles, recovery scenarios)
 
@@ -3212,18 +3188,18 @@ This is an intentional trade-off for human-readable VP numbers. At current token
 
 ### Coverage Matrix
 
-| Category                      | Tests | Vulnerabilities Found | All Fixed? |
-| ----------------------------- | ----- | --------------------- | ---------- |
-| State Synchronization         | 15    | 3 CRITICAL            | ✅ Yes     |
-| Boundary Conditions           | 12    | 0                     | N/A        |
-| Access Control                | 8     | 0                     | N/A        |
-| Arithmetic Operations         | 6     | 0 (auto-protected)    | N/A        |
-| Config Management             | 18    | 1 MEDIUM (validation) | ℹ️ Doc'd   |
-| Tie-Breaking                  | 3     | 0                     | N/A        |
-| Cross-Cycle Behavior          | 8     | 1 CRITICAL            | ✅ Yes     |
-| Supply Manipulation           | 6     | 2 CRITICAL            | ✅ Yes     |
-| Attack Scenarios              | 5     | 0 (all demonstrated)  | N/A        |
-| Edge Case Regression          | 20    | 2 MEDIUM              | ℹ️ Doc'd   |
+| Category              | Tests | Vulnerabilities Found | All Fixed? |
+| --------------------- | ----- | --------------------- | ---------- |
+| State Synchronization | 15    | 3 CRITICAL            | ✅ Yes     |
+| Boundary Conditions   | 12    | 0                     | N/A        |
+| Access Control        | 8     | 0                     | N/A        |
+| Arithmetic Operations | 6     | 0 (auto-protected)    | N/A        |
+| Config Management     | 18    | 1 MEDIUM (validation) | ℹ️ Doc'd   |
+| Tie-Breaking          | 3     | 0                     | N/A        |
+| Cross-Cycle Behavior  | 8     | 1 CRITICAL            | ✅ Yes     |
+| Supply Manipulation   | 6     | 2 CRITICAL            | ✅ Yes     |
+| Attack Scenarios      | 5     | 0 (all demonstrated)  | N/A        |
+| Edge Case Regression  | 20    | 2 MEDIUM              | ℹ️ Doc'd   |
 
 ### Recommendations for Future Improvements
 
@@ -3688,14 +3664,14 @@ Completed:
 
 ### Files Modified
 
-| File                                  | Change                                                        |
-| ------------------------------------- | ------------------------------------------------------------- |
-| `src/interfaces/ILevrGovernor_v1.sol` | Added `token` field to `Proposal`, updated function sigs      |
-| `src/interfaces/ILevrTreasury_v1.sol` | Updated `transfer()` and `applyBoost()` signatures            |
-| `src/LevrGovernor_v1.sol`             | Token parameter in proposals, balance checks, event update    |
-| `src/LevrTreasury_v1.sol`             | Token parameter in transfer/applyBoost, zero address checks   |
-| `spec/USER_FLOWS.md`                  | Updated flows 10, 12, 14, 15, 20, 21 with token parameters    |
-| `test/**/*.sol`                       | Updated all 296 tests with token parameters                   |
+| File                                  | Change                                                      |
+| ------------------------------------- | ----------------------------------------------------------- |
+| `src/interfaces/ILevrGovernor_v1.sol` | Added `token` field to `Proposal`, updated function sigs    |
+| `src/interfaces/ILevrTreasury_v1.sol` | Updated `transfer()` and `applyBoost()` signatures          |
+| `src/LevrGovernor_v1.sol`             | Token parameter in proposals, balance checks, event update  |
+| `src/LevrTreasury_v1.sol`             | Token parameter in transfer/applyBoost, zero address checks |
+| `spec/USER_FLOWS.md`                  | Updated flows 10, 12, 14, 15, 20, 21 with token parameters  |
+| `test/**/*.sol`                       | Updated all 296 tests with token parameters                 |
 
 ### Edge Cases Addressed
 
