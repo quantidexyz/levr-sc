@@ -153,11 +153,11 @@ forge test -vvv
 
 ### 7. Update Audit Documentation ✅
 
-**File:** `spec/audit.md`
+**File:** `spec/AUDIT.md`
 
 **✅ Added section:**
 
-Comprehensive documentation added to `spec/audit.md` covering:
+Comprehensive documentation added to `spec/AUDIT.md` covering:
 
 - ✅ Summary of changes
 - ✅ Governance updates (7 changes)
@@ -195,7 +195,7 @@ Comprehensive documentation added to `spec/audit.md` covering:
 
 5. **Add new WETH test scenarios** (20-30 minutes)
 
-6. **Update audit.md** (10 minutes)
+6. **Update AUDIT.md** (10 minutes)
 
 ### Files Modified So Far
 
@@ -205,7 +205,7 @@ Comprehensive documentation added to `spec/audit.md` covering:
 ✅ `src/LevrGovernor_v1.sol` - Implementation updated  
 ✅ `src/LevrTreasury_v1.sol` - Implementation updated  
 ✅ `test/**/*.sol` - All 296 tests updated  
-✅ `spec/audit.md` - Documentation updated
+✅ `spec/AUDIT.md` - Documentation updated
 
 ### Search Commands to Find All Tests Needing Updates
 

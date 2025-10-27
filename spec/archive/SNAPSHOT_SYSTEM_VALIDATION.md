@@ -330,7 +330,7 @@ The snapshot system implementation is **production-ready and bulletproof**:
 2. ✅ Comprehensive testing completed
 3. ✅ Edge cases validated
 4. ✅ Attack vectors blocked
-5. ⏭️ Update audit.md with snapshot validation results
+5. ⏭️ Update AUDIT.md with snapshot validation results
 6. ⏭️ Consider external professional audit
 7. ⏭️ Deploy to testnet for final validation
 

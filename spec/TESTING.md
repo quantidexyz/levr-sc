@@ -805,7 +805,7 @@ forge test --match-test test_name -vvv
 ### Test Documentation
 
 - **[USER_FLOWS.md](./USER_FLOWS.md)** - Systematic flow mapping methodology
-- **[comparative-audit.md](./comparative-audit.md)** - Industry comparison approach
+- **[comparative-AUDIT.md](./comparative-AUDIT.md)** - Industry comparison approach
 - **[HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)** - Bug discovery and testing lessons
 
 ### Archived

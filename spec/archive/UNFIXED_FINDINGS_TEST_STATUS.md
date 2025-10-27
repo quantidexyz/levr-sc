@@ -1,7 +1,7 @@
 # Unfixed Audit Findings - Test Status
 
 **Date:** October 26, 2025  
-**Purpose:** Track test coverage for all unfixed critical bugs from audit.md  
+**Purpose:** Track test coverage for all unfixed critical bugs from AUDIT.md  
 **Status:** All critical bugs have comprehensive failing tests
 
 ---
@@ -374,7 +374,7 @@ Run all tests again to ensure:
 - ✅ All test issue tests now PASS (tests corrected)
 - ✅ All other tests still PASS (no regressions)
 
-### 4. Update Audit.md
+### 4. Update AUDIT.md
 
 Mark all 4 critical findings as ✅ **RESOLVED** with test coverage confirmation
 

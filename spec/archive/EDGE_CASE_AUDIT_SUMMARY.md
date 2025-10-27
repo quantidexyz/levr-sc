@@ -11,18 +11,18 @@
 
 A comprehensive edge case analysis was conducted on the Governor and FeeSplitter contracts using systematic user flow mapping. This analysis:
 
-✅ **Verified all 4 critical governor bugs are FIXED** (audit.md was outdated)  
+✅ **Verified all 4 critical governor bugs are FIXED** (AUDIT.md was outdated)  
 ✅ **Created 67 new edge case tests** (100% passing)  
 ✅ **Discovered 5 new MEDIUM severity findings** (all documented with workarounds)  
 ✅ **Validated 140+ total test coverage** across both systems
 
 **Key Outcomes:**
 
-| Component              | Original Tests | New Tests Added | Total Tests | Status          |
-| ---------------------- | -------------- | --------------- | ----------- | --------------- |
-| LevrGovernor_v1        | 46             | +20             | 66          | ✅ ALL PASSING  |
-| LevrFeeSplitter_v1     | 27             | +47             | 74          | ✅ ALL PASSING  |
-| **Combined**           | **73**         | **+67**         | **140**     | **✅ COMPLETE** |
+| Component          | Original Tests | New Tests Added | Total Tests | Status          |
+| ------------------ | -------------- | --------------- | ----------- | --------------- |
+| LevrGovernor_v1    | 46             | +20             | 66          | ✅ ALL PASSING  |
+| LevrFeeSplitter_v1 | 27             | +47             | 74          | ✅ ALL PASSING  |
+| **Combined**       | **73**         | **+67**         | **140**     | **✅ COMPLETE** |
 
 ---
 
@@ -30,7 +30,7 @@ A comprehensive edge case analysis was conducted on the Governor and FeeSplitter
 
 ### Critical Documentation Issue
 
-**Finding:** The audit.md file claimed NEW-C-1, C-2, C-3, C-4 were "🔴 NOT FIXED", but code inspection and test results prove they **ARE FIXED**.
+**Finding:** The AUDIT.md file claimed NEW-C-1, C-2, C-3, C-4 were "🔴 NOT FIXED", but code inspection and test results prove they **ARE FIXED**.
 
 **Evidence:**
 
@@ -67,7 +67,7 @@ _activeProposalCount[ProposalType.TransferToAddress] = 0;
    → "Count RESET to 0 when cycle changed"
 ```
 
-**Resolution:** ✅ Updated audit.md to reflect actual implementation status
+**Resolution:** ✅ Updated AUDIT.md to reflect actual implementation status
 
 ---
 
@@ -75,13 +75,13 @@ _activeProposalCount[ProposalType.TransferToAddress] = 0;
 
 ### Bugs Fixed (Verified)
 
-| Bug ID  | Description                     | Status       | Test Coverage   |
-| ------- | ------------------------------- | ------------ | --------------- |
-| NEW-C-1 | Supply increase manipulation    | ✅ **FIXED** | 18 tests        |
-| NEW-C-2 | Supply decrease manipulation    | ✅ **FIXED** | 18 tests        |
-| NEW-C-3 | Config winner manipulation      | ✅ **FIXED** | 18 tests        |
-| NEW-C-4 | Active count gridlock           | ✅ **FIXED** | 4 tests         |
-| NEW-M-1 | VP precision loss               | ℹ️ BY DESIGN | 3 tests         |
+| Bug ID  | Description                  | Status       | Test Coverage |
+| ------- | ---------------------------- | ------------ | ------------- |
+| NEW-C-1 | Supply increase manipulation | ✅ **FIXED** | 18 tests      |
+| NEW-C-2 | Supply decrease manipulation | ✅ **FIXED** | 18 tests      |
+| NEW-C-3 | Config winner manipulation   | ✅ **FIXED** | 18 tests      |
+| NEW-C-4 | Active count gridlock        | ✅ **FIXED** | 4 tests       |
+| NEW-M-1 | VP precision loss            | ℹ️ BY DESIGN | 3 tests       |
 
 ### New Edge Cases Discovered (20 tests added)
 
@@ -116,6 +116,7 @@ _activeProposalCount[ProposalType.TransferToAddress] = 0;
 **Test:** `test_edgeCase_invalidBps_snapshotBehavior()`
 
 **Impact:**
+
 - Governance can be rendered impossible
 - Proposals snapshot invalid values at creation
 - Even with 100% participation, proposals fail
@@ -141,6 +142,7 @@ if (newConfig.approvalBps > 10000) revert InvalidBps();
 **Test:** `test_edgeCase_zeroTotalSupplySnapshot_actuallySucceeds()`
 
 **Impact:**
+
 - Wasteful (gas spent on un-executable proposals)
 - Proposals can never be voted on (no one has VP)
 
@@ -162,16 +164,17 @@ function _propose(...) internal {
 
 ### Previously Fixed Issues (Verified)
 
-| Issue   | Description                  | Status      | Test Coverage |
-| ------- | ---------------------------- | ----------- | ------------- |
-| FS-C-1  | Auto-accrual revert          | ✅ **FIXED** | 2 tests       |
-| FS-H-1  | Duplicate receivers          | ✅ **FIXED** | 1 test        |
-| FS-H-2  | Unbounded receiver array     | ✅ **FIXED** | 1 test        |
-| FS-M-1  | Dust accumulation            | ✅ **FIXED** | 3 tests       |
+| Issue  | Description              | Status       | Test Coverage |
+| ------ | ------------------------ | ------------ | ------------- |
+| FS-C-1 | Auto-accrual revert      | ✅ **FIXED** | 2 tests       |
+| FS-H-1 | Duplicate receivers      | ✅ **FIXED** | 1 test        |
+| FS-H-2 | Unbounded receiver array | ✅ **FIXED** | 1 test        |
+| FS-M-1 | Dust accumulation        | ✅ **FIXED** | 3 tests       |
 
 ### New Edge Cases Discovered (47 tests added)
 
 **Factory (7 tests):**
+
 1. ✅ Weak validation (deploy for any token)
 2. ✅ Double deployment prevention
 3. ✅ CREATE2 salt collision handling
@@ -180,58 +183,21 @@ function _propose(...) internal {
 6. ✅ Same salt same token rejection
 7. ✅ Zero salt deployment
 
-**Configuration (6 tests):**
-8. ✅ Reconfigure to empty array
-9. ✅ Receiver is splitter itself (stuck funds)
-10. ✅ Receiver is factory address
-11. ✅ BPS overflow scenarios
-12. ✅ Admin change handling
-13. ✅ Project not registered validation
+**Configuration (6 tests):** 8. ✅ Reconfigure to empty array 9. ✅ Receiver is splitter itself (stuck funds) 10. ✅ Receiver is factory address 11. ✅ BPS overflow scenarios 12. ✅ Admin change handling 13. ✅ Project not registered validation
 
-**Distribution (9 tests):**
-14. ✅ 1 wei distribution (all round to 0)
-15. ✅ Minimal rounding scenarios
-16. ✅ Overflow protection
-17. ✅ Immediate reconfiguration
-18. ✅ Duplicate tokens in batch
-19. ✅ Empty batch array
-20. ✅ Large batch (100 tokens)
-21. ✅ Exact dust calculations
-22. ✅ Single receiver (no dust)
+**Distribution (9 tests):** 14. ✅ 1 wei distribution (all round to 0) 15. ✅ Minimal rounding scenarios 16. ✅ Overflow protection 17. ✅ Immediate reconfiguration 18. ✅ Duplicate tokens in batch 19. ✅ Empty batch array 20. ✅ Large batch (100 tokens) 21. ✅ Exact dust calculations 22. ✅ Single receiver (no dust)
 
-**Dust Recovery (4 tests):**
-23. ✅ All balance as dust
-24. ✅ Zero address rejection
-25. ✅ No dust scenario
-26. ✅ Never-distributed token
+**Dust Recovery (4 tests):** 23. ✅ All balance as dust 24. ✅ Zero address rejection 25. ✅ No dust scenario 26. ✅ Never-distributed token
 
-**Auto-Accrual (4 tests):**
-27. ✅ Multiple staking prevention
-28. ✅ Batch accrual
-29. ✅ 100% to staking
-30. ✅ 0% to staking
+**Auto-Accrual (4 tests):** 27. ✅ Multiple staking prevention 28. ✅ Batch accrual 29. ✅ 100% to staking 30. ✅ 0% to staking
 
-**State Consistency (4 tests):**
-31. ✅ Distribution state accumulation
-32. ✅ Multiple reconfigurations
-33. ✅ Persistence across reconfigs
-34. ✅ View function consistency
+**State Consistency (4 tests):** 31. ✅ Distribution state accumulation 32. ✅ Multiple reconfigurations 33. ✅ Persistence across reconfigs 34. ✅ View function consistency
 
-**External Dependencies (4 tests):**
-35. ✅ Missing metadata handling
-36. ✅ Unregistered project
-37. ✅ collectRewards failure
-38. ✅ Fee locker failure
+**External Dependencies (4 tests):** 35. ✅ Missing metadata handling 36. ✅ Unregistered project 37. ✅ collectRewards failure 38. ✅ Fee locker failure
 
-**Cross-Contract (2 tests):**
-39. ✅ Staking address change (CRITICAL)
-40. ✅ Unconfigured distribution
+**Cross-Contract (2 tests):** 39. ✅ Staking address change (CRITICAL) 40. ✅ Unconfigured distribution
 
-**Arithmetic (8 tests):**
-41. ✅ Prime number balance
-42. ✅ Max receivers
-43. ✅ BPS off-by-one scenarios
-44. ✅ Extreme rounding cases
+**Arithmetic (8 tests):** 41. ✅ Prime number balance 42. ✅ Max receivers 43. ✅ BPS off-by-one scenarios 44. ✅ Extreme rounding cases
 
 ### New MEDIUM Findings
 
@@ -243,6 +209,7 @@ function _propose(...) internal {
 **Test:** `test_splitter_stakingAddressChange_affectsDistribution()`
 
 **Scenario:**
+
 ```
 Configure: staking = 0xAAA → stored in splits
 Factory updates: staking = 0xCCC
@@ -251,6 +218,7 @@ Result: Fees sent but NOT accrued!
 ```
 
 **Impact:**
+
 - Fees delivered but not auto-accrued
 - Requires manual accrual OR reconfiguration
 - Medium likelihood if project migrates staking
@@ -267,6 +235,7 @@ Result: Fees sent but NOT accrued!
 **Test:** `test_splitter_receiverIsSplitterItself()`
 
 **Impact:**
+
 - Creates stuck funds (30% sent to splitter becomes trapped)
 - Recoverable via recoverDust()
 - Wasteful and confusing
@@ -289,6 +258,7 @@ if (splits[i].receiver == address(this)) revert CannotSendToSelf();
 **Test:** `test_splitter_distributeBatch_veryLargeArray_gasLimit()`
 
 **Impact:**
+
 - Very large batches (800+ tokens) could exceed gas limit
 - DOS via gas bomb
 
@@ -305,15 +275,15 @@ require(rewardTokens.length <= MAX_BATCH_SIZE, "BATCH_TOO_LARGE");
 
 ## Comparison: Governor vs FeeSplitter Security
 
-| Aspect                     | Governor          | FeeSplitter       |
-| -------------------------- | ----------------- | ----------------- |
-| Critical Issues Fixed      | ✅ 4/4 (100%)     | ✅ 1/1 (100%)     |
-| High Issues Fixed          | ✅ 0 new          | ✅ 2/2 (100%)     |
-| Medium Issues              | 2 (documented)    | 3 (documented)    |
-| New Edge Cases Found       | 20                | 47                |
-| Test Coverage              | 66 tests          | 74 tests          |
-| Production Readiness       | ✅ **APPROVED**   | ✅ **APPROVED**   |
-| Recommended Improvements   | 2 (low priority)  | 3 (low priority)  |
+| Aspect                   | Governor         | FeeSplitter      |
+| ------------------------ | ---------------- | ---------------- |
+| Critical Issues Fixed    | ✅ 4/4 (100%)    | ✅ 1/1 (100%)    |
+| High Issues Fixed        | ✅ 0 new         | ✅ 2/2 (100%)    |
+| Medium Issues            | 2 (documented)   | 3 (documented)   |
+| New Edge Cases Found     | 20               | 47               |
+| Test Coverage            | 66 tests         | 74 tests         |
+| Production Readiness     | ✅ **APPROVED**  | ✅ **APPROVED**  |
+| Recommended Improvements | 2 (low priority) | 3 (low priority) |
 
 ---
 
@@ -322,52 +292,61 @@ require(rewardTokens.length <= MAX_BATCH_SIZE, "BATCH_TOO_LARGE");
 ### Strengths
 
 ✅ **Comprehensive snapshot mechanism** (Governor)
-  - Immune to supply manipulation
-  - Immune to config manipulation
-  - Winner determination is stable
+
+- Immune to supply manipulation
+- Immune to config manipulation
+- Winner determination is stable
 
 ✅ **Robust cycle management** (Governor)
-  - Count resets prevent gridlock
-  - Orphan proposal protection
-  - Recovery mechanisms for failed cycles
+
+- Count resets prevent gridlock
+- Orphan proposal protection
+- Recovery mechanisms for failed cycles
 
 ✅ **Defense in depth** (FeeSplitter)
-  - Try/catch on all external calls
-  - Reentrancy guards
-  - SafeERC20 for all transfers
-  - Dust recovery mechanism
+
+- Try/catch on all external calls
+- Reentrancy guards
+- SafeERC20 for all transfers
+- Dust recovery mechanism
 
 ✅ **Access control**
-  - Dynamic admin checking
-  - Permissionless where appropriate
-  - Protected where necessary
+
+- Dynamic admin checking
+- Permissionless where appropriate
+- Protected where necessary
 
 ### Weaknesses (All with Workarounds)
 
 🟡 **Invalid BPS configuration** (Governor + FeeSplitter)
-  - Factory doesn't validate BPS <= 10000
-  - Can render governance/distribution impossible
-  - **Workaround:** Factory owner reconfigures with valid values
+
+- Factory doesn't validate BPS <= 10000
+- Can render governance/distribution impossible
+- **Workaround:** Factory owner reconfigures with valid values
 
 🟡 **Staking address mismatch** (FeeSplitter)
-  - Split receiver captured at config time
-  - Auto-accrual target dynamic
-  - Can diverge if factory updated
-  - **Workaround:** Reconfigure splits OR manual accrual
+
+- Split receiver captured at config time
+- Auto-accrual target dynamic
+- Can diverge if factory updated
+- **Workaround:** Reconfigure splits OR manual accrual
 
 🟡 **Self-send allowed** (FeeSplitter)
-  - Can send fees to splitter itself
-  - Creates stuck funds
-  - **Workaround:** recoverDust()
+
+- Can send fees to splitter itself
+- Creates stuck funds
+- **Workaround:** recoverDust()
 
 🟡 **No batch limit** (FeeSplitter)
-  - Very large batches could hit gas limit
-  - **Workaround:** Practical limit is block gas (30M)
+
+- Very large batches could hit gas limit
+- **Workaround:** Practical limit is block gas (30M)
 
 🟡 **Zero supply proposals** (Governor)
-  - Can create proposals with no stakers
-  - Wasteful but harmless
-  - **Workaround:** Set minSTokenBpsToSubmit > 0
+
+- Can create proposals with no stakers
+- Wasteful but harmless
+- **Workaround:** Set minSTokenBpsToSubmit > 0
 
 ---
 
@@ -375,7 +354,8 @@ require(rewardTokens.length <= MAX_BATCH_SIZE, "BATCH_TOO_LARGE");
 
 ### Priority 1: Documentation Updates (1 hour)
 
-✅ **COMPLETED** - Updated audit.md to reflect:
+✅ **COMPLETED** - Updated AUDIT.md to reflect:
+
 - All critical bugs are fixed
 - Snapshot mechanism working
 - Count reset implemented
@@ -404,14 +384,14 @@ function updateConfig(FactoryConfig memory newConfig) external onlyOwner {
 ```solidity
 function _validateSplits(...) internal view {
     // ... existing validation ...
-    
+
     for (uint256 i = 0; i < splits.length; i++) {
         // Prevent self-send
         if (splits[i].receiver == address(this)) revert CannotSendToSelf();
-        
+
         // Prevent sending to factory (likely mistake)
         if (splits[i].receiver == factory) revert CannotSendToFactory();
-        
+
         // ... rest of validation
     }
 }
@@ -438,11 +418,13 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 **Scope:** Full protocol audit by professional firm
 
 **Rationale:**
+
 - 140+ tests provide strong coverage
 - Systematic methodology validates edge cases
 - But external review adds confidence for production
 
 **Firms to Consider:**
+
 - Trail of Bits
 - OpenZeppelin
 - Consensys Diligence
@@ -455,22 +437,26 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 ### Systematic User Flow Mapping
 
 **Step 1: Map ALL user interactions**
+
 - 22 flows for main protocol
 - 21 flows for fee splitter
 - **Total: 43 user flows documented**
 
 **Step 2: Identify state changes for each flow**
+
 - What reads happen when?
 - What writes happen when?
 - What can change between steps?
 
 **Step 3: Ask critical questions**
+
 - "What if X changes between step A and B?"
 - "What if value overflows/underflows?"
 - "What if external call fails?"
 - "What if same operation happens twice?"
 
 **Step 4: Categorize by pattern**
+
 - State synchronization issues (snapshots)
 - Boundary conditions (0, 1, max values)
 - Ordering dependencies (race conditions)
@@ -479,6 +465,7 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 - External dependencies (failures, reentrancy)
 
 **Step 5: Create systematic tests**
+
 - One test per edge case
 - Clear console logging
 - Verify expected behavior
@@ -494,6 +481,7 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 ✅ Prevented future bugs via systematic validation
 
 **Same approach that would have caught:**
+
 - Staking midstream accrual bug (Oct 2025)
 - Governor snapshot bugs (Oct 2025)
 - FeeSplitter staking mismatch (Oct 2025)
@@ -504,32 +492,34 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 
 ### Governor Tests (66 total)
 
-| Suite                             | Tests | Focus Area                    |
-| --------------------------------- | ----- | ----------------------------- |
-| LevrGovernor_SnapshotEdgeCases    | 18    | Snapshot mechanism validation |
-| LevrGovernor_ActiveCountGridlock  | 4     | Count reset verification      |
-| LevrGovernor_CriticalLogicBugs    | 4     | Bug reproduction              |
-| LevrGovernor_OtherLogicBugs       | 11    | Additional logic              |
-| LevrGovernorV1.AttackScenarios    | 5     | Real-world attacks            |
-| LevrGovernorV1                    | 4     | Basic functionality           |
-| **LevrGovernor_MissingEdgeCases** | **20**| **Newly discovered edges**    |
+| Suite                             | Tests  | Focus Area                    |
+| --------------------------------- | ------ | ----------------------------- |
+| LevrGovernor_SnapshotEdgeCases    | 18     | Snapshot mechanism validation |
+| LevrGovernor_ActiveCountGridlock  | 4      | Count reset verification      |
+| LevrGovernor_CriticalLogicBugs    | 4      | Bug reproduction              |
+| LevrGovernor_OtherLogicBugs       | 11     | Additional logic              |
+| LevrGovernorV1.AttackScenarios    | 5      | Real-world attacks            |
+| LevrGovernorV1                    | 4      | Basic functionality           |
+| **LevrGovernor_MissingEdgeCases** | **20** | **Newly discovered edges**    |
 
 ### FeeSplitter Tests (74 total)
 
-| Suite                                  | Tests | Focus Area              |
-| -------------------------------------- | ----- | ----------------------- |
-| LevrFeeSplitterV1                      | 20    | Original functionality  |
-| LevrV1.FeeSplitter (E2E)               | 7     | Integration flows       |
-| **LevrFeeSplitter_MissingEdgeCases**   | **47**| **Newly discovered**    |
+| Suite                                | Tests  | Focus Area             |
+| ------------------------------------ | ------ | ---------------------- |
+| LevrFeeSplitterV1                    | 20     | Original functionality |
+| LevrV1.FeeSplitter (E2E)             | 7      | Integration flows      |
+| **LevrFeeSplitter_MissingEdgeCases** | **47** | **Newly discovered**   |
 
 ### Combined Coverage
 
 **Total Tests:** 140+ (100% passing)
+
 - Governor: 66 tests
 - FeeSplitter: 74 tests
 - Plus: Factory, Treasury, Staking, Forwarder tests
 
 **Coverage Categories:**
+
 - ✅ State synchronization
 - ✅ Boundary conditions
 - ✅ Access control
@@ -548,6 +538,7 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 ### Production Readiness: ✅ **APPROVED**
 
 **Governor:** ✅ **PRODUCTION READY**
+
 - All 4 critical bugs fixed
 - 66 tests passing (100%)
 - 2 optional improvements (low priority)
@@ -555,6 +546,7 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 - Cycle management sound
 
 **FeeSplitter:** ✅ **PRODUCTION READY**
+
 - All previous issues fixed
 - 74 tests passing (100%)
 - 3 optional improvements (low priority)
@@ -562,6 +554,7 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 - Safe failure handling
 
 **Combined System:** ✅ **PRODUCTION READY**
+
 - 140+ tests passing
 - All critical/high issues resolved
 - Medium issues documented with workarounds
@@ -570,7 +563,7 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 
 ### Recommended Next Steps
 
-1. ✅ **DONE** - Document all findings in audit.md
+1. ✅ **DONE** - Document all findings in AUDIT.md
 2. ✅ **DONE** - Update USER_FLOWS.md with comprehensive flows
 3. ✅ **DONE** - Create edge case test suites
 4. ⏭️ **OPTIONAL** - Implement 5 low-priority improvements (3 hours)
@@ -580,14 +573,14 @@ function distributeBatch(address[] calldata tokens) external nonReentrant {
 
 ### Risk Assessment
 
-| Category              | Risk Level | Mitigation                        |
-| --------------------- | ---------- | --------------------------------- |
-| Critical Bugs         | ✅ NONE    | All fixed and verified            |
-| High Severity         | ✅ NONE    | All fixed and verified            |
-| Medium Severity       | 🟡 LOW     | 5 findings, all with workarounds  |
-| Edge Cases            | ✅ COVERED | 140+ tests validate all scenarios |
-| Unknown Unknowns      | 🟡 MEDIUM  | External audit recommended        |
-| **Overall Risk**      | **🟢 LOW** | **Ready for production**          |
+| Category         | Risk Level | Mitigation                        |
+| ---------------- | ---------- | --------------------------------- |
+| Critical Bugs    | ✅ NONE    | All fixed and verified            |
+| High Severity    | ✅ NONE    | All fixed and verified            |
+| Medium Severity  | 🟡 LOW     | 5 findings, all with workarounds  |
+| Edge Cases       | ✅ COVERED | 140+ tests validate all scenarios |
+| Unknown Unknowns | 🟡 MEDIUM  | External audit recommended        |
+| **Overall Risk** | **🟢 LOW** | **Ready for production**          |
 
 ---
 
@@ -614,4 +607,3 @@ The Levr V1 protocol has undergone the most comprehensive edge case analysis pos
 **Audit Completed:** October 27, 2025  
 **Status:** ✅ **COMPREHENSIVE AND COMPLETE**  
 **Next Review:** After mainnet deployment + 3 months operation
-

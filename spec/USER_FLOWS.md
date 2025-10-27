@@ -1128,7 +1128,7 @@ T1+7.5d: Execution (WETH moved treasury → staking)
 3. ⏭️ Focus on state synchronization (Category A) first
 4. ⏭️ Test boundary conditions (Category B)
 5. ⏭️ Test ordering dependencies (Category C)
-6. ⏭️ Document all findings in audit.md
+6. ⏭️ Document all findings in AUDIT.md
 7. ⏭️ Implement fixes for all CRITICAL bugs
 8. ⏭️ Retest after fixes
 

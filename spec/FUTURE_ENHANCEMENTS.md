@@ -824,7 +824,7 @@ These documents are archived as they're consolidated above:
 
 ### Current Documentation
 
-- **[audit.md](./audit.md)** - Security audit
+- **[AUDIT.md](./AUDIT.md)** - Security audit
 - **[README.md](./README.md)** - Main entry point
 
 ---

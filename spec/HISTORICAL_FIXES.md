@@ -534,9 +534,9 @@ These documents are archived as they're now consolidated here:
 
 ### Current Documentation
 
-- **[audit.md](./audit.md)** - Complete security audit with all findings
+- **[AUDIT.md](./AUDIT.md)** - Complete security audit with all findings
 - **[USER_FLOWS.md](./USER_FLOWS.md)** - User flow mapping methodology
-- **[comparative-audit.md](./comparative-audit.md)** - Industry comparison
+- **[comparative-AUDIT.md](./comparative-AUDIT.md)** - Industry comparison
 
 ---
 

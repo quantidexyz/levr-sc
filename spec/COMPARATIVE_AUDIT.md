@@ -1095,7 +1095,7 @@ if (msg.value != totalValue) {
 4. Review and verification (2-4 hours)
 5. **Estimated delay: 2-3 days**
 
-**📄 Complete Analysis:** All findings consolidated in `spec/audit.md` (single source of truth)
+**📄 Complete Analysis:** All findings consolidated in `spec/AUDIT.md` (single source of truth)
 
 ---
 

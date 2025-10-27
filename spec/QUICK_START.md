@@ -10,11 +10,11 @@
 ```
 spec/
 ├── 📘 README.md                    ← START HERE (navigation guide)
-├── 🔒 audit.md                     ← Security audit (comprehensive)
+├── 🔒 AUDIT.md                     ← Security audit (comprehensive)
 ├── ⚙️  gov.md                       ← Governance glossary (5 min)
 ├── 💰 fee-splitter.md              ← Fee distribution spec
 ├── 🔄 USER_FLOWS.md                ← User interaction patterns
-├── 📊 comparative-audit.md         ← Industry comparison
+├── 📊 comparative-AUDIT.md         ← Industry comparison
 ├── 📜 HISTORICAL_FIXES.md          ← Past bugs (all fixed)
 ├── 🚀 FUTURE_ENHANCEMENTS.md       ← Optional improvements
 ├── 📋 CHANGELOG.md                 ← Feature evolution
@@ -28,7 +28,7 @@ spec/
 
 ### I'm New to Levr
 
-**Path:** README.md → gov.md → audit.md summary → fee-splitter.md  
+**Path:** README.md → gov.md → AUDIT.md summary → fee-splitter.md  
 **Time:** 20 minutes  
 **Outcome:** Understand protocol, security status, and key features
 
@@ -40,7 +40,7 @@ spec/
 
 ### I'm Reviewing Security
 
-**Path:** audit.md → comparative-audit.md → HISTORICAL_FIXES.md  
+**Path:** AUDIT.md → comparative-AUDIT.md → HISTORICAL_FIXES.md  
 **Time:** 40 minutes  
 **Outcome:** Complete security understanding
 
@@ -62,7 +62,7 @@ spec/
 
 **1. [README.md](./README.md)** - Start here, guides to everything else
 
-**2. [audit.md](./audit.md)** - Security status, all findings, test coverage
+**2. [AUDIT.md](./AUDIT.md)** - Security status, all findings, test coverage
 
 **3. [gov.md](./gov.md)** - Governance mechanics explained simply
 
@@ -96,7 +96,7 @@ spec/
 
 **"Where do I find X?"** → Check [README.md](./README.md) lookup table
 
-**"Is this production ready?"** → Yes! See [audit.md](./audit.md) summary
+**"Is this production ready?"** → Yes! See [AUDIT.md](./AUDIT.md) summary
 
 **"What bugs were fixed?"** → See [HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)
 

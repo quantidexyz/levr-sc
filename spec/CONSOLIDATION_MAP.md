@@ -54,7 +54,7 @@
 | ------------------------------------- | ------------------------------------------------- | --------------- |
 | `TOKEN_AGNOSTIC_MIGRATION_SUMMARY.md` | `CHANGELOG.md` § [1.3.0] Token-Agnostic           | ✅ Consolidated |
 | `FEE_SPLITTER_REFACTOR.md`            | `CHANGELOG.md` § [1.2.0] Per-Project Architecture | ✅ Consolidated |
-| `EDGE_CASE_AUDIT_SUMMARY.md`          | `audit.md` (already covered there)                | ✅ Consolidated |
+| `EDGE_CASE_AUDIT_SUMMARY.md`          | `AUDIT.md` (already covered there)                | ✅ Consolidated |
 
 **All 3 files (1,247 lines) → 1 doc (334 lines)**
 
@@ -74,11 +74,11 @@
 
 | File                   | Status        | Reason                                               |
 | ---------------------- | ------------- | ---------------------------------------------------- |
-| `audit.md`             | ✅ Kept as-is | Most comprehensive audit doc, already well-organized |
+| `AUDIT.md`             | ✅ Kept as-is | Most comprehensive audit doc, already well-organized |
 | `gov.md`               | ✅ Kept as-is | Perfect as quick reference glossary                  |
 | `fee-splitter.md`      | ✅ Kept as-is | Complete specification, well-structured              |
 | `USER_FLOWS.md`        | ✅ Kept as-is | Comprehensive flow mapping, valuable as-is           |
-| `comparative-audit.md` | ✅ Kept as-is | Industry comparison, unique content                  |
+| `comparative-AUDIT.md` | ✅ Kept as-is | Industry comparison, unique content                  |
 
 ---
 
