@@ -291,41 +291,14 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
+        // FIX: Validation now prevents this
+        vm.expectRevert('INVALID_QUORUM_BPS');
         factory.updateConfig(invalidCfg);
 
-        console2.log('Set invalid BPS values:');
-        console2.log('  Quorum: 15000 (150%)');
-        console2.log('  Approval: 20000 (200%)');
-
-        // Create proposal (will snapshot invalid values)
-        vm.prank(alice);
-        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
-
-        ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
-        console2.log('\nSnapshot values:');
-        console2.log('  Quorum snapshot:', prop.quorumBpsSnapshot);
-        console2.log('  Approval snapshot:', prop.approvalBpsSnapshot);
-
-        assertEq(prop.quorumBpsSnapshot, 15000, 'Should snapshot invalid quorum');
-        assertEq(prop.approvalBpsSnapshot, 20000, 'Should snapshot invalid approval');
-
-        // Vote with 100% participation and approval
-        vm.warp(block.timestamp + 2 days + 1);
-        vm.prank(alice);
-        governor.vote(pid, true);
-
-        vm.warp(block.timestamp + 5 days + 1);
-
-        // With 150% quorum requirement, proposal can NEVER meet quorum
-        // (max participation = 100% < 150%)
-        assertFalse(governor.meetsQuorum(pid), 'Cannot meet 150% quorum');
-
-        // Try to execute - should fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
-        governor.execute(pid);
-
-        console2.log('[FINDING] Invalid BPS values make proposals impossible to execute');
-        console2.log('[RECOMMENDATION] Add BPS validation to factory.updateConfig()');
+        console2.log('[FIX CONFIRMED] Invalid BPS values now rejected');
+        console2.log('  Quorum: 15000 (150%) - REJECTED');
+        console2.log('  Approval: 20000 (200%) - REJECTED');
+        console2.log('[SUCCESS] Gridlock scenario prevented by validation');
     }
 
     // ============================================================================
@@ -776,34 +749,13 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             maxProposalAmountBps: 5000,
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
+
+        // FIX: Validation now prevents this
+        vm.expectRevert('INVALID_QUORUM_BPS');
         factory.updateConfig(cfg);
 
-        console2.log('Set quorum/approval to uint16.max:', type(uint16).max);
-
-        // Create proposal
-        vm.prank(alice);
-        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
-
-        ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
-        console2.log('Snapshot quorum:', prop.quorumBpsSnapshot);
-        console2.log('Snapshot approval:', prop.approvalBpsSnapshot);
-
-        // These calculations will overflow:
-        // requiredQuorum = (totalSupply * 65535) / 10000 = totalSupply * 6.5535
-        // requiredApproval = (totalVotes * 65535) / 10000 = totalVotes * 6.5535
-
-        // Proposal can NEVER meet these requirements
-        vm.warp(block.timestamp + 2 days + 1);
-        vm.prank(alice);
-        governor.vote(pid, true);
-
-        vm.warp(block.timestamp + 5 days + 1);
-
-        assertFalse(governor.meetsQuorum(pid), 'Impossible to meet 655.35% quorum');
-        assertFalse(governor.meetsApproval(pid), 'Impossible to meet 655.35% approval');
-
-        console2.log('[FINDING] Extreme BPS values make governance impossible');
-        console2.log('[RECOMMENDATION] Add BPS validation: require(bps <= 10000)');
+        console2.log('[FIX CONFIRMED] uint16.max BPS rejected:', type(uint16).max);
+        console2.log('[SUCCESS] Gridlock scenario prevented by validation');
     }
 
     // ============================================================================

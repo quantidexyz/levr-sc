@@ -219,7 +219,23 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     }
 
     function _applyConfig(FactoryConfig memory cfg) internal {
+        // FIX [CONFIG-GRIDLOCK]: Validate BPS values are <= 100% (10000 basis points)
+        // Prevents permanent gridlocks from impossible quorum/approval requirements
+        require(cfg.quorumBps <= 10000, 'INVALID_QUORUM_BPS');
+        require(cfg.approvalBps <= 10000, 'INVALID_APPROVAL_BPS');
+        require(cfg.minSTokenBpsToSubmit <= 10000, 'INVALID_MIN_STAKE_BPS');
+        require(cfg.maxProposalAmountBps <= 10000, 'INVALID_MAX_PROPOSAL_BPS');
+        require(cfg.protocolFeeBps <= 10000, 'INVALID_PROTOCOL_FEE_BPS');
+
+        // FIX [CONFIG-GRIDLOCK]: Prevent zero values that freeze functionality
+        require(cfg.maxActiveProposals > 0, 'MAX_ACTIVE_PROPOSALS_ZERO');
+        require(cfg.maxRewardTokens > 0, 'MAX_REWARD_TOKENS_ZERO');
+        require(cfg.proposalWindowSeconds > 0, 'PROPOSAL_WINDOW_ZERO');
+        require(cfg.votingWindowSeconds > 0, 'VOTING_WINDOW_ZERO');
+
+        // Existing validation
         require(cfg.streamWindowSeconds >= 1 days, 'STREAM_WINDOW_TOO_SHORT');
+
         protocolFeeBps = cfg.protocolFeeBps;
         streamWindowSeconds = cfg.streamWindowSeconds;
         protocolTreasury = cfg.protocolTreasury;

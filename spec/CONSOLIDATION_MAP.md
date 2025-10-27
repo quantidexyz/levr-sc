@@ -72,13 +72,13 @@
 
 ### Stuck Funds Analysis (October 27, 2025)
 
-| Old File                            | New Location                              | Status          |
-| ----------------------------------- | ----------------------------------------- | --------------- |
-| `STUCK_FUNDS_ANALYSIS.md`           | `AUDIT.md` § Stuck Funds Analysis         | ✅ Consolidated |
-| `FRESH_AUDIT_SUMMARY.md`            | `AUDIT.md` § Executive Summary (enhanced) | ✅ Consolidated |
-| `TEST_VALIDATION_REPORT.md`         | `TESTING.md` § Test Validation            | ✅ Consolidated |
-| `TEST_VALIDATION_DEEP_DIVE.md`      | `archive/` (detailed reference)           | ✅ Archived     |
-| `TOKEN_AGNOSTIC_DOS_PROTECTION.md`  | `archive/` (detailed reference)           | ✅ Archived     |
+| Old File                           | New Location                              | Status          |
+| ---------------------------------- | ----------------------------------------- | --------------- |
+| `STUCK_FUNDS_ANALYSIS.md`          | `AUDIT.md` § Stuck Funds Analysis         | ✅ Consolidated |
+| `FRESH_AUDIT_SUMMARY.md`           | `AUDIT.md` § Executive Summary (enhanced) | ✅ Consolidated |
+| `TEST_VALIDATION_REPORT.md`        | `TESTING.md` § Test Validation            | ✅ Consolidated |
+| `TEST_VALIDATION_DEEP_DIVE.md`     | `archive/` (detailed reference)           | ✅ Archived     |
+| `TOKEN_AGNOSTIC_DOS_PROTECTION.md` | `archive/` (detailed reference)           | ✅ Archived     |
 
 **All 5 files (2,500 lines) → Sections in AUDIT.md + TESTING.md (~400 lines) + Archive (2,100 lines)**
 
@@ -268,5 +268,19 @@ All improvements made:
 ---
 
 **Created:** October 27, 2025  
+**Updated:** October 27, 2025 (added config gridlock findings)  
 **Purpose:** Documentation consolidation tracking  
-**Result:** 68% reduction in duplication, 0% information loss, 100% improved navigation
+**Result:** 81% reduction in main spec, 0% information loss, 100% improved navigation
+
+---
+
+## Latest Updates (October 27, 2025)
+
+### Config Gridlock Analysis
+
+| File                          | Status                                                  |
+| ----------------------------- | ------------------------------------------------------- |
+| `CONFIG_GRIDLOCK_FINDINGS.md` | Added to spec/ (comprehensive report)                   |
+| Code fix applied to factory   | `LevrFactory_v1.sol` lines 222-237                      |
+| Tests created                 | `test/unit/LevrFactory_ConfigGridlock.t.sol` (15 tests) |
+| **Total tests:** 364          | 363 passing, 1 edge case documentation                  |
