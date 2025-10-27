@@ -11,10 +11,10 @@
 spec/
 ├── 📘 README.md                    ← START HERE (navigation guide)
 ├── 🔒 AUDIT.md                     ← Security audit (comprehensive)
-├── ⚙️  gov.md                       ← Governance glossary (5 min)
-├── 💰 fee-splitter.md              ← Fee distribution spec
+├── ⚙️ GOV.md                       ← Governance glossary (5 min)
+├── 💰 FEE_SPLITTER.md              ← Fee distribution spec
 ├── 🔄 USER_FLOWS.md                ← User interaction patterns
-├── 📊 comparative-AUDIT.md         ← Industry comparison
+├── 📊 COMPARATIVE_AUDIT.md         ← Industry comparison
 ├── 📜 HISTORICAL_FIXES.md          ← Past bugs (all fixed)
 ├── 🚀 FUTURE_ENHANCEMENTS.md       ← Optional improvements
 ├── 📋 CHANGELOG.md                 ← Feature evolution
@@ -28,19 +28,19 @@ spec/
 
 ### I'm New to Levr
 
-**Path:** README.md → gov.md → AUDIT.md summary → fee-splitter.md  
+**Path:** README.md → GOV.md → AUDIT.md summary → FEE_SPLITTER.md
 **Time:** 20 minutes  
 **Outcome:** Understand protocol, security status, and key features
 
 ### I'm Implementing Features
 
-**Path:** gov.md OR fee-splitter.md → USER_FLOWS.md (specific flows)  
+**Path:** GOV.md OR FEE_SPLITTER.md→ USER_FLOWS.md (specific flows)  
 **Time:** 10 minutes  
 **Outcome:** Implementation-ready understanding
 
 ### I'm Reviewing Security
 
-**Path:** AUDIT.md → comparative-AUDIT.md → HISTORICAL_FIXES.md  
+**Path:** AUDIT.md → COMPARATIVE_AUDIT.md → HISTORICAL_FIXES.md  
 **Time:** 40 minutes  
 **Outcome:** Complete security understanding
 
@@ -64,7 +64,7 @@ spec/
 
 **2. [AUDIT.md](./AUDIT.md)** - Security status, all findings, test coverage
 
-**3. [gov.md](./gov.md)** - Governance mechanics explained simply
+**3. [GOV.md](./GOV.md)** - Governance mechanics explained simply
 
 **4. [HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)** - Learn from past bugs
 
@@ -84,7 +84,7 @@ spec/
 
 ## 💡 Pro Tips
 
-1. **Start with gov.md** - It's short and gives you the mental model
+1. **Start with GOV.md** - It's short and gives you the mental model
 2. **Use README.md tables** - Quick lookup for "I need to understand X"
 3. **Check CHANGELOG.md** - See what changed recently
 4. **Archive is for deep dives** - Most info is in main docs

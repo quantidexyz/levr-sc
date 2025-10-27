@@ -13,10 +13,10 @@
 | Document                                           | Purpose                                   | When to Use                                      |
 | -------------------------------------------------- | ----------------------------------------- | ------------------------------------------------ |
 | **[AUDIT.md](./AUDIT.md)**                         | Complete security audit with all findings | Understanding security, fixes, and test coverage |
-| **[gov.md](./gov.md)**                             | Governance glossary and quick reference   | Quick lookup of governance mechanics             |
+| **[GOV.md](./GOV.md)**                             | Governance glossary and quick reference   | Quick lookup of governance mechanics             |
 | **[fee-splitter.md](./fee-splitter.md)**           | Fee splitter specification                | Implementing fee distribution                    |
 | **[USER_FLOWS.md](./USER_FLOWS.md)**               | Comprehensive user interaction flows      | Understanding protocol behavior and edge cases   |
-| **[comparative-AUDIT.md](./comparative-AUDIT.md)** | Industry security comparison              | Validating security vs industry standards        |
+| **[COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)** | Industry security comparison              | Validating security vs industry standards        |
 
 ### Supporting Documentation
 
@@ -33,14 +33,14 @@
 
 ### Understanding the Protocol
 
-1. Start with **[gov.md](./gov.md)** - 5 min overview of governance mechanics
+1. Start with **[GOV.md](./GOV.md)** - 5 min overview of governance mechanics
 2. Read **[AUDIT.md](./AUDIT.md)** executive summary - 10 min overview of security status
 3. Check **[USER_FLOWS.md](./USER_FLOWS.md)** for specific interaction patterns
 
 ### Implementing Features
 
 - **Fee Distribution:** See [fee-splitter.md](./fee-splitter.md)
-- **Governance Integration:** See [gov.md](./gov.md) + [USER_FLOWS.md](./USER_FLOWS.md)
+- **Governance Integration:** See [GOV.md](./GOV.md) + [USER_FLOWS.md](./USER_FLOWS.md)
 - **Security Review:** See [AUDIT.md](./AUDIT.md)
 
 ### Historical Context
@@ -85,11 +85,11 @@
 
 | Topic                      | Document                                           | Section                       |
 | -------------------------- | -------------------------------------------------- | ----------------------------- |
-| How governance works       | [gov.md](./gov.md)                                 | Full document                 |
+| How governance works       | [GOV.md](./GOV.md)                                 | Full document                 |
 | How fee distribution works | [fee-splitter.md](./fee-splitter.md)               | Architecture section          |
 | Security vulnerabilities   | [AUDIT.md](./AUDIT.md)                             | Critical/High/Medium findings |
 | User interaction patterns  | [USER_FLOWS.md](./USER_FLOWS.md)                   | Flow categories               |
-| Industry comparison        | [comparative-AUDIT.md](./comparative-AUDIT.md)     | Comparison matrices           |
+| Industry comparison        | [COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)     | Comparison matrices           |
 | Why bugs happened          | [HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)       | Bug analysis sections         |
 | Future improvements        | [FUTURE_ENHANCEMENTS.md](./FUTURE_ENHANCEMENTS.md) | Enhancement categories        |
 | Recent changes             | [CHANGELOG.md](./CHANGELOG.md)                     | Chronological entries         |

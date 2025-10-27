@@ -75,10 +75,10 @@
 | File                   | Status        | Reason                                               |
 | ---------------------- | ------------- | ---------------------------------------------------- |
 | `AUDIT.md`             | ✅ Kept as-is | Most comprehensive audit doc, already well-organized |
-| `gov.md`               | ✅ Kept as-is | Perfect as quick reference glossary                  |
+| `GOV.md`               | ✅ Kept as-is | Perfect as quick reference glossary                  |
 | `fee-splitter.md`      | ✅ Kept as-is | Complete specification, well-structured              |
 | `USER_FLOWS.md`        | ✅ Kept as-is | Comprehensive flow mapping, valuable as-is           |
-| `comparative-AUDIT.md` | ✅ Kept as-is | Industry comparison, unique content                  |
+| `COMPARATIVE_AUDIT.md` | ✅ Kept as-is | Industry comparison, unique content                  |
 
 ---
 
