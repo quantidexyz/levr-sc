@@ -70,6 +70,20 @@
 
 ---
 
+### Stuck Funds Analysis (October 27, 2025)
+
+| Old File                            | New Location                              | Status          |
+| ----------------------------------- | ----------------------------------------- | --------------- |
+| `STUCK_FUNDS_ANALYSIS.md`           | `AUDIT.md` § Stuck Funds Analysis         | ✅ Consolidated |
+| `FRESH_AUDIT_SUMMARY.md`            | `AUDIT.md` § Executive Summary (enhanced) | ✅ Consolidated |
+| `TEST_VALIDATION_REPORT.md`         | `TESTING.md` § Test Validation            | ✅ Consolidated |
+| `TEST_VALIDATION_DEEP_DIVE.md`      | `archive/` (detailed reference)           | ✅ Archived     |
+| `TOKEN_AGNOSTIC_DOS_PROTECTION.md`  | `archive/` (detailed reference)           | ✅ Archived     |
+
+**All 5 files (2,500 lines) → Sections in AUDIT.md + TESTING.md (~400 lines) + Archive (2,100 lines)**
+
+---
+
 ### Files Unchanged (Core Documentation)
 
 | File                   | Status        | Reason                                               |
@@ -121,17 +135,25 @@ All original files moved to `archive/` folder for historical reference:
 
 **Plus:** Archive README explaining organization
 
+**Category 6: Stuck Funds Analysis (5 files - October 27, 2025)**
+
+- STUCK_FUNDS_ANALYSIS.md
+- FRESH_AUDIT_SUMMARY.md
+- TEST_VALIDATION_REPORT.md
+- TEST_VALIDATION_DEEP_DIVE.md
+- TOKEN_AGNOSTIC_DOS_PROTECTION.md
+
 ---
 
 ## 🔄 Information Flow
 
 ```
-18 Detailed/Duplicate Files
+23 Detailed/Duplicate Files
          ↓
     Consolidation
          ↓
-    4 New Files
-    (68% smaller, 0% info loss)
+    9 Core Files + Archive
+    (75% smaller, 0% info loss)
          ↓
   Easy Navigation
 ```
