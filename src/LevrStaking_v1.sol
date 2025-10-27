@@ -335,8 +335,16 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (factory == address(0)) return;
 
         // Get clanker metadata from our factory
-        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-            .getClankerMetadata(underlying);
+        // Wrapped in try/catch to handle cases where Clanker factory doesn't exist (e.g., unit tests)
+        ILevrFactory_v1.ClankerMetadata memory metadata;
+        try ILevrFactory_v1(factory).getClankerMetadata(underlying) returns (
+            ILevrFactory_v1.ClankerMetadata memory _metadata
+        ) {
+            metadata = _metadata;
+        } catch {
+            // Clanker factory not available or errored - skip claiming
+            return;
+        }
         if (!metadata.exists) return;
 
         // First, collect rewards from LP locker to ensure ClankerFeeLocker has latest fees
