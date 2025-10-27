@@ -34,6 +34,10 @@ contract LevrStakingV1_UnitTest is Test {
         return 3 days; // Default stream window for tests
     }
 
+    function maxRewardTokens() external pure returns (uint16) {
+        return 50; // Default max reward tokens for tests
+    }
+
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         // Pass address(0) for forwarder since we're not testing meta-transactions here

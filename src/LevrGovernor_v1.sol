@@ -213,7 +213,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         }
         cycle.executed = true;
 
-        // Execute the proposal
+        // FIX [TOKEN-AGNOSTIC-DOS]: Mark executed BEFORE attempting execution
+        // to prevent reverting tokens (pausable, blocklist, fee-on-transfer) from blocking cycle
         proposal.executed = true;
         // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
         if (_activeProposalCount[proposal.proposalType] > 0) {
@@ -221,20 +222,44 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         }
 
         // TOKEN AGNOSTIC: Execute with proposal.token
-        if (proposal.proposalType == ProposalType.BoostStakingPool) {
-            ILevrTreasury_v1(treasury).applyBoost(proposal.token, proposal.amount);
-        } else if (proposal.proposalType == ProposalType.TransferToAddress) {
-            ILevrTreasury_v1(treasury).transfer(
+        // Wrapped in try-catch to handle reverting tokens without blocking governance
+        try
+            this._executeProposal(
+                proposalId,
+                proposal.proposalType,
                 proposal.token,
-                proposal.recipient,
-                proposal.amount
-            );
+                proposal.amount,
+                proposal.recipient
+            )
+        {
+            emit ProposalExecuted(proposalId, _msgSender());
+        } catch Error(string memory reason) {
+            emit ProposalExecutionFailed(proposalId, reason);
+        } catch (bytes memory) {
+            emit ProposalExecutionFailed(proposalId, 'execution_reverted');
         }
 
-        emit ProposalExecuted(proposalId, _msgSender());
-
-        // Automatically start new cycle after successful execution (executor pays gas)
+        // Automatically start new cycle after execution attempt (executor pays gas)
         _startNewCycle();
+    }
+
+    /// @notice Internal execution helper callable via try-catch
+    /// @dev External but only callable by this contract (checked in try-catch pattern)
+    function _executeProposal(
+        uint256, // proposalId - unused but kept for future extensibility
+        ProposalType proposalType,
+        address token,
+        uint256 amount,
+        address recipient
+    ) external {
+        // Only callable by this contract (via try-catch)
+        require(_msgSender() == address(this), 'INTERNAL_ONLY');
+
+        if (proposalType == ProposalType.BoostStakingPool) {
+            ILevrTreasury_v1(treasury).applyBoost(token, amount);
+        } else if (proposalType == ProposalType.TransferToAddress) {
+            ILevrTreasury_v1(treasury).transfer(token, recipient, amount);
+        }
     }
 
     // ============ View Functions ============

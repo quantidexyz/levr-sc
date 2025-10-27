@@ -49,7 +49,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
-            maxProposalAmountBps: 5000 // 50%
+            maxProposalAmountBps: 5000, // 50%,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
@@ -286,7 +287,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 15000, // INVALID: 150% > 100%
             approvalBps: 20000, // INVALID: 200% > 100%
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
         factory.updateConfig(invalidCfg);
@@ -423,7 +425,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 5000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg1);
         console2.log('Config 1: quorum = 50%');
@@ -536,7 +539,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0, // NO MINIMUM
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 
@@ -648,7 +652,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 5000, // Changed to 50%
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
 
@@ -768,7 +773,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: type(uint16).max, // 65535
             approvalBps: type(uint16).max, // 65535
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 
@@ -1077,7 +1083,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 0 // NO LIMIT
+            maxProposalAmountBps: 0, // NO LIMIT,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 
@@ -1135,7 +1142,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 10000, // 100%
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0, // Disable for this test
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 

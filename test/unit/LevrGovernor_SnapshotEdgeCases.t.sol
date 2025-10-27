@@ -48,7 +48,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
-            maxProposalAmountBps: 5000 // 50%
+            maxProposalAmountBps: 5000, // 50%,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
@@ -153,7 +154,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 9000, // Changed from 7000 to 9000
             approvalBps: 8000, // Changed from 5100 to 8000
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
 
@@ -246,7 +248,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0, // Disabled
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 
@@ -286,7 +289,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 0, // No quorum requirement
             approvalBps: 0, // No approval requirement
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 
@@ -335,7 +339,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 10000, // 100% participation required
             approvalBps: 10000, // 100% approval required
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 
@@ -414,7 +419,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 8000, // Changed
             approvalBps: 6000, // Changed
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
 
@@ -562,7 +568,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 9000, // Changed from 51% to 90%
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
 
@@ -765,7 +772,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 7000, // Changed from 51% to 70% to invalidate prop1's 66%
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
 
@@ -812,7 +820,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 10000, // 100% required
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
 
@@ -896,7 +905,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 5000, // Changed
             approvalBps: 3000, // Changed
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
 
@@ -1012,7 +1022,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 10000, // 100% approval required
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
 

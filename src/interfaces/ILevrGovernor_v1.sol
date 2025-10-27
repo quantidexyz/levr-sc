@@ -151,6 +151,11 @@ interface ILevrGovernor_v1 {
     /// @param proposalId The ID of the proposal
     event ProposalDefeated(uint256 indexed proposalId);
 
+    /// @notice Emitted when a proposal execution fails (token revert, etc)
+    /// @param proposalId The ID of the proposal
+    /// @param reason The failure reason
+    event ProposalExecutionFailed(uint256 indexed proposalId, string reason);
+
     /// @notice Emitted when a new governance cycle starts
     /// @param cycleId The ID of the new cycle
     /// @param proposalWindowStart Timestamp when proposal window starts

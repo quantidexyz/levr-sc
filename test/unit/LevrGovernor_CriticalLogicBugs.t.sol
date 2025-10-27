@@ -48,7 +48,8 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
-            maxProposalAmountBps: 5000 // 50%
+            maxProposalAmountBps: 5000, // 50%,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
@@ -253,7 +254,12 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
         uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'transfer');
+        uint256 pid2 = governor.proposeTransfer(
+            address(underlying),
+            charlie,
+            500 ether,
+            'transfer'
+        );
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -294,7 +300,8 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 7000, // Changed from 5100 to 7000 (70%)
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
         factory.updateConfig(newCfg);

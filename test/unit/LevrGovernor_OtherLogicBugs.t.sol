@@ -46,7 +46,8 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000
+            maxProposalAmountBps: 5000,
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));

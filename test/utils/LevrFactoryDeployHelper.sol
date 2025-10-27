@@ -92,7 +92,8 @@ contract LevrFactoryDeployHelper is Test {
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
-            maxProposalAmountBps: 500 // 5%
+            maxProposalAmountBps: 500, // 5%
+            maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
     }
 }

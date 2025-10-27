@@ -46,6 +46,12 @@ interface ILevrStaking_v1 {
         uint256 amount
     );
 
+    /// @notice Emitted when a finished reward token is removed from the system
+    event RewardTokenRemoved(address indexed token);
+
+    /// @notice Emitted when a token is added to the whitelist
+    event TokenWhitelisted(address indexed token);
+
     // ============ Functions ============
 
     /// @notice Initialize staking module.

@@ -19,6 +19,8 @@ interface ILevrFactory_v1 {
         uint16 approvalBps; // Minimum yes-vote threshold (e.g., 5100 = 51%)
         uint16 minSTokenBpsToSubmit; // Min % of sToken supply to submit (e.g., 100 = 1%)
         uint16 maxProposalAmountBps; // Max proposal amount as % of treasury (e.g., 500 = 5%)
+        // Staking parameters
+        uint16 maxRewardTokens; // Max non-whitelisted reward tokens (e.g., 50)
     }
 
     /// @notice Project contract addresses.
@@ -164,4 +166,8 @@ interface ILevrFactory_v1 {
 
     /// @notice Maximum proposal amount as % of treasury (basis points, e.g., 500 = 5%).
     function maxProposalAmountBps() external view returns (uint16);
+
+    // Staking config getters
+    /// @notice Maximum number of non-whitelisted reward tokens (e.g., 50).
+    function maxRewardTokens() external view returns (uint16);
 }

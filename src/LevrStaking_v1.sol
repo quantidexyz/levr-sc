@@ -9,6 +9,7 @@ import {ERC2771ContextBase} from './base/ERC2771ContextBase.sol';
 import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
+import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
 import {IClankerLpLocker} from './interfaces/external/IClankerLpLocker.sol';
 
@@ -49,6 +50,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     // for each reward token. Prevents double-accrual and enables liquidity checks.
     mapping(address => uint256) private _rewardReserve;
 
+    // FIX [TOKEN-AGNOSTIC-DOS]: Whitelist for trusted tokens
+    // Whitelisted tokens don't count toward MAX_REWARD_TOKENS limit
+    // Index 0 is always the underlying token (immutable)
+    address[] private _whitelistedTokens;
+    mapping(address => bool) private _isWhitelisted;
+
     function initialize(
         address underlying_,
         address stakedToken_,
@@ -73,6 +80,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         factory = factory_;
         _rewardInfo[underlying_] = ILevrStaking_v1.RewardInfo({accPerShare: 0, exists: true});
         _rewardTokens.push(underlying_);
+
+        // FIX [TOKEN-AGNOSTIC-DOS]: Initialize whitelist with underlying token at index 0
+        _whitelistedTokens.push(underlying_);
+        _isWhitelisted[underlying_] = true;
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -156,6 +167,68 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (available > 0) {
             _creditRewards(token, available);
         }
+    }
+
+    /// @notice Add a token to the whitelist (doesn't count toward MAX_REWARD_TOKENS)
+    /// @dev Only callable by the clanker token admin
+    ///      Whitelisted tokens are exempt from the MAX_REWARD_TOKENS limit
+    ///      Useful for trusted tokens like WETH, USDC, etc.
+    /// @param token The token to whitelist
+    function whitelistToken(address token) external nonReentrant {
+        if (token == address(0)) revert ZeroAddress();
+
+        // Only token admin can whitelist
+        address tokenAdmin = IClankerToken(underlying).admin();
+        require(_msgSender() == tokenAdmin, 'ONLY_TOKEN_ADMIN');
+
+        // Cannot whitelist already whitelisted token
+        require(!_isWhitelisted[token], 'ALREADY_WHITELISTED');
+
+        _whitelistedTokens.push(token);
+        _isWhitelisted[token] = true;
+
+        emit ILevrStaking_v1.TokenWhitelisted(token);
+    }
+
+    /// @notice Clean up finished reward tokens to free up slots
+    /// @dev Removes tokens whose streams have ended and all rewards claimed
+    ///      Can only remove non-underlying tokens
+    ///      Anyone can call to help maintain the system
+    /// @param token The token to clean up
+    function cleanupFinishedRewardToken(address token) external nonReentrant {
+        // Cannot remove underlying token
+        require(token != underlying, 'CANNOT_REMOVE_UNDERLYING');
+
+        // Token must exist in the system
+        require(_rewardInfo[token].exists, 'TOKEN_NOT_REGISTERED');
+
+        // Stream must be finished (ended and past end time)
+        uint64 tokenStreamEnd = _streamEndByToken[token];
+        require(tokenStreamEnd > 0 && block.timestamp >= tokenStreamEnd, 'STREAM_NOT_FINISHED');
+
+        // All rewards must be claimed (reserve = 0)
+        require(_rewardReserve[token] == 0, 'REWARDS_STILL_PENDING');
+
+        // Remove from _rewardTokens array
+        for (uint256 i = 0; i < _rewardTokens.length; i++) {
+            if (_rewardTokens[i] == token) {
+                // Swap with last element and pop
+                _rewardTokens[i] = _rewardTokens[_rewardTokens.length - 1];
+                _rewardTokens.pop();
+                break;
+            }
+        }
+
+        // Mark as non-existent
+        delete _rewardInfo[token];
+
+        // Clear stream metadata
+        delete _streamStartByToken[token];
+        delete _streamEndByToken[token];
+        delete _streamTotalByToken[token];
+        delete _lastUpdateByToken[token];
+
+        emit ILevrStaking_v1.RewardTokenRemoved(token);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -271,6 +344,19 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @inheritdoc ILevrStaking_v1
     function streamEnd() external view returns (uint64) {
         return _streamEnd;
+    }
+
+    /// @notice Get all whitelisted tokens
+    /// @return Array of whitelisted token addresses (index 0 is always underlying)
+    function getWhitelistedTokens() external view returns (address[] memory) {
+        return _whitelistedTokens;
+    }
+
+    /// @notice Check if a token is whitelisted
+    /// @param token The token address to check
+    /// @return True if whitelisted, false otherwise
+    function isTokenWhitelisted(address token) external view returns (bool) {
+        return _isWhitelisted[token];
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -392,6 +478,22 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     ) internal returns (ILevrStaking_v1.RewardInfo storage info) {
         info = _rewardInfo[token];
         if (!info.exists) {
+            // FIX [TOKEN-AGNOSTIC-DOS]: Check max tokens limit (excluding whitelisted tokens)
+            // Whitelisted tokens (including underlying at index 0) are exempt from the limit
+            if (!_isWhitelisted[token]) {
+                // Read maxRewardTokens from factory config
+                uint16 maxRewardTokens = ILevrFactory_v1(factory).maxRewardTokens();
+
+                // Count non-whitelisted reward tokens
+                uint256 nonWhitelistedCount = 0;
+                for (uint256 i = 0; i < _rewardTokens.length; i++) {
+                    if (!_isWhitelisted[_rewardTokens[i]]) {
+                        nonWhitelistedCount++;
+                    }
+                }
+                require(nonWhitelistedCount < maxRewardTokens, 'MAX_REWARD_TOKENS_REACHED');
+            }
+
             _rewardInfo[token] = ILevrStaking_v1.RewardInfo({accPerShare: 0, exists: true});
             _rewardTokens.push(token);
             info = _rewardInfo[token];

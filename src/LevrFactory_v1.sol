@@ -31,6 +31,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 public override minSTokenBpsToSubmit;
     uint16 public override maxProposalAmountBps;
 
+    // Staking parameters
+    uint16 public override maxRewardTokens;
+
     mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
     address[] private _projectTokens; // Array of all registered project tokens
 
@@ -227,6 +230,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         approvalBps = cfg.approvalBps;
         minSTokenBpsToSubmit = cfg.minSTokenBpsToSubmit;
         maxProposalAmountBps = cfg.maxProposalAmountBps;
+        maxRewardTokens = cfg.maxRewardTokens;
     }
 
     /// @dev Override trustedForwarder to satisfy both ILevrFactory_v1 and ERC2771Context

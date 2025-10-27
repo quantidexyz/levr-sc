@@ -69,6 +69,7 @@ contract DeployLevr is Script {
     uint16 constant DEFAULT_APPROVAL_BPS = 5100; // 51%
     uint16 constant DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT = 100; // 1%
     uint16 constant DEFAULT_MAX_PROPOSAL_AMOUNT_BPS = 500; // 5%
+    uint16 constant DEFAULT_MAX_REWARD_TOKENS = 50; // Max non-whitelisted reward tokens
 
     // Estimated gas costs for deployment (conservative estimates)
     uint256 constant ESTIMATED_FORWARDER_GAS = 500_000; // ~0.0005 ETH at 1 gwei
@@ -148,6 +149,10 @@ contract DeployLevr is Script {
         uint16 maxProposalAmountBps = vm.envExists('MAX_PROPOSAL_AMOUNT_BPS')
             ? uint16(vm.envUint('MAX_PROPOSAL_AMOUNT_BPS'))
             : DEFAULT_MAX_PROPOSAL_AMOUNT_BPS;
+
+        uint16 maxRewardTokens = vm.envExists('MAX_REWARD_TOKENS')
+            ? uint16(vm.envUint('MAX_REWARD_TOKENS'))
+            : DEFAULT_MAX_REWARD_TOKENS;
 
         // =======================================================================
         // PRE-DEPLOYMENT VALIDATION
@@ -245,7 +250,8 @@ contract DeployLevr is Script {
             quorumBps: quorumBps,
             approvalBps: approvalBps,
             minSTokenBpsToSubmit: minSTokenBpsToSubmit,
-            maxProposalAmountBps: maxProposalAmountBps
+            maxProposalAmountBps: maxProposalAmountBps,
+            maxRewardTokens: maxRewardTokens
         });
 
         console.log('=== DEPLOYMENT CONFIGURATION ===');
@@ -266,6 +272,7 @@ contract DeployLevr is Script {
         console.log('- Approval BPS:', config.approvalBps);
         console.log('- Min sToken BPS to Submit:', config.minSTokenBpsToSubmit);
         console.log('- Max Proposal Amount BPS:', config.maxProposalAmountBps);
+        console.log('- Max Reward Tokens (non-whitelisted):', config.maxRewardTokens);
         console.log('');
 
         // =======================================================================
@@ -354,6 +361,7 @@ contract DeployLevr is Script {
             factory.maxProposalAmountBps() == maxProposalAmountBps,
             'Max proposal amount BPS mismatch'
         );
+        require(factory.maxRewardTokens() == maxRewardTokens, 'Max reward tokens mismatch');
         require(factory.protocolTreasury() == protocolTreasury, 'Protocol treasury mismatch');
         require(factory.trustedForwarder() == address(forwarder), 'Trusted forwarder mismatch');
 
