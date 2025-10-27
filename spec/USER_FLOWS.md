@@ -492,61 +492,232 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 ## Fee Splitter Flows
 
-### Flow 16: Fee Splitter Configuration
-
-**Actors:** Token Admin
-
-**Steps:**
-
-1. Token Admin calls `feeSplitter.configureSplits([{receiver, bps}, ...])`
-2. Validates:
-   - Caller is token admin
-   - No zero addresses
-   - No zero bps
-   - Total bps = 10000 (100%)
-   - **No duplicate receivers**
-   - **Not more than MAX_RECEIVERS (20)**
-3. Stores splits configuration
-
-**Edge Cases to Test:**
-
-- ✅ Tested: Duplicate receiver detection
-- ✅ Tested: Too many receivers blocked
-- ❓ What if configure during active distribution?
-- ❓ What if configure to include malicious receiver?
-- ❓ What if staking address changes after configuration?
-- ❓ What if configure with empty array?
-
----
-
-### Flow 17: Fee Distribution
+### Flow 16: Fee Splitter Factory Deployment
 
 **Actors:** Anyone (permissionless)
 
 **Steps:**
 
-1. Fees accumulate in fee locker or fee splitter contract
-2. Anyone calls `feeSplitter.distribute(rewardToken)`
-3. Claims from ClankerFeeLocker (if exists)
-4. Gets balance of rewardToken in splitter
-5. For each split:
-   - Calculates: `amount = (balance × bps) / 10000`
-   - Transfers amount to receiver (SafeERC20)
-   - If receiver is staking: sets `sentToStaking = true`
-6. If sent to staking: **Auto-calls staking.accrueRewards()** (try/catch)
+1. Anyone calls `feeSplitterFactory.deploy(clankerToken)` OR `deployDeterministic(clankerToken, salt)`
+2. Factory validates:
+   - Token address is not zero
+   - Splitter not already deployed for this token
+3. Deploys new LevrFeeSplitter_v1 instance
+4. Stores mapping: `splitters[clankerToken] = newSplitter`
+5. Emits `FeeSplitterDeployed` event
 
-**Edge Cases to Test:**
+**State Changes:**
 
-- ✅ Tested: Auto-accrual try/catch protection
-- ✅ Tested: Dust recovery mechanism
-- ❓ What if distribution with splits not configured?
-- ❓ What if balance = 0?
-- ❓ What if rounding leaves dust in contract?
-- ❓ What if transfer to receiver fails?
-- ❓ What if one receiver is a contract that reverts?
-- ❓ What if distribute same token twice quickly?
+- New LevrFeeSplitter_v1 contract deployed
+- Factory stores splitter address in mapping
+- Splitter references: clankerToken (immutable), factory (immutable)
+
+**Edge Cases Tested:**
+
+- ✅ **Deploy for unregistered token** - Succeeds (validation at configure time)
+- ✅ **Double deployment** - Reverts with AlreadyDeployed
+- ✅ **Same salt different tokens** - Creates different addresses (different bytecode)
+- ✅ **Deterministic address accuracy** - computeDeterministicAddress matches actual
+- ✅ **Zero address token** - Reverts in factory
+- ✅ **Zero salt** - Valid CREATE2 deployment
+
+**New Findings:**
+- ⚠️ **Weak validation**: Only checks if token != address(0), doesn't verify token is in Levr system
+- ✅ **Safe in practice**: configureSplits validates staking exists (ProjectNotRegistered)
 
 ---
+
+### Flow 17: Fee Splitter Configuration
+
+**Actors:** Token Admin (IClankerToken.admin())
+
+**Steps:**
+
+1. Token Admin calls `feeSplitter.configureSplits([{receiver, bps}, ...])`
+2. Validates (in _validateSplits):
+   - Caller is token admin (_msgSender() == IClankerToken(clankerToken).admin())
+   - Array not empty
+   - Array length <= MAX_RECEIVERS (20)
+   - Get staking address from factory (reverts if project not registered)
+   - For each split:
+     - Receiver not address(0)
+     - BPS not 0
+     - No duplicate receivers (nested loop check)
+     - Accumulate totalBps
+   - Total BPS exactly == 10000
+3. Deletes old splits: `delete _splits`
+4. Stores new splits: loop and push
+5. Emits `SplitsConfigured` event
+
+**State Changes:**
+
+- Old _splits array completely deleted
+- New _splits array populated
+- Distribution state (_distributionState) UNCHANGED (persists)
+
+**Edge Cases Tested:**
+
+- ✅ **Duplicate receiver detection** - Reverts with DuplicateReceiver
+- ✅ **Too many receivers** - Reverts with TooManyReceivers (max 20)
+- ✅ **Reconfigure to empty** - Reverts with NoReceivers
+- ✅ **Receiver is splitter itself** - Allowed but creates stuck funds (recoverDust workaround)
+- ✅ **Receiver is factory** - Allowed (likely unintended)
+- ✅ **BPS overflow (uint16.max)** - Caught by InvalidTotalBps
+- ✅ **Admin change** - Dynamic admin check allows new admin to reconfigure
+- ✅ **Project not registered** - Reverts with ProjectNotRegistered
+- ✅ **Multiple reconfigurations** - State properly cleaned each time
+- ✅ **BPS sum 9999 or 10001** - Rejected (must be exactly 10000)
+
+**Critical Finding:**
+- ⚠️ **Staking address** captured at configuration time (stored in splits[i].receiver)
+- ⚠️ **Auto-accrual target** read dynamically at distribution time (getStakingAddress())
+- ⚠️ **Mismatch risk** if staking address changes in factory between config and distribution
+
+---
+
+### Flow 18: Fee Distribution (Single Token)
+
+**Actors:** Anyone (permissionless)
+
+**Steps:**
+
+1. Anyone calls `feeSplitter.distribute(rewardToken)`
+2. Gets Clanker metadata from factory (reverts if not found)
+3. Tries to collect rewards from LP locker (try/catch)
+   - Calls `IClankerLpLocker(lpLocker).collectRewards(clankerToken)`
+   - Moves fees from Uniswap V4 pool → ClankerFeeLocker
+4. Tries to claim fees from fee locker (try/catch)
+   - Calls `IClankerFeeLocker(feeLocker).claim(address(this), rewardToken)`
+   - Moves fees from ClankerFeeLocker → FeeSplitter
+5. Gets balance: `IERC20(rewardToken).balanceOf(address(this))`
+6. If balance == 0: return early (no-op)
+7. Validates splits configured
+8. For each split in _splits:
+   - Calculate: `amount = (balance * split.bps) / 10000`
+   - If amount > 0: transfer to split.receiver (SafeERC20)
+   - If receiver == staking (from factory): set sentToStaking = true
+   - Emit FeeDistributed event
+9. Update state: totalDistributed += balance, lastDistribution = timestamp
+10. Emit Distributed event
+11. If sentToStaking: try to call `staking.accrueRewards(rewardToken)` (try/catch)
+
+**State Changes:**
+
+- rewardToken balance transferred from splitter → receivers
+- _distributionState[rewardToken].totalDistributed increases
+- _distributionState[rewardToken].lastDistribution updated
+
+**Edge Cases Tested:**
+
+- ✅ **Zero balance** - Returns early without error
+- ✅ **Splits not configured** - Reverts with SplitsNotConfigured
+- ✅ **Metadata not found** - Reverts with ClankerMetadataNotFound
+- ✅ **collectRewards fails** - Try/catch, distribution continues
+- ✅ **Fee locker claim fails** - Try/catch, distribution continues
+- ✅ **Auto-accrual fails** - Try/catch, distribution continues (emits AutoAccrualFailed)
+- ✅ **Auto-accrual succeeds** - Emits AutoAccrualSuccess
+- ✅ **1 wei distribution** - All amounts round to 0, entire balance becomes dust
+- ✅ **Minimal rounding** - Predictable dust (9 wei → 4+4+1 dust)
+- ✅ **Prime number balance** - Uneven split creates dust
+- ✅ **100% to staking** - Auto-accrual called once
+- ✅ **0% to staking** - Auto-accrual not called
+- ✅ **Multiple tokens sequentially** - Each distributes independently
+
+**Critical Finding:**
+- ⚠️ **Staking address mismatch**: If factory staking changes, fees sent to OLD staking but accrual called on NEW staking (mismatch!)
+
+---
+
+### Flow 19: Fee Distribution (Batch)
+
+**Actors:** Anyone (permissionless)
+
+**Steps:**
+
+1. Anyone calls `feeSplitter.distributeBatch([token1, token2, ...])`
+2. For each token in array:
+   - Calls _distributeSingle(token) (internal, no reentrancy guard)
+3. ReentrancyGuard protects entire batch operation
+
+**State Changes:**
+
+- Multiple tokens distributed in single transaction
+- State updated for each token independently
+
+**Edge Cases Tested:**
+
+- ✅ **Empty array** - Completes gracefully (no-op)
+- ✅ **Duplicate tokens** - First distributes all, second distributes 0 (safe)
+- ✅ **100 tokens** - Works but gas-intensive (no hard limit)
+- ✅ **Multiple tokens to multiple receivers** - All combinations work correctly
+- ✅ **Auto-accrual per token** - Called for each token sent to staking
+
+**New Finding:**
+- ⚠️ **No MAX_BATCH_SIZE limit** - Could hit gas limit with very large arrays (800+ tokens estimated)
+
+---
+
+### Flow 20: Dust Recovery
+
+**Actors:** Token Admin
+
+**Steps:**
+
+1. Token Admin calls `feeSplitter.recoverDust(token, recipient)`
+2. Validates:
+   - Caller is token admin
+   - Recipient not address(0)
+3. Gets pending fees in locker: `splitter.pendingFees(token)`
+4. Gets current balance: `IERC20(token).balanceOf(address(this))`
+5. Calculates dust: `balance - pendingInLocker`
+6. If dust > 0: transfers dust to recipient
+7. Emits DustRecovered event
+
+**Edge Cases Tested:**
+
+- ✅ **All balance is dust** (never distributed) - Recovers all
+- ✅ **Zero address recipient** - Reverts with ZeroAddress
+- ✅ **No dust** (balance = 0 or balance <= pending) - Completes without transfer
+- ✅ **Rounding dust** - Successfully recovers tiny amounts (1 wei)
+- ✅ **Never-distributed token** - Can recover entire balance
+- ✅ **After distribution** - Only recovers remainder dust
+
+---
+
+### Flow 21: Splitter Reconfiguration
+
+**Actors:** Token Admin
+
+**Steps:**
+
+1. Splits already configured
+2. Token Admin calls `configureSplits(newSplits)`
+3. Validates new configuration (same as initial configuration)
+4. **Deletes entire _splits array**: `delete _splits`
+5. Stores new splits
+6. **Distribution state NOT deleted** - persists across reconfigurations
+
+**State Changes:**
+
+- _splits completely replaced
+- _distributionState unchanged (totalDistributed, lastDistribution persist)
+
+**Edge Cases Tested:**
+
+- ✅ **Immediate reconfiguration after distribution** - Works correctly
+- ✅ **Multiple reconfigurations** - State cleaned each time
+- ✅ **totalDistributed persists** - Accumulates across different configurations
+- ✅ **Old splits deleted** - No residual state from old config
+
+**Design Note:**
+- Distribution state is per-token, not per-configuration
+- totalDistributed tracks lifetime totals, not config-specific totals
+
+---
+
+**Edge Cases Updated:** October 27, 2025  
+**New Tests Added:** 47  
+**Total FeeSplitter Coverage:** 74 tests (100% passing)
 
 ## Forwarder Flows
 
