@@ -98,7 +98,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(100 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         // Advance to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -145,17 +145,17 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 10 days);
 
         // Create proposal of first type
-        uint256 pid1 = governor.proposeBoost(100 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 100 ether);
 
         // Wait for cycle to end and new cycle to start
         vm.warp(block.timestamp + 7 days + 1); // Past voting window
         governor.startNewCycle(); // Start new cycle
 
         // Now can create second boost proposal in new cycle
-        uint256 pid2 = governor.proposeBoost(200 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 200 ether);
 
         // And a transfer proposal (different type, same cycle is OK)
-        uint256 pid3 = governor.proposeTransfer(bob, 50 ether, 'test');
+        uint256 pid3 = governor.proposeTransfer(address(underlying), bob, 50 ether, 'test');
 
         vm.stopPrank();
 
@@ -197,7 +197,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates and votes on proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(100 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -232,17 +232,17 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 10 days);
 
         // Try to spam boost proposals
-        uint256 pid1 = governor.proposeBoost(100 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 100 ether);
         console2.log('Proposal 1 created:', pid1);
 
         // PROTECTION 1: Can't propose same type twice in same cycle
         vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
-        governor.proposeBoost(200 ether);
+        governor.proposeBoost(address(underlying), 200 ether);
 
         console2.log('PROTECTION 1: One proposal per type per user per cycle');
 
         // But can propose different type
-        uint256 pid2 = governor.proposeTransfer(bob, 50 ether, 'test');
+        uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 50 ether, 'test');
         console2.log('Proposal 2 (different type) created:', pid2);
 
         vm.stopPrank();
@@ -265,14 +265,17 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
         console2.log('\n=== TREASURY: Reentrancy Protection Test ===');
 
         // Deploy malicious contract
-        MaliciousTreasuryReceiver malicious = new MaliciousTreasuryReceiver(address(treasury));
+        MaliciousTreasuryReceiver malicious = new MaliciousTreasuryReceiver(
+            address(treasury),
+            address(underlying)
+        );
 
         // Fund treasury - note it already has 100k from setUp
         uint256 initialBalance = underlying.balanceOf(address(treasury));
 
         // Transfer to malicious contract (should not allow reentrancy)
         vm.prank(address(governor));
-        treasury.transfer(address(malicious), 100 ether);
+        treasury.transfer(address(underlying), address(malicious), 100 ether);
 
         // Check that only 100 ether was transferred (no reentrancy)
         assertEq(underlying.balanceOf(address(malicious)), 100 ether);
@@ -292,11 +295,11 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
         // Try to transfer from non-governor
         vm.prank(attacker);
         vm.expectRevert(ILevrTreasury_v1.OnlyGovernor.selector);
-        treasury.transfer(attacker, 1000 ether);
+        treasury.transfer(address(underlying), attacker, 1000 ether);
 
         // Only governor can transfer
         vm.prank(address(governor));
-        treasury.transfer(bob, 100 ether);
+        treasury.transfer(address(underlying), bob, 100 ether);
 
         assertEq(underlying.balanceOf(bob), 100 ether);
 
@@ -310,7 +313,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 
         // Apply boost
         vm.prank(address(governor));
-        treasury.applyBoost(100 ether);
+        treasury.applyBoost(address(underlying), 100 ether);
 
         // Check that approval was reset to 0
         uint256 approval = underlying.allowance(address(treasury), address(staking));
@@ -479,10 +482,12 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 /// @notice Malicious contract that tries to reenter treasury
 contract MaliciousTreasuryReceiver is Test {
     address public treasury;
+    address public token;
     bool public attacked;
 
-    constructor(address _treasury) {
+    constructor(address _treasury, address _token) {
         treasury = _treasury;
+        token = _token;
     }
 
     // ERC20 transfer callback - doesn't exist in standard ERC20 but showing protection concept
@@ -491,7 +496,7 @@ contract MaliciousTreasuryReceiver is Test {
         if (!attacked) {
             attacked = true;
             // Try to reenter (will be blocked by nonReentrant)
-            try LevrTreasury_v1(payable(treasury)).transfer(address(this), 1 ether) {
+            try LevrTreasury_v1(payable(treasury)).transfer(token, address(this), 1 ether) {
                 // Should not reach here
             } catch {
                 // Reentrancy blocked

@@ -43,7 +43,7 @@ contract LevrForwarderV1_UnitTest is Test {
     /// @notice Test that direct calls to executeTransaction are blocked
     function test_executeTransaction_revertsWhenCalledDirectly() public {
         // Attacker tries to call executeTransaction directly to impersonate governor
-        bytes memory data = abi.encodeCall(treasury.transfer, (attacker, 100 ether));
+        bytes memory data = abi.encodeCall(treasury.transfer, (address(token), attacker, 100 ether));
 
         // Attempt direct call (should fail)
         vm.prank(attacker);
@@ -81,7 +81,7 @@ contract LevrForwarderV1_UnitTest is Test {
     function test_cannotImpersonateAddress_viaCraftedCalldata() public {
         // Attacker crafts calldata with fake governor address appended
         bytes memory maliciousData = abi.encodePacked(
-            abi.encodeCall(treasury.transfer, (attacker, 100 ether)),
+            abi.encodeCall(treasury.transfer, (address(token), attacker, 100 ether)),
             governor // Fake sender appended (last 20 bytes)
         );
 
@@ -152,7 +152,7 @@ contract LevrForwarderV1_UnitTest is Test {
             target: address(treasury),
             allowFailure: false,
             value: 0,
-            callData: abi.encodeCall(treasury.transfer, (alice, 100 ether))
+            callData: abi.encodeCall(treasury.transfer, (address(token), alice, 100 ether))
         });
 
         // Execute from governor

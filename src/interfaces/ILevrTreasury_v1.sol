@@ -32,14 +32,16 @@ interface ILevrTreasury_v1 {
     /// @param underlying_ Underlying token address
     function initialize(address governor_, address underlying_) external;
 
-    /// @notice Execute a governor-authorized transfer of underlying.
+    /// @notice Execute a governor-authorized transfer of any ERC20 token.
+    /// @param token ERC20 token address (underlying, WETH, or any ERC20)
     /// @param to Recipient
     /// @param amount Amount to transfer
-    function transfer(address to, uint256 amount) external;
+    function transfer(address token, address to, uint256 amount) external;
 
     /// @notice Apply a staking boost by moving tokens to staking and accruing rewards.
-    /// @param amount Amount of underlying to allocate to stakers
-    function applyBoost(uint256 amount) external;
+    /// @param token ERC20 token address (underlying, WETH, or any ERC20)
+    /// @param amount Amount of tokens to allocate to stakers
+    function applyBoost(address token, uint256 amount) external;
 
     /// @notice Current underlying balance held by the treasury.
     /// @return balance Underlying token balance

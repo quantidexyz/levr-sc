@@ -97,12 +97,12 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // First transfer proposal succeeds (auto-starts cycle)
         vm.prank(u);
-        g.proposeTransfer(address(0xB0B), 1 ether, 'ops');
+        g.proposeTransfer(address(underlying), address(0xB0B), 1 ether, 'ops');
 
         // Second transfer proposal should revert (maxActiveProposals = 1)
         vm.prank(u);
         vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-        g.proposeTransfer(address(0xB0B), 1 ether, 'ops2');
+        g.proposeTransfer(address(underlying), address(0xB0B), 1 ether, 'ops2');
 
         // Vote on first proposal to make it winner
         vm.warp(block.timestamp + 2 days + 1); // In voting window
@@ -116,13 +116,13 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Now new proposal should succeed in the new auto-started cycle
         vm.prank(u);
-        g.proposeTransfer(address(0xB0B), 1 ether, 'ops3');
+        g.proposeTransfer(address(underlying), address(0xB0B), 1 ether, 'ops3');
     }
 
     function test_getProposal_returns_computed_fields() public {
         // Create a proposal
         vm.prank(user);
-        uint256 pid = governor.proposeBoost(100 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         // Get proposal in pending state
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
@@ -243,7 +243,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = g.proposeBoost(100 ether);
+        uint256 pid = g.proposeBoost(address(underlying), 100 ether);
 
         // Only Alice votes (40% participation < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);

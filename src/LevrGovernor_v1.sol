@@ -75,18 +75,21 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     // ============ External Functions ============
 
     /// @inheritdoc ILevrGovernor_v1
-    function proposeBoost(uint256 amount) external returns (uint256 proposalId) {
-        return _propose(ProposalType.BoostStakingPool, amount, address(0), '');
+    function proposeBoost(address token, uint256 amount) external returns (uint256 proposalId) {
+        if (token == address(0)) revert InvalidRecipient(); // Reusing error for zero address
+        return _propose(ProposalType.BoostStakingPool, token, amount, address(0), '');
     }
 
     /// @inheritdoc ILevrGovernor_v1
     function proposeTransfer(
+        address token,
         address recipient,
         uint256 amount,
         string calldata description
     ) external returns (uint256 proposalId) {
+        if (token == address(0)) revert InvalidRecipient();
         if (recipient == address(0)) revert InvalidRecipient();
-        return _propose(ProposalType.TransferToAddress, amount, recipient, description);
+        return _propose(ProposalType.TransferToAddress, token, amount, recipient, description);
     }
 
     /// @inheritdoc ILevrGovernor_v1
@@ -185,8 +188,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert ProposalNotSucceeded();
         }
 
-        // Check treasury has sufficient balance for proposal amount
-        uint256 treasuryBalance = IERC20(underlying).balanceOf(treasury);
+        // TOKEN AGNOSTIC: Check treasury has sufficient balance for proposal token and amount
+        uint256 treasuryBalance = IERC20(proposal.token).balanceOf(treasury);
         if (treasuryBalance < proposal.amount) {
             proposal.executed = true; // Mark as processed to avoid retries
             emit ProposalDefeated(proposalId);
@@ -217,10 +220,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             _activeProposalCount[proposal.proposalType]--;
         }
 
+        // TOKEN AGNOSTIC: Execute with proposal.token
         if (proposal.proposalType == ProposalType.BoostStakingPool) {
-            ILevrTreasury_v1(treasury).applyBoost(proposal.amount);
+            ILevrTreasury_v1(treasury).applyBoost(proposal.token, proposal.amount);
         } else if (proposal.proposalType == ProposalType.TransferToAddress) {
-            ILevrTreasury_v1(treasury).transfer(proposal.recipient, proposal.amount);
+            ILevrTreasury_v1(treasury).transfer(
+                proposal.token,
+                proposal.recipient,
+                proposal.amount
+            );
         }
 
         emit ProposalExecuted(proposalId, _msgSender());
@@ -287,11 +295,13 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     function _propose(
         ProposalType proposalType,
+        address token,
         uint256 amount,
         address recipient,
         string memory description
     ) internal returns (uint256 proposalId) {
         if (amount == 0) revert InvalidAmount();
+        if (token == address(0)) revert InvalidRecipient(); // Token must be valid
 
         address proposer = _msgSender();
 
@@ -323,10 +333,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
+        // TOKEN AGNOSTIC: Validate treasury has sufficient balance of the proposed token
+        uint256 treasuryBalance = IERC20(token).balanceOf(treasury);
+        if (treasuryBalance < amount) {
+            revert InsufficientTreasuryBalance();
+        }
+
         // Check proposal amount doesn't exceed maximum percentage of treasury balance
         uint16 maxProposalBps = ILevrFactory_v1(factory).maxProposalAmountBps();
         if (maxProposalBps > 0) {
-            uint256 treasuryBalance = IERC20(underlying).balanceOf(treasury);
             uint256 maxProposalAmount = (treasuryBalance * maxProposalBps) / 10_000;
             if (amount > maxProposalAmount) {
                 revert ProposalAmountExceedsLimit();
@@ -357,6 +372,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             id: proposalId,
             proposalType: proposalType,
             proposer: proposer,
+            token: token, // TOKEN AGNOSTIC: Store token address
             amount: amount,
             recipient: recipient,
             description: description,
@@ -382,7 +398,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Mark that user has proposed this type in this cycle
         _hasProposedInCycle[cycleId][proposalType][proposer] = true;
 
-        emit ProposalCreated(proposalId, proposer, proposalType, amount, recipient, description);
+        emit ProposalCreated(
+            proposalId,
+            proposer,
+            proposalType,
+            token,
+            amount,
+            recipient,
+            description
+        );
     }
 
     function _state(uint256 proposalId) internal view returns (ProposalState) {

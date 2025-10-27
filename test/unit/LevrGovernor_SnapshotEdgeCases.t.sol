@@ -92,7 +92,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         // Verify snapshots match creation-time values
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
@@ -130,7 +130,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 10 days);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory propBefore = governor.getProposal(pid);
         uint256 snapshotSupply = propBefore.totalSupplySnapshot;
@@ -194,7 +194,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 snapshotSupply = governor.getProposal(pid).totalSupplySnapshot;
         console2.log('Snapshot supply:', snapshotSupply / 1e18);
@@ -251,7 +251,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(cfg);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(100 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
 
@@ -291,7 +291,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(cfg);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
 
@@ -340,7 +340,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(cfg);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
 
@@ -384,7 +384,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create first proposal
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory prop1 = governor.getProposal(pid1);
         console2.log('Proposal 1 snapshots:');
@@ -424,7 +424,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create second proposal in SAME cycle
         vm.prank(bob);
-        uint256 pid2 = governor.proposeTransfer(charlie, 500 ether, 'test');
+        uint256 pid2 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'test');
 
         ILevrGovernor_v1.Proposal memory prop2 = governor.getProposal(pid2);
         console2.log('\nProposal 2 snapshots:');
@@ -478,7 +478,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal (snapshot: 1000 supply, 70% quorum = 700 required)
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 snapshot = governor.getProposal(pid).totalSupplySnapshot;
         console2.log('Snapshot supply:', snapshot / 1e18);
@@ -535,7 +535,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal (approval snapshot = 51%)
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint16 snapshotApproval = governor.getProposal(pid).approvalBpsSnapshot;
         console2.log('Snapshot approval BPS:', snapshotApproval);
@@ -600,7 +600,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 snapshot = governor.getProposal(pid).totalSupplySnapshot;
         console2.log('Initial supply:', snapshot / 1e18);
@@ -655,7 +655,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates malicious proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 snapshot = governor.getProposal(pid).totalSupplySnapshot;
         console2.log('Snapshot supply:', snapshot / 1e18);
@@ -718,10 +718,10 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create two competing proposals
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeTransfer(charlie, 500 ether, 'test');
+        uint256 pid2 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'test');
 
         // Vote: Prop1 gets 60% yes, Prop2 gets 100% yes but less total votes
         vm.warp(block.timestamp + 2 days + 1);
@@ -817,7 +817,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(cfg);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(100 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         console2.log('Supply:', sToken.totalSupply() / 1e18);
         console2.log('Quorum required (100%):', sToken.totalSupply() / 1e18);
@@ -860,7 +860,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Cycle 1: Create proposal
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 cycle1Supply = governor.getProposal(pid1).totalSupplySnapshot;
         uint16 cycle1Quorum = governor.getProposal(pid1).quorumBpsSnapshot;
@@ -910,7 +910,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Cycle 2: Create proposal
         vm.prank(alice);
-        uint256 pid2 = governor.proposeBoost(1000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 cycle2Supply = governor.getProposal(pid2).totalSupplySnapshot;
         uint16 cycle2Quorum = governor.getProposal(pid2).quorumBpsSnapshot;
@@ -969,13 +969,13 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create 3 competing proposals
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeBoost(2000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 2000 ether);
 
         vm.prank(charlie);
-        uint256 pid3 = governor.proposeTransfer(whale, 500 ether, 'test');
+        uint256 pid3 = governor.proposeTransfer(address(underlying), whale, 500 ether, 'test');
 
         // Vote: Prop1 = most yes votes
         vm.warp(block.timestamp + 2 days + 1);
@@ -1062,7 +1062,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal - snapshot happens HERE
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 snapshot = governor.getProposal(pid).totalSupplySnapshot;
 
@@ -1089,7 +1089,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal 1
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
         uint256 snapshot1 = governor.getProposal(pid1).totalSupplySnapshot;
 
         console2.log('Proposal 1 supply snapshot:', snapshot1 / 1e18);
@@ -1105,7 +1105,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal 2 (still in same cycle, same day)
         vm.prank(bob);
-        uint256 pid2 = governor.proposeTransfer(charlie, 500 ether, 'test');
+        uint256 pid2 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'test');
         uint256 snapshot2 = governor.getProposal(pid2).totalSupplySnapshot;
 
         console2.log('Proposal 2 supply snapshot:', snapshot2 / 1e18);
@@ -1140,7 +1140,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 snapshot = governor.getProposal(pid).totalSupplySnapshot;
         console2.log('Supply snapshot at creation:', snapshot / 1e18);

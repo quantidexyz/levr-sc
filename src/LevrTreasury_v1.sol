@@ -40,23 +40,29 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         _;
     }
 
-    function transfer(address to, uint256 amount) external onlyGovernor nonReentrant {
-        IERC20(underlying).safeTransfer(to, amount);
+    function transfer(
+        address token,
+        address to,
+        uint256 amount
+    ) external onlyGovernor nonReentrant {
+        if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
+        IERC20(token).safeTransfer(to, amount);
     }
 
     /// @inheritdoc ILevrTreasury_v1
-    function applyBoost(uint256 amount) external onlyGovernor nonReentrant {
+    function applyBoost(address token, uint256 amount) external onlyGovernor nonReentrant {
+        if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
 
         ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
             underlying
         );
         // Approve and pull via accrueFromTreasury for atomicity
-        IERC20(underlying).approve(project.staking, amount);
-        ILevrStaking_v1(project.staking).accrueFromTreasury(underlying, amount, true);
+        IERC20(token).approve(project.staking, amount);
+        ILevrStaking_v1(project.staking).accrueFromTreasury(token, amount, true);
 
         // Reset approval to 0 after use
-        IERC20(underlying).approve(project.staking, 0);
+        IERC20(token).approve(project.staking, 0);
     }
 
     function getUnderlyingBalance() external view returns (uint256) {

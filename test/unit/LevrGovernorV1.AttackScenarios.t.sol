@@ -136,7 +136,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         // ATTACK: Attacker1 creates malicious proposal to drain treasury
         uint256 drainAmount = 50_000 ether;
         vm.prank(attacker1);
-        uint256 pid = governor.proposeTransfer(maliciousRecipient, drainAmount, 'Malicious drain');
+        uint256 pid = governor.proposeTransfer(address(underlying), maliciousRecipient, drainAmount, 'Malicious drain');
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -278,7 +278,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         // ATTACK: Whales propose malicious transfer
         uint256 drainAmount = 50_000 ether;
         vm.prank(attacker1);
-        uint256 pid = governor.proposeTransfer(maliciousRecipient, drainAmount, 'Whale attack');
+        uint256 pid = governor.proposeTransfer(address(underlying), maliciousRecipient, drainAmount, 'Whale attack');
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -363,7 +363,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         // ATTACK: Create malicious proposal
         uint256 drainAmount = 50_000 ether;
         vm.prank(attacker1);
-        uint256 pid = governor.proposeTransfer(
+        uint256 pid = governor.proposeTransfer(address(underlying), 
             maliciousRecipient,
             drainAmount,
             'Barely meets quorum'
@@ -464,11 +464,11 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         // CREATE 3 PROPOSALS IN SAME CYCLE
         // P1: Benign boost proposal (decoy)
         vm.prank(honest1);
-        uint256 pid1 = governor.proposeBoost(100_000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 100_000 ether);
 
         // P2: Malicious transfer to attacker (REAL TARGET)
         vm.prank(attacker1);
-        uint256 pid2 = governor.proposeTransfer(
+        uint256 pid2 = governor.proposeTransfer(address(underlying), 
             maliciousRecipient,
             50_000 ether,
             'Malicious proposal disguised'
@@ -477,7 +477,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         // P3: Benign transfer to legitimate address (another decoy)
         address legitimateRecipient = address(0x1E617);
         vm.prank(honest2);
-        uint256 pid3 = governor.proposeTransfer(
+        uint256 pid3 = governor.proposeTransfer(address(underlying), 
             legitimateRecipient,
             50_000 ether,
             'Legitimate ops'
@@ -623,7 +623,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         // ATTACK: Entity proposes MAXIMUM treasury drain
         uint256 maxDrain = underlying.balanceOf(address(treasury));
         vm.prank(sybilWallets[0]);
-        uint256 pid = governor.proposeTransfer(
+        uint256 pid = governor.proposeTransfer(address(underlying), 
             maliciousRecipient,
             50_000 ether,
             'Complete treasury takeover'

@@ -45,15 +45,15 @@ contract LevrTreasuryV1_UnitTest is Test, LevrFactoryDeployHelper {
 
     function test_onlyGovernor_can_transfer() public {
         vm.expectRevert();
-        treasury.transfer(address(1), 1 ether);
+        treasury.transfer(address(underlying), address(1), 1 ether);
 
         vm.prank(governor);
-        treasury.transfer(address(1), 1 ether);
+        treasury.transfer(address(underlying), address(1), 1 ether);
     }
 
     function test_applyBoost_movesFundsToStaking_andCreditsRewards() public {
         vm.prank(governor);
-        treasury.applyBoost(2_000 ether);
+        treasury.applyBoost(address(underlying), 2_000 ether);
 
         address[] memory tokens = new address[](1);
         tokens[0] = address(underlying);

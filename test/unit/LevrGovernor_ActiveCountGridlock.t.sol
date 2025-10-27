@@ -89,7 +89,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         console2.log('-------');
 
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
         console2.log('Created proposal 1 (Boost)');
 
         uint256 countAfterFirst = governor.activeProposalCount(
@@ -99,7 +99,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         assertEq(countAfterFirst, 1);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeBoost(2000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 2000 ether);
         console2.log('Created proposal 2 (Boost)');
 
         uint256 countAfterSecond = governor.activeProposalCount(
@@ -111,7 +111,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         // Try to create 3rd - should fail (max = 2)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-        governor.proposeBoost(3000 ether);
+        governor.proposeBoost(address(underlying), 3000 ether);
         console2.log('Cannot create 3rd proposal: maxActiveProposals = 2\n');
 
         // BOTH proposals fail quorum (only Alice votes, need 70%)
@@ -198,12 +198,12 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         if (countInCycle2 >= 2) {
             // If count didn't reset, should fail
             vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-            governor.proposeBoost(5000 ether);
+            governor.proposeBoost(address(underlying), 5000 ether);
             console2.log('BLOCKED: Cannot create new proposal in cycle 2');
             console2.log('BUG CONFIRMED: Defeated proposals from cycle 1 block cycle 2');
         } else {
             // If count reset, should succeed
-            uint256 pid3 = governor.proposeBoost(5000 ether);
+            uint256 pid3 = governor.proposeBoost(address(underlying), 5000 ether);
             console2.log('SUCCESS: Created proposal 3 in cycle 2');
             console2.log('NO BUG: Count resets between cycles');
         }
@@ -217,10 +217,10 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
         // Create 2 proposals in cycle 1
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeBoost(2000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 2000 ether);
 
         console2.log('Created 2 boost proposals in cycle 1');
         console2.log(
@@ -277,7 +277,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
         vm.prank(alice);
         if (countAfterFailed < 2) {
-            uint256 pid3 = governor.proposeBoost(3000 ether);
+            uint256 pid3 = governor.proposeBoost(address(underlying), 3000 ether);
             console2.log('Created proposal 3: SUCCESS');
 
             uint256 countNow = governor.activeProposalCount(
@@ -291,7 +291,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
                 // Try to create 3rd
                 vm.prank(bob);
                 vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-                governor.proposeBoost(4000 ether);
+                governor.proposeBoost(address(underlying), 4000 ether);
                 console2.log('Cannot create 4th: maxActiveProposals = 2');
 
                 console2.log(
@@ -300,7 +300,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
             }
         } else {
             vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-            governor.proposeBoost(3000 ether);
+            governor.proposeBoost(address(underlying), 3000 ether);
             console2.log('BLOCKED: Cannot create new proposal');
             console2.log('BUG CONFIRMED: Defeated proposal from cycle 1 blocks cycle 2');
         }
@@ -316,11 +316,11 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         console2.log('CYCLE 1: Creating 2 proposals (max limit)');
 
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
         console2.log('Proposal 1 created');
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeBoost(2000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 2000 ether);
         console2.log('Proposal 2 created');
 
         uint256 countCycle1 = governor.activeProposalCount(
@@ -364,7 +364,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
             // Should be able to create new proposals
             vm.prank(alice);
-            governor.proposeBoost(3000 ether);
+            governor.proposeBoost(address(underlying), 3000 ether);
             console2.log('Can create new proposal: CONFIRMED');
         } else if (countCycle2 == 2) {
             console2.log('Count is STILL 2 from cycle 1');
@@ -374,7 +374,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
             // Should NOT be able to create new proposals
             vm.prank(alice);
             vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-            governor.proposeBoost(3000 ether);
+            governor.proposeBoost(address(underlying), 3000 ether);
             console2.log('Cannot create new proposal: CONFIRMED GRIDLOCK');
 
             console2.log('\n[CRITICAL BUG CONFIRMED]');
@@ -398,9 +398,9 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         console2.log('\n--- CYCLE', currentCycle, '---');
 
         vm.prank(alice);
-        governor.proposeBoost(1000 ether);
+        governor.proposeBoost(address(underlying), 1000 ether);
         vm.prank(bob);
-        governor.proposeBoost(2000 ether);
+        governor.proposeBoost(address(underlying), 2000 ether);
         console2.log('Created 2 boost proposals');
         console2.log(
             'Active count:',
@@ -430,7 +430,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
             vm.prank(alice);
             vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-            governor.proposeBoost(3000 ether);
+            governor.proposeBoost(address(underlying), 3000 ether);
 
             console2.log('\n[PERMANENT GRIDLOCK CONFIRMED]');
             console2.log('Boost proposals are PERMANENTLY BLOCKED');

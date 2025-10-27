@@ -299,33 +299,43 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 ## Governance Flows
 
-### Flow 10: Proposal Creation (Auto-Start Cycle)
+### Flow 10: Proposal Creation (Auto-Start Cycle) - TOKEN AGNOSTIC
 
 **Actors:** Staker with sufficient balance and VP
 
 **Steps:**
 
-1. User calls `governor.proposeBoost(amount)` or `governor.proposeTransfer(recipient, amount, description)`
-2. Governor checks if new cycle needed (`_currentCycleId == 0 || _needsNewCycle()`)
-3. If needed: **Auto-starts new cycle**
+1. User calls `governor.proposeBoost(token, amount)` or `governor.proposeTransfer(token, recipient, amount, description)`
+2. Governor validates:
+   - Token address is not zero
+3. Governor checks if new cycle needed (`_currentCycleId == 0 || _needsNewCycle()`)
+4. If needed: **Auto-starts new cycle**
    - Reads `proposalWindowSeconds` and `votingWindowSeconds` FROM FACTORY
    - Creates cycle with calculated timestamps
    - Stores in `_cycles[cycleId]`
-4. Reads cycle timestamps (NOT from factory)
-5. Validates:
+5. Reads cycle timestamps (NOT from factory)
+6. Validates:
    - Proposal window is open
    - User has minimum stake (reads FROM FACTORY)
-   - Amount doesn't exceed max (reads FROM FACTORY, uses current treasury balance)
+   - Amount doesn't exceed max (reads FROM FACTORY, uses current treasury balance FOR THAT TOKEN)
    - Not too many active proposals (reads FROM FACTORY)
    - User hasn't proposed this type in this cycle
-6. Creates proposal:
+7. Creates proposal:
+   - Stores token address in proposal
    - Copies `votingStartsAt` and `votingEndsAt` FROM CYCLE
    - Sets initial vote counts to 0
    - Stores proposal
 
+**Token Agnostic Support:**
+
+- ✅ Proposals can specify any ERC20 token
+- ✅ Treasury balance check uses proposal.token
+- ✅ Execution uses proposal.token
+
 **Critical State Reads:**
 
 - ✅ `votingStartsAt`, `votingEndsAt`: Read from cycle (IMMUTABLE) ✅
+- ✅ `token`: Stored in proposal (IMMUTABLE) ✅
 - ❌ `minSTokenBpsToSubmit`: Read from factory (DYNAMIC) ⚠️
 - ❌ `maxProposalAmountBps`: Read from factory (DYNAMIC) ⚠️
 - ❌ `maxActiveProposals`: Read from factory (DYNAMIC) ⚠️
@@ -335,10 +345,14 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ✅ Tested: Auto-start cycle when none exists
 - ✅ Tested: Multiple proposals in same cycle
 - ❓ What if factory config changes between proposal creation and voting?
-- ❓ What if treasury balance decreases after proposal creation?
+- ❓ What if treasury token balance decreases after proposal creation?
 - ❓ What if user's balance decreases after creating proposal?
 - ❓ What if cycle window = 0?
 - ❓ What if uint256 overflow in timestamp calculations?
+- ❓ What if token is zero address?
+- ❓ What if token is not held by treasury?
+- ❓ What if multiple proposals for different tokens in same cycle?
+- ❓ What if underlying token proposal vs WETH proposal in same cycle?
 
 ---
 
@@ -377,7 +391,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 ---
 
-### Flow 12: Proposal Execution
+### Flow 12: Proposal Execution - TOKEN AGNOSTIC
 
 **Actors:** Anyone (permissionless)
 
@@ -387,32 +401,44 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 2. Validates:
    - Voting window has ended
    - Not already executed
-   - **Meets quorum** (reads CURRENT totalSupply) ⚠️
-   - **Meets approval** (reads CURRENT approval threshold) ⚠️
-   - **Treasury has balance** (reads CURRENT balance)
-   - Is winner (checks CURRENT quorum/approval for all proposals) ⚠️
+   - **Meets quorum** (uses snapshot from proposal creation) ✅
+   - **Meets approval** (uses snapshot from proposal creation) ✅
+   - **Treasury has balance** (reads CURRENT balance FOR PROPOSAL.TOKEN)
+   - Is winner (checks snapshots for all proposals) ✅
    - Cycle not already executed
 3. Marks proposal and cycle as executed
-4. Executes action (boost or transfer)
+4. Executes action:
+   - **BoostStakingPool**: `treasury.applyBoost(proposal.token, proposal.amount)`
+   - **TransferToAddress**: `treasury.transfer(proposal.token, proposal.recipient, proposal.amount)`
 5. **Auto-starts new cycle**
+
+**Token Agnostic Support:**
+
+- ✅ Execution uses proposal.token (stored at creation)
+- ✅ Balance check uses IERC20(proposal.token).balanceOf(treasury)
+- ✅ Treasury methods accept token parameter
 
 **Critical State Reads:**
 
-- ❌ `totalSupply`: Read at EXECUTION time (can change after voting) 🔴 BUG
-- ❌ `quorumBps`: Read at EXECUTION time (can change) 🔴 BUG
-- ❌ `approvalBps`: Read at EXECUTION time (can change) 🔴 BUG
-- ❌ `treasuryBalance`: Read at EXECUTION time (can decrease) ⚠️
+- ✅ `totalSupply`: Snapshot at proposal creation (FIXED NEW-C-1, NEW-C-2) ✅
+- ✅ `quorumBps`: Snapshot at proposal creation (FIXED NEW-C-3) ✅
+- ✅ `approvalBps`: Snapshot at proposal creation (FIXED NEW-C-3) ✅
+- ✅ `token`: Stored in proposal (IMMUTABLE) ✅
+- ❌ `treasuryBalance`: Read at EXECUTION time for proposal.token (can decrease) ⚠️
 
 **Edge Cases to Test:**
 
-- 🔴 CRITICAL: Supply manipulation after voting (NEW-C-1, NEW-C-2)
-- 🔴 CRITICAL: Config changes affect winner (NEW-C-3)
+- ✅ FIXED: Supply manipulation after voting (NEW-C-1, NEW-C-2)
+- ✅ FIXED: Config changes affect winner (NEW-C-3)
 - ✅ Tested: Treasury balance validation
 - ❓ What if execution reverts (e.g., transfer to malicious contract)?
 - ❓ What if multiple proposals meet same yesVotes?
 - ❓ What if winner = 0 (no proposals met quorum)?
 - ❓ What if auto-start new cycle fails?
 - ❓ What if two people try to execute simultaneously?
+- ❓ What if treasury has insufficient balance for proposal.token?
+- ❓ What if proposal.token is different from underlying?
+- ❓ What if boost with WETH while treasury has underlying balance?
 
 ---
 
@@ -440,18 +466,30 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 ## Treasury Flows
 
-### Flow 14: Treasury Transfer (via Governance)
+### Flow 14: Treasury Transfer (via Governance) - TOKEN AGNOSTIC
 
 **Actors:** Governor contract
 
 **Steps:**
 
 1. Winning proposal executed by anyone
-2. Governor calls `treasury.transfer(recipient, amount)`
+2. Governor calls `treasury.transfer(token, recipient, amount)`
 3. Treasury validates:
    - Caller is governor
    - Reentrancy guard active
+   - Token address is not zero
 4. Transfers tokens to recipient using SafeERC20
+
+**Token Agnostic Support:**
+
+- ✅ Underlying token (clanker token) - for backwards compatibility
+- ✅ Wrapped ETH (WETH) - primary use case for expansion
+- ✅ Any ERC20 token held by treasury - full flexibility
+
+**State Changes:**
+
+- Treasury token balance decreases
+- Recipient token balance increases
 
 **Edge Cases to Test:**
 
@@ -460,24 +498,40 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ❓ What if transfer to malicious contract that reverts?
 - ❓ What if transfer amount > balance?
 - ❓ What if transfer to zero address?
-- ❓ What if underlying token has transfer fees?
-- ❓ What if underlying token is pausable and paused?
+- ❓ What if token has transfer fees?
+- ❓ What if token is pausable and paused?
+- ❓ What if token is zero address?
+- ❓ What if transfer underlying vs WETH vs other ERC20?
 
 ---
 
-### Flow 15: Treasury Boost (via Governance)
+### Flow 15: Treasury Boost (via Governance) - TOKEN AGNOSTIC
 
 **Actors:** Governor contract
 
 **Steps:**
 
-1. Governor calls `treasury.applyBoost(amount)`
+1. Governor calls `treasury.applyBoost(token, amount)`
 2. Treasury:
+   - Validates token address is not zero
    - Gets staking address from factory
-   - Approves staking for `amount`
-   - Calls `staking.accrueFromTreasury(underlying, amount, true)`
-   - Staking pulls tokens
+   - Approves staking for `amount` of `token`
+   - Calls `staking.accrueFromTreasury(token, amount, true)`
+   - Staking pulls tokens (any ERC20)
    - **Resets approval to 0**
+
+**Token Agnostic Support:**
+
+- ✅ Underlying token (clanker token) - boosts with project token
+- ✅ Wrapped ETH (WETH) - boosts with ETH rewards
+- ✅ Any ERC20 token - boosts with arbitrary reward tokens
+
+**State Changes:**
+
+- Treasury token balance decreases
+- Staking contract token balance increases
+- Staking reward reserve for token increases
+- New reward stream starts (or adds to existing stream)
 
 **Edge Cases to Test:**
 
@@ -487,6 +541,9 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ❓ What if staking contract is malicious?
 - ❓ What if amount = 0?
 - ❓ What if boost twice in same transaction?
+- ❓ What if token is zero address?
+- ❓ What if boost with underlying vs WETH vs other ERC20?
+- ❓ What if multiple boosts with different tokens in same cycle?
 
 ---
 
@@ -522,6 +579,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ✅ **Zero salt** - Valid CREATE2 deployment
 
 **New Findings:**
+
 - ⚠️ **Weak validation**: Only checks if token != address(0), doesn't verify token is in Levr system
 - ✅ **Safe in practice**: configureSplits validates staking exists (ProjectNotRegistered)
 
@@ -534,8 +592,8 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 **Steps:**
 
 1. Token Admin calls `feeSplitter.configureSplits([{receiver, bps}, ...])`
-2. Validates (in _validateSplits):
-   - Caller is token admin (_msgSender() == IClankerToken(clankerToken).admin())
+2. Validates (in \_validateSplits):
+   - Caller is token admin (\_msgSender() == IClankerToken(clankerToken).admin())
    - Array not empty
    - Array length <= MAX_RECEIVERS (20)
    - Get staking address from factory (reverts if project not registered)
@@ -551,9 +609,9 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 **State Changes:**
 
-- Old _splits array completely deleted
-- New _splits array populated
-- Distribution state (_distributionState) UNCHANGED (persists)
+- Old \_splits array completely deleted
+- New \_splits array populated
+- Distribution state (\_distributionState) UNCHANGED (persists)
 
 **Edge Cases Tested:**
 
@@ -569,6 +627,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ✅ **BPS sum 9999 or 10001** - Rejected (must be exactly 10000)
 
 **Critical Finding:**
+
 - ⚠️ **Staking address** captured at configuration time (stored in splits[i].receiver)
 - ⚠️ **Auto-accrual target** read dynamically at distribution time (getStakingAddress())
 - ⚠️ **Mismatch risk** if staking address changes in factory between config and distribution
@@ -592,7 +651,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 5. Gets balance: `IERC20(rewardToken).balanceOf(address(this))`
 6. If balance == 0: return early (no-op)
 7. Validates splits configured
-8. For each split in _splits:
+8. For each split in \_splits:
    - Calculate: `amount = (balance * split.bps) / 10000`
    - If amount > 0: transfer to split.receiver (SafeERC20)
    - If receiver == staking (from factory): set sentToStaking = true
@@ -604,8 +663,8 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 **State Changes:**
 
 - rewardToken balance transferred from splitter → receivers
-- _distributionState[rewardToken].totalDistributed increases
-- _distributionState[rewardToken].lastDistribution updated
+- \_distributionState[rewardToken].totalDistributed increases
+- \_distributionState[rewardToken].lastDistribution updated
 
 **Edge Cases Tested:**
 
@@ -624,6 +683,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ✅ **Multiple tokens sequentially** - Each distributes independently
 
 **Critical Finding:**
+
 - ⚠️ **Staking address mismatch**: If factory staking changes, fees sent to OLD staking but accrual called on NEW staking (mismatch!)
 
 ---
@@ -636,7 +696,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 1. Anyone calls `feeSplitter.distributeBatch([token1, token2, ...])`
 2. For each token in array:
-   - Calls _distributeSingle(token) (internal, no reentrancy guard)
+   - Calls \_distributeSingle(token) (internal, no reentrancy guard)
 3. ReentrancyGuard protects entire batch operation
 
 **State Changes:**
@@ -653,6 +713,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ✅ **Auto-accrual per token** - Called for each token sent to staking
 
 **New Finding:**
+
 - ⚠️ **No MAX_BATCH_SIZE limit** - Could hit gas limit with very large arrays (800+ tokens estimated)
 
 ---
@@ -693,14 +754,14 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 1. Splits already configured
 2. Token Admin calls `configureSplits(newSplits)`
 3. Validates new configuration (same as initial configuration)
-4. **Deletes entire _splits array**: `delete _splits`
+4. **Deletes entire \_splits array**: `delete _splits`
 5. Stores new splits
 6. **Distribution state NOT deleted** - persists across reconfigurations
 
 **State Changes:**
 
-- _splits completely replaced
-- _distributionState unchanged (totalDistributed, lastDistribution persist)
+- \_splits completely replaced
+- \_distributionState unchanged (totalDistributed, lastDistribution persist)
 
 **Edge Cases Tested:**
 
@@ -710,6 +771,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 - ✅ **Old splits deleted** - No residual state from old config
 
 **Design Note:**
+
 - Distribution state is per-token, not per-configuration
 - totalDistributed tracks lifetime totals, not config-specific totals
 
@@ -770,7 +832,7 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 ## Cross-Contract Flows
 
-### Flow 20: Complete Governance Cycle (Proposal → Vote → Execute → Boost)
+### Flow 20: Complete Governance Cycle (Proposal → Vote → Execute → Boost) - TOKEN AGNOSTIC
 
 **Actors:** Multiple users
 
@@ -778,52 +840,63 @@ Total rewards: 5000 (3000 from stream 1 + 2000 from stream 2)
 
 1. **T0**: Alice stakes 1000 tokens (gets 1000 sTokens, VP = 0)
 2. **T0 + 10 days**: Alice has VP = (1000 × 10) / (1e18 × 86400) token-days
-3. **T1**: Alice creates proposal for 5000 token boost
+3. **T1**: Alice creates proposal for 5000 WETH boost
+   - `proposeBoost(WETH_ADDRESS, 5000 ether)`
    - Auto-starts Cycle 1
    - Proposal window: T1 to T1+2days
    - Voting window: T1+2days to T1+7days
+   - Stores: `proposal.token = WETH_ADDRESS`
 4. **T1 + 2.5 days**: Bob (also staker) votes YES
 5. **T1 + 3 days**: Alice votes YES
 6. **T1 + 7.5 days**: Anyone executes proposal
-   - Checks quorum (uses CURRENT totalSupply) ⚠️
-   - Checks approval (uses CURRENT approvalBps) ⚠️
-   - Governor calls treasury.applyBoost(5000)
-   - Treasury approves staking for 5000
-   - Staking pulls tokens and credits rewards
+   - Checks quorum (uses SNAPSHOT totalSupply) ✅
+   - Checks approval (uses SNAPSHOT approvalBps) ✅
+   - Governor calls `treasury.applyBoost(WETH_ADDRESS, 5000 ether)`
+   - Treasury approves staking for 5000 WETH
+   - Staking pulls WETH and credits as rewards
    - Approval reset to 0
    - Auto-starts Cycle 2
+
+**Token Agnostic Support:**
+
+- ✅ Proposal specifies token (WETH in this example)
+- ✅ Treasury balance check uses proposal.token
+- ✅ Staking receives WETH as reward token (multi-token support)
+- ✅ Users can claim WETH rewards separately from underlying
 
 **State Progression:**
 
 ```
-T0: Staking begins
+T0: Staking begins (underlying token)
 T0+10d: VP accumulates
-T1: Proposal created (cycle starts)
+T1: WETH boost proposal created (cycle starts)
 T1+2d: Voting starts
 T1+3d: Votes cast
 T1+7d: Voting ends
-T1+7.5d: Execution
+T1+7.5d: Execution (WETH moved treasury → staking)
 ```
 
 **Critical Edge Cases:**
 
-- 🔴 What if Charlie stakes between T1+7d and T1+7.5d? (Supply manipulation)
-- 🔴 What if factory config changes between T1+7d and T1+7.5d? (Config manipulation)
+- ✅ FIXED: Charlie stakes between T1+7d and T1+7.5d (Supply snapshot protects)
+- ✅ FIXED: Factory config changes between T1+7d and T1+7.5d (Config snapshot protects)
 - ❓ What if Alice unstakes after voting?
-- ❓ What if treasury runs out of funds?
+- ❓ What if treasury runs out of WETH?
 - ❓ What if boost reverts?
 - ❓ What if no one executes the proposal?
+- ❓ What if treasury has underlying but proposal is for WETH?
+- ❓ What if multiple proposals for different tokens in same cycle?
 
 ---
 
-### Flow 21: Competing Proposals (Winner Determination)
+### Flow 21: Competing Proposals (Winner Determination) - TOKEN AGNOSTIC
 
 **Actors:** Multiple stakers
 
 **Steps:**
 
-1. **T0**: Alice proposes Boost(1000) - Proposal 1
-2. **T0 + 1 day**: Bob proposes Boost(2000) - Proposal 2
+1. **T0**: Alice proposes Boost(WETH, 1000 ether) - Proposal 1
+2. **T0 + 1 day**: Bob proposes Boost(underlying, 2000 ether) - Proposal 2
 3. **T0 + 2 days**: Voting starts
 4. **T0 + 3 days**:
    - Proposal 1 gets 600 yes votes
@@ -831,17 +904,26 @@ T1+7.5d: Execution
 5. **T0 + 7 days**: Voting ends
 6. **T0 + 7.5 days**: Execute proposal
    - Winner determination: loops through proposals
-   - For each: checks `_meetsQuorum(pid) && _meetsApproval(pid)` (uses CURRENT state) ⚠️
-   - Winner = proposal with most yes votes
+   - For each: checks `_meetsQuorum(pid) && _meetsApproval(pid)` (uses SNAPSHOTS) ✅
+   - Winner = proposal with most yes votes (Proposal 2)
    - Only winner can execute
+   - Execution: `treasury.applyBoost(underlying, 2000 ether)`
+
+**Token Agnostic Support:**
+
+- ✅ Different proposals can specify different tokens
+- ✅ Winner determination independent of token
+- ✅ Only winner's token is used in execution
 
 **Critical Edge Cases:**
 
-- 🔴 What if factory config changes before execution? (Changes who meets threshold)
-- 🔴 What if supply changes before execution? (Changes quorum denominator)
+- ✅ FIXED: Factory config changes before execution (Snapshots protect)
+- ✅ FIXED: Supply changes before execution (Snapshots protect)
 - ❓ What if two proposals have same yes votes?
 - ❓ What if all proposals fail quorum?
 - ❓ What if winner is executed but other proposals still meet quorum?
+- ❓ What if winner proposes WETH but loser proposes underlying?
+- ❓ What if treasury has one token but not the other?
 
 ---
 

@@ -88,7 +88,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create and vote on proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -149,7 +149,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -277,7 +277,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 10 days);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
         uint256 votingStarts = prop.votingStartsAt;
@@ -298,7 +298,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), type(uint256).max);
         staking.stake(1000 ether);
         vm.warp(block.timestamp + 10 days);
-        uint256 pid2 = governor.proposeBoost(1000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 1000 ether);
         vm.stopPrank();
 
         prop = governor.getProposal(pid2);
@@ -347,7 +347,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Propose exactly at max (should succeed)
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(maxAmount);
+        uint256 pid = governor.proposeBoost(address(underlying), maxAmount);
         console2.log('Proposal at exact max: SUCCESS');
 
         // Wait for new cycle
@@ -357,7 +357,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         // Propose 1 wei over max (should fail)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.ProposalAmountExceedsLimit.selector);
-        governor.proposeBoost(maxAmount + 1);
+        governor.proposeBoost(address(underlying), maxAmount + 1);
         console2.log('Proposal at max + 1: BLOCKED (correct)');
     }
 
@@ -448,7 +448,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -509,7 +509,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 10 days);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
         console2.log('Alice proposed with 10% of supply (min = 1%)');
 
         // Factory owner changes minStake to 20%
@@ -552,7 +552,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
-        governor.proposeBoost(1000 ether);
+        governor.proposeBoost(address(underlying), 1000 ether);
         console2.log('Alice cannot create new proposal: BLOCKED (10% < 20%)');
     }
 
@@ -569,7 +569,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 10 days);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -758,7 +758,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal in cycle 1
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
         vm.prank(alice);
@@ -772,7 +772,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // FIX: Create proposal immediately, then warp to voting window
         vm.prank(alice);
-        uint256 pid2 = governor.proposeBoost(1000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory p2 = governor.getProposal(pid2);
         console2.log('Proposal 2 created at:', block.timestamp);

@@ -162,7 +162,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create first proposal (auto-starts governance cycle - proposer pays gas)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         uint256 cycleId = ILevrGovernor_v1(governor).currentCycleId();
         assertEq(cycleId, 1, 'cycle should be 1 after first proposal');
@@ -171,13 +171,14 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'Team allocation'
         );
 
         vm.prank(charlie);
-        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
 
         // Verify proposals created
         assertEq(pid1, 1);
@@ -293,7 +294,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal (auto-starts cycle - proposer pays gas)
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Bob tries to stake AFTER proposal is created
         _stakeFor(bob, 10 ether); // Bob stakes 2x more than Alice
@@ -342,17 +343,18 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Alice can only propose once per type per cycle
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(10 ether); // First auto-starts cycle
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 10 ether); // First auto-starts cycle
         assertGt(pid1, 0, 'should create first boost proposal');
 
         // Alice tries to create another BoostStakingPool in same cycle (should revert)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
-        ILevrGovernor_v1(governor).proposeBoost(10 ether);
+        ILevrGovernor_v1(governor).proposeBoost(clankerToken, 10 ether);
 
         // But alice can create TransferToAddress proposal (different type)
         vm.prank(alice);
         uint256 pidTransfer = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             10 ether,
             'test'
@@ -362,7 +364,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Alice tries to create another TransferToAddress in same cycle (should revert)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
-        ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 10 ether, 'test');
+        ILevrGovernor_v1(governor).proposeTransfer(clankerToken, address(0xBEEF), 10 ether, 'test');
     }
 
     // ============ Test 5: Quorum Not Met ============
@@ -387,7 +389,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting
         vm.warp(block.timestamp + 2 days + 1);
@@ -429,7 +431,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting
         vm.warp(block.timestamp + 2 days + 1);
@@ -471,13 +473,13 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create 3 proposals
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         vm.prank(bob);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
 
         vm.prank(charlie);
-        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(150 ether);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 150 ether);
 
         // Warp to voting
         vm.warp(block.timestamp + 2 days + 1);
@@ -545,7 +547,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Alice tries to propose (should revert)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
-        ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Alice stakes more to meet threshold
         uint256 additionalStake = (minStake - aliceAmount) + 0.01 ether;
@@ -557,7 +559,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Now Alice can propose
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertGt(pid, 0, 'proposal should be created');
     }
 
@@ -571,7 +573,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // First proposal auto-starts cycle 1
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertEq(pid1, 1, 'First proposal should have ID 1');
         assertEq(ILevrGovernor_v1(governor).currentCycleId(), 1, 'Should be in cycle 1');
 
@@ -593,7 +595,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // New proposal after cycle ended auto-starts cycle 2
         // pid1 failed quorum so it's defeated and can be orphaned safely
         vm.prank(alice);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
         assertEq(pid2, 2, 'Second proposal should have ID 2');
         assertEq(
             ILevrGovernor_v1(governor).currentCycleId(),
@@ -634,7 +636,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create single proposal (will auto-start cycle 1)
         vm.prank(alice);
-        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Get initial proposal state
         ILevrGovernor_v1.Proposal memory propAfterCreation = ILevrGovernor_v1(governor).getProposal(
@@ -728,7 +730,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal (auto-starts cycle 1)
         vm.prank(alice);
-        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -779,10 +781,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create two proposals (auto-starts cycle 1)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'test'
@@ -848,7 +851,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal (auto-starts cycle 1)
         vm.prank(alice);
-        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);

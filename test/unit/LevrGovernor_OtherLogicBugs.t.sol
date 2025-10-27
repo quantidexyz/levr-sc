@@ -83,10 +83,10 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Create two proposals
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeTransfer(charlie, 1000 ether, 'test');
+        uint256 pid2 = governor.proposeTransfer(address(underlying), charlie, 1000 ether, 'test');
 
         console2.log('Proposal 1 (Boost):', pid1);
         console2.log('Proposal 2 (Transfer):', pid2);
@@ -142,7 +142,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 countAfterCreate = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
@@ -206,7 +206,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 countBefore = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
@@ -257,7 +257,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 10 days);
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
         vm.prank(alice);
@@ -328,7 +328,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         // Only Alice votes - insufficient quorum
         vm.warp(block.timestamp + 2 days + 1);
@@ -367,7 +367,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -423,7 +423,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         console2.log('Total supply:', sToken.totalSupply() / 1e18);
 
@@ -486,7 +486,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint256 countAfterCreate = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
@@ -535,7 +535,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal for 10k tokens
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(10_000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 10_000 ether);
 
         console2.log('Proposal amount: 10000 tokens');
         console2.log('Treasury balance at creation: 100000 tokens');
@@ -550,7 +550,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         // BEFORE execution: Drain treasury (governance attack or separate proposal)
         // In real scenario, another proposal could have drained it
         vm.prank(address(governor));
-        treasury.transfer(charlie, 95_000 ether);
+        treasury.transfer(address(underlying), charlie, 95_000 ether);
 
         console2.log('\nTreasury drained to: 5000 tokens');
         console2.log('Proposal needs: 10000 tokens');

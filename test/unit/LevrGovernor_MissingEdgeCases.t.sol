@@ -91,7 +91,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal in Cycle 1
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         console2.log('Created proposal in Cycle 1');
         console2.log(
@@ -164,13 +164,13 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create 3 boost proposals
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeBoost(2000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 2000 ether);
 
         vm.prank(charlie);
-        uint256 pid3 = governor.proposeBoost(3000 ether);
+        uint256 pid3 = governor.proposeBoost(address(underlying), 3000 ether);
 
         console2.log('Created 3 proposals:', pid1, pid2, pid3);
 
@@ -297,7 +297,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal (will snapshot invalid values)
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
         console2.log('\nSnapshot values:');
@@ -351,7 +351,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Cycle 1: Create proposal that will fail quorum
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         console2.log('Cycle 1: Created proposal', pid1);
 
@@ -440,7 +440,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal RIGHT AFTER third update
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         // Verify snapshot captured LATEST config (70%)
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
@@ -486,7 +486,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create first proposal (starts Cycle 1)
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory p1 = governor.getProposal(pid1);
         uint256 cycle1End = p1.votingEndsAt;
@@ -503,7 +503,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         // Try to create proposal after cycle boundary
         // Should auto-start Cycle 2
         vm.prank(alice);
-        uint256 pid2 = governor.proposeBoost(2000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 2000 ether);
 
         // Verify we're in a new cycle
         uint256 cycleId = governor.currentCycleId();
@@ -548,7 +548,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         console2.log('\nAttempting to create proposal with 0 total supply...');
 
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         console2.log('Proposal created successfully with ID:', pid);
 
@@ -581,7 +581,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Cycle 1: Create successful proposal but DON'T execute it
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
         vm.prank(alice);
@@ -629,7 +629,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create first proposal (quorum = 70%)
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         uint16 snapshot1 = governor.getProposal(pid1).quorumBpsSnapshot;
         console2.log('Proposal 1 quorum snapshot:', snapshot1);
@@ -656,7 +656,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create second proposal (should snapshot new config)
         vm.prank(bob);
-        uint256 pid2 = governor.proposeTransfer(charlie, 500 ether, 'test');
+        uint256 pid2 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'test');
 
         uint16 snapshot2 = governor.getProposal(pid2).quorumBpsSnapshot;
         console2.log('Proposal 2 quorum snapshot:', snapshot2);
@@ -693,13 +693,13 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create 3 proposals
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeBoost(2000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 2000 ether);
 
         vm.prank(alice);
-        uint256 pid3 = governor.proposeTransfer(charlie, 500 ether, 'test');
+        uint256 pid3 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'test');
 
         console2.log('Created 3 proposals');
 
@@ -776,7 +776,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
         console2.log('Snapshot quorum:', prop.quorumBpsSnapshot);
@@ -826,20 +826,20 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal for exactly 50% (50,000 tokens)
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(50_000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 50_000 ether);
 
         console2.log('Created proposal for 50,000 tokens (exactly 50%)');
 
         // Try to create proposal for 50% + 1 wei (should fail)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.ProposalAmountExceedsLimit.selector);
-        governor.proposeBoost(50_000 ether + 1);
+        governor.proposeBoost(address(underlying), 50_000 ether + 1);
 
         console2.log('Cannot create proposal for 50,000 + 1 wei: PASS');
 
         // Now DRAIN treasury via governor (simulate other proposal executing first)
         vm.prank(address(governor));
-        treasury.transfer(charlie, 60_000 ether);
+        treasury.transfer(address(underlying), charlie, 60_000 ether);
 
         console2.log('\nTreasury drained to:', underlying.balanceOf(address(treasury)) / 1e18);
 
@@ -884,7 +884,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(bob);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         // Move to voting window start
         vm.warp(block.timestamp + 2 days + 1);
@@ -927,13 +927,13 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         // Create 4 proposals
         uint256[4] memory pids;
         vm.prank(alice);
-        pids[0] = governor.proposeBoost(1000 ether);
+        pids[0] = governor.proposeBoost(address(underlying), 1000 ether);
         vm.prank(bob);
-        pids[1] = governor.proposeBoost(2000 ether);
+        pids[1] = governor.proposeBoost(address(underlying), 2000 ether);
         vm.prank(charlie);
-        pids[2] = governor.proposeBoost(3000 ether);
+        pids[2] = governor.proposeBoost(address(underlying), 3000 ether);
         vm.prank(dave);
-        pids[3] = governor.proposeBoost(4000 ether);
+        pids[3] = governor.proposeBoost(address(underlying), 4000 ether);
 
         console2.log('Created 4 proposals');
         console2.log('  PID 1:', pids[0]);
@@ -1003,7 +1003,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         // Capture original snapshots
         ILevrGovernor_v1.Proposal memory propBefore = governor.getProposal(pid);
@@ -1088,22 +1088,21 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         uint256 treasuryBalance = underlying.balanceOf(address(treasury));
         uint256 proposalAmount = treasuryBalance + 1_000_000 ether;
 
+        // With token-agnostic update, balance is now checked at proposal creation
+        // So this should revert at creation time (NEW-C-1 fix)
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(proposalAmount);
-
-        console2.log('Created proposal for:', proposalAmount / 1e18, 'tokens');
-        console2.log('(More than treasury balance)');
-
-        // Proposal creation succeeds (no limit at creation)
-        // But execution will fail (treasury balance check at execution)
-        vm.warp(block.timestamp + 2 days + 1);
-        vm.prank(alice);
-        governor.vote(pid, true);
-
-        vm.warp(block.timestamp + 5 days + 1);
-
         vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
-        governor.execute(pid);
+        governor.proposeBoost(address(underlying), proposalAmount);
+
+        console2.log('Proposal creation correctly rejected (balance check at creation)');
+        console2.log('(Treasury balance validated upfront for security)');
+
+        // Now create a valid proposal that's within treasury balance
+        vm.prank(alice);
+        uint256 pid = governor.proposeBoost(address(underlying), treasuryBalance / 2);
+
+        console2.log('Created valid proposal for:', treasuryBalance / 2 / 1e18, 'tokens');
+        console2.log('RESULT: maxProposalAmountBps=0 allows any amount up to treasury balance');
 
         console2.log('[PASS] maxProposalAmountBps = 0 allows any amount (checked at execution)');
     }
@@ -1146,7 +1145,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(100 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         // Move to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -1189,7 +1188,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         // Only Alice votes - fails quorum
         vm.warp(block.timestamp + 2 days + 1);
@@ -1232,14 +1231,14 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Cycle 1: Alice creates boost proposal
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         console2.log('Cycle 1: Alice created boost proposal');
 
         // Try to create another boost proposal - should fail
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
-        governor.proposeBoost(2000 ether);
+        governor.proposeBoost(address(underlying), 2000 ether);
 
         console2.log('Cannot create another boost proposal in same cycle: PASS');
 
@@ -1255,7 +1254,7 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // In Cycle 2, Alice should be able to create boost proposal again
         vm.prank(alice);
-        uint256 pid2 = governor.proposeBoost(3000 ether);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 3000 ether);
 
         console2.log('Alice created boost proposal in Cycle 2: SUCCESS');
 

@@ -128,7 +128,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Propose boost (auto-starts governance cycle)
         uint256 boostAmount = treasuryAmount / 2;
-        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(boostAmount);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(clankerToken, boostAmount);
 
         // Vote to make it winner (quorum=0, approval=0 for this test config)
         vm.warp(block.timestamp + 2 days + 1); // In voting window

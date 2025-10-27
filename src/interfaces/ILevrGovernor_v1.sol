@@ -29,6 +29,7 @@ interface ILevrGovernor_v1 {
         uint256 id; // Proposal ID
         ProposalType proposalType; // Type of proposal
         address proposer; // Address that created the proposal
+        address token; // TOKEN AGNOSTIC: ERC20 token address (underlying, WETH, or any ERC20)
         uint256 amount; // Amount of tokens to transfer
         address recipient; // Recipient address (for TransferToAddress type)
         string description; // Proposal description (for TransferToAddress type)
@@ -120,6 +121,7 @@ interface ILevrGovernor_v1 {
     /// @param proposalId The ID of the proposal
     /// @param proposer Address that created the proposal
     /// @param proposalType Type of proposal
+    /// @param token ERC20 token address (underlying, WETH, or any ERC20)
     /// @param amount Amount of tokens
     /// @param recipient Recipient address (for TransferToAddress)
     /// @param description Proposal description
@@ -127,6 +129,7 @@ interface ILevrGovernor_v1 {
         uint256 indexed proposalId,
         address indexed proposer,
         ProposalType proposalType,
+        address indexed token,
         uint256 amount,
         address recipient,
         string description
@@ -166,19 +169,22 @@ interface ILevrGovernor_v1 {
     /// @dev Requires minimum staked balance (minSTokenBpsToSubmit)
     ///      Max active proposals per type not exceeded
     ///      Automatically starts new cycle if none exists or current ended
+    /// @param token ERC20 token address (underlying, WETH, or any ERC20)
     /// @param amount Amount of tokens to transfer from treasury to staking
     /// @return proposalId The ID of the created proposal
-    function proposeBoost(uint256 amount) external returns (uint256 proposalId);
+    function proposeBoost(address token, uint256 amount) external returns (uint256 proposalId);
 
     /// @notice Create a proposal to transfer tokens to an address
     /// @dev Requires minimum staked balance (minSTokenBpsToSubmit)
     ///      Max active proposals per type not exceeded
     ///      Automatically starts new cycle if none exists or current ended
+    /// @param token ERC20 token address (underlying, WETH, or any ERC20)
     /// @param recipient Address to receive tokens
     /// @param amount Amount of tokens to transfer
     /// @param description Proposal description
     /// @return proposalId The ID of the created proposal
     function proposeTransfer(
+        address token,
         address recipient,
         uint256 amount,
         string calldata description

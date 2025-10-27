@@ -3572,3 +3572,142 @@ All governance tests pass (139/139 total):
 - ✅ 50 other tests
 
 ---
+
+## Token-Agnostic Governance (October 27, 2025)
+
+**Status:** ✅ **IMPLEMENTED**  
+**Severity:** ENHANCEMENT  
+**Impact:** Expanded functionality - treasury can manage multiple ERC20 tokens
+
+### Summary
+
+Governance and treasury contracts upgraded to support token-agnostic operations:
+
+- Proposals now specify which ERC20 token to use
+- Treasury can transfer any ERC20, not just underlying token
+- Staking can receive boosts in any ERC20 (already supported multi-token rewards)
+
+### Changes Made
+
+**Governance (`LevrGovernor_v1.sol`):**
+
+1. Added `token` field to `Proposal` struct
+2. Updated `proposeBoost(address token, uint256 amount)` to accept token parameter
+3. Updated `proposeTransfer(address token, address recipient, uint256 amount, string description)` to accept token parameter
+4. Added token validation at proposal creation (non-zero address check)
+5. **Added balance check for `proposal.token` at creation and execution**
+6. Updated execution to use `proposal.token` for treasury operations
+7. Updated `ProposalCreated` event to include `address indexed token` parameter
+
+**Treasury (`LevrTreasury_v1.sol`):**
+
+1. Updated `transfer(address token, address to, uint256 amount)` to accept token parameter
+2. Updated `applyBoost(address token, uint256 amount)` to accept token parameter
+3. Both functions now work with any ERC20, not just `underlying`
+4. Added zero address validation for token parameter
+
+**Backward Compatibility:**
+
+- ⚠️ **BREAKING CHANGE**: Function signatures changed (requires test updates)
+- ✅ Existing proposal pattern still works (just specify `underlying` token)
+- ✅ All security fixes maintained (snapshots, reentrancy protection, etc.)
+
+### Security Considerations
+
+✅ **Validations Added:**
+
+- Token address cannot be zero (checked in `_propose()`)
+- Treasury balance checked at **proposal creation** AND execution
+- All existing security measures maintained
+
+✅ **No New Vulnerabilities:**
+
+- Snapshot mechanism still protects against supply/config manipulation
+- Reentrancy guards remain in place
+- Access control unchanged (only governor can call treasury functions)
+
+### Test Coverage
+
+**Updated Tests:**
+
+- ✅ 296/296 tests passing
+- ✅ All governance unit tests updated
+- ✅ All governance E2E tests updated
+- ✅ All treasury unit tests updated
+- ✅ 1 test updated to reflect balance check at creation time
+
+**Test Pattern:**
+
+```solidity
+// OLD:
+governor.proposeBoost(1000 ether);
+governor.proposeTransfer(alice, 500 ether, "Send to Alice");
+
+// NEW:
+governor.proposeBoost(address(clankerToken), 1000 ether);
+governor.proposeTransfer(address(clankerToken), alice, 500 ether, "Send to Alice");
+
+// For WETH (new capability):
+governor.proposeBoost(WETH_ADDRESS, 1000 ether);
+governor.proposeTransfer(WETH_ADDRESS, alice, 500 ether, "Send WETH to Alice");
+```
+
+### Use Cases Enabled
+
+**1. WETH Donations & Distribution:**
+
+- Treasury can accept WETH donations
+- Governance can propose WETH boosts to staking rewards
+- Governance can propose WETH transfers to addresses
+
+**2. Multi-Token Treasury Management:**
+
+- Support for fee splitters that send multiple tokens to treasury
+- Ability to distribute any ERC20 via governance
+- Future-proof for new token types
+
+**3. Reward Diversification:**
+
+- Staking already supports multi-token rewards via `accrueFromTreasury(token, amount, true)`
+- Now governance can propose boosts in any supported token
+- Community can diversify reward strategies
+
+### Production Readiness
+
+**Status:** ✅ **PRODUCTION READY**
+
+Completed:
+
+- ✅ Treasury implementation updated
+- ✅ Governor implementation updated
+- ✅ All test suites updated (296/296 passing)
+- ✅ Token validation added
+- ✅ Balance checks at creation & execution
+- ✅ Zero address validation
+- ✅ Documentation updated
+
+### Files Modified
+
+| File                                  | Change                                                        |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `src/interfaces/ILevrGovernor_v1.sol` | Added `token` field to `Proposal`, updated function sigs      |
+| `src/interfaces/ILevrTreasury_v1.sol` | Updated `transfer()` and `applyBoost()` signatures            |
+| `src/LevrGovernor_v1.sol`             | Token parameter in proposals, balance checks, event update    |
+| `src/LevrTreasury_v1.sol`             | Token parameter in transfer/applyBoost, zero address checks   |
+| `spec/USER_FLOWS.md`                  | Updated flows 10, 12, 14, 15, 20, 21 with token parameters    |
+| `test/**/*.sol`                       | Updated all 296 tests with token parameters                   |
+
+### Edge Cases Addressed
+
+✅ **Balance validation** - Added at proposal creation (prevents impossible proposals)  
+✅ **Zero address** - Validated for token parameter  
+✅ **Multi-token proposals** - Supported in same cycle  
+✅ **Winner determination** - Token-independent  
+✅ **Treasury balance changes** - Checked at execution too (double validation)
+
+---
+
+**Migration Date:** October 27, 2025  
+**Tests Passing:** 296/296  
+**Breaking Changes:** Function signature changes (fully migrated)  
+**New Capabilities:** WETH support, multi-token treasury management

@@ -93,7 +93,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         // Advance to voting
         vm.warp(block.timestamp + 2 days + 1);
@@ -182,7 +182,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(1000 ether);
+        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
 
@@ -250,10 +250,10 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Create two proposals
         vm.prank(alice);
-        uint256 pid1 = governor.proposeBoost(1000 ether);
+        uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.prank(bob);
-        uint256 pid2 = governor.proposeTransfer(charlie, 500 ether, 'transfer');
+        uint256 pid2 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'transfer');
 
         vm.warp(block.timestamp + 2 days + 1);
 

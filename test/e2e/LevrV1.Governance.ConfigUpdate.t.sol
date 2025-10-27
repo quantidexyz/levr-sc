@@ -137,7 +137,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -186,7 +186,9 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Execution should succeed because snapshot protects against config changes
         ILevrGovernor_v1(governor).execute(pid);
 
-        console2.log('[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes');
+        console2.log(
+            '[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes'
+        );
     }
 
     // ============ Test 2: Quorum Decrease Mid-Cycle (Allows Previously Failing Proposal) ============
@@ -201,7 +203,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -249,7 +251,9 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
 
-        console2.log('[RESULT] Proposal still defeated - snapshot protects against mid-cycle config changes');
+        console2.log(
+            '[RESULT] Proposal still defeated - snapshot protects against mid-cycle config changes'
+        );
     }
 
     // ============ Test 3: Approval Threshold Change Mid-Cycle ============
@@ -264,7 +268,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
@@ -316,7 +320,9 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Execution should succeed because snapshot protects against config changes
         ILevrGovernor_v1(governor).execute(pid);
 
-        console2.log('[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes');
+        console2.log(
+            '[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes'
+        );
     }
 
     // ============ Test 4: MaxActiveProposals Change Mid-Cycle ============
@@ -329,7 +335,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates first proposal (maxActiveProposals = 7)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertGt(pid1, 0, 'First proposal should succeed');
 
         // Factory owner reduces maxActiveProposals to 1
@@ -358,7 +364,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Note: MaxProposalsReached is checked BEFORE AlreadyProposedInCycle
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-        ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
 
         console2.log(
             '[RESULT] New proposals blocked by reduced limit, existing proposals unaffected'
@@ -376,7 +382,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal (meets 1% requirement with 25%)
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertGt(pid, 0, 'First proposal should succeed');
 
         // Factory owner increases minStake to 30% (alice now has insufficient stake for NEW proposals)
@@ -419,7 +425,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Alice tries to create new proposal in new cycle - should fail (25% < 30%)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
-        ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 50 ether, 'test');
+        ILevrGovernor_v1(governor).proposeTransfer(clankerToken, address(0xBEEF), 50 ether, 'test');
 
         console2.log('[RESULT] New proposals blocked by increased stake requirement');
     }
@@ -436,7 +442,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates FIRST proposal with original config (2 day proposal, 5 day voting)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         ILevrGovernor_v1.Proposal memory p1Before = ILevrGovernor_v1(governor).getProposal(pid1);
         uint256 cycleProposalEnd = p1Before.votingStartsAt; // Should be now + 2 days
@@ -468,6 +474,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(block.timestamp + 1 days); // Still within original proposal window
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'test'
@@ -553,7 +560,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // STEP 1: First proposal auto-creates cycle
         console2.log('=== STEP 1: Alice proposes (auto-creates cycle 1) ===');
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         ILevrGovernor_v1.Proposal memory p1 = ILevrGovernor_v1(governor).getProposal(pid1);
         console2.log('Cycle 1 created at T0:', t0);
@@ -591,6 +598,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'test'
@@ -676,7 +684,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Vote but make it fail (low quorum - only alice votes = 20% < 70%)
         vm.warp(block.timestamp + 2 days + 1); // Voting window
@@ -711,7 +719,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(alice);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(50 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 50 ether);
         assertGt(pid2, 0, 'New proposal should work in cycle 2');
 
         console2.log('[RESULT] Governance recovered - new proposals work in cycle 2');
@@ -727,7 +735,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Create proposal in cycle 1
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Vote but make it fail (only alice votes = 20% < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);
@@ -747,7 +755,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(alice);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(50 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 50 ether);
 
         // This should have auto-created cycle 2!
         assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should auto-advance to cycle 2');
@@ -771,7 +779,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Vote but insufficient participation (only alice votes = 20% < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);
@@ -806,7 +814,10 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // FIX [NEW-C-3]: With snapshot fix, proposal STILL does NOT meet quorum
         // Config changes can no longer be used for recovery (security improvement)
         // This is the CORRECT, SECURE behavior - prevents config manipulation
-        assertFalse(ILevrGovernor_v1(governor).meetsQuorum(pid), 'Should still not meet 70% quorum (snapshot)');
+        assertFalse(
+            ILevrGovernor_v1(governor).meetsQuorum(pid),
+            'Should still not meet 70% quorum (snapshot)'
+        );
 
         // Execution fails - config changes cannot unblock stuck proposals
         vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
@@ -817,7 +828,11 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Proper recovery: manually start new cycle
         ILevrGovernor_v1(governor).startNewCycle();
-        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should be in cycle 2 after manual restart');
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            2,
+            'Should be in cycle 2 after manual restart'
+        );
     }
 
     // ============ Test 10: Auto-Cycle Creation After Config Update ============
@@ -848,7 +863,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal - this will AUTO-CREATE cycle 1 with NEW config
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Verify the auto-created cycle used the NEW config
         ILevrGovernor_v1.Proposal memory proposal = ILevrGovernor_v1(governor).getProposal(pid);
