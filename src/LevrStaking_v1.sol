@@ -22,11 +22,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     address public stakedToken;
     address public treasury; // for future integrations
     address public factory; // Levr factory instance
+
+    // Global streaming state - shared by all reward tokens for gas efficiency
     uint64 private _streamStart;
     uint64 private _streamEnd;
-    // Per-token streaming state for UI/APR
-    mapping(address => uint64) private _streamStartByToken;
-    mapping(address => uint64) private _streamEndByToken;
+
+    // Per-token: amount to vest and last update time
     mapping(address => uint256) private _streamTotalByToken;
     // Track last settlement timestamp per reward token to vest linearly
     mapping(address => uint64) private _lastUpdateByToken;
@@ -201,9 +202,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Token must exist in the system
         require(_rewardInfo[token].exists, 'TOKEN_NOT_REGISTERED');
 
-        // Stream must be finished (ended and past end time)
-        uint64 tokenStreamEnd = _streamEndByToken[token];
-        require(tokenStreamEnd > 0 && block.timestamp >= tokenStreamEnd, 'STREAM_NOT_FINISHED');
+        // Stream must be finished (global stream ended and past end time)
+        // Check if global stream has ended
+        require(_streamEnd > 0 && block.timestamp >= _streamEnd, 'STREAM_NOT_FINISHED');
 
         // All rewards must be claimed (reserve = 0)
         require(_rewardReserve[token] == 0, 'REWARDS_STILL_PENDING');
@@ -221,9 +222,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Mark as non-existent
         delete _rewardInfo[token];
 
-        // Clear stream metadata
-        delete _streamStartByToken[token];
-        delete _streamEndByToken[token];
+        // Clear per-token stream metadata
         delete _streamTotalByToken[token];
         delete _lastUpdateByToken[token];
 
@@ -255,9 +254,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Calculate what would be accumulated after settling streaming
         uint256 accPerShare = info.accPerShare;
 
-        // Add any pending streaming rewards
-        uint64 start = _streamStartByToken[token];
-        uint64 end = _streamEndByToken[token];
+        // Add any pending streaming rewards using GLOBAL stream window
+        uint64 start = _streamStart;
+        uint64 end = _streamEnd;
         if (end > 0 && start > 0 && block.timestamp > start) {
             uint64 last = _lastUpdateByToken[token];
             uint64 from = last < start ? start : last;
@@ -360,8 +359,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function rewardRatePerSecond(address token) external view returns (uint256) {
-        uint64 start = _streamStartByToken[token];
-        uint64 end = _streamEndByToken[token];
+        // Use GLOBAL stream window
+        uint64 start = _streamStart;
+        uint64 end = _streamEnd;
         if (end == 0 || end <= start) return 0;
         if (block.timestamp >= end) return 0;
         uint256 window = end - start;
@@ -372,8 +372,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @inheritdoc ILevrStaking_v1
     function aprBps() external view returns (uint256) {
         if (_totalStaked == 0) return 0;
-        uint64 start = _streamStartByToken[underlying];
-        uint64 end = _streamEndByToken[underlying];
+        // Use GLOBAL stream window
+        uint64 start = _streamStart;
+        uint64 end = _streamEnd;
         if (end == 0 || end <= start) return 0;
         if (block.timestamp >= end) return 0;
         uint256 window = end - start;
@@ -388,11 +389,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Query stream window from factory config
         uint32 window = ILevrFactory_v1(factory).streamWindowSeconds();
 
+        // Reset GLOBAL stream window (shared by all tokens)
         _streamStart = uint64(block.timestamp);
         _streamEnd = uint64(block.timestamp + window);
         emit StreamReset(window, _streamStart, _streamEnd);
-        _streamStartByToken[token] = uint64(block.timestamp);
-        _streamEndByToken[token] = uint64(block.timestamp + window);
+
+        // Set per-token amount and last update
         _streamTotalByToken[token] = amount;
         _lastUpdateByToken[token] = uint64(block.timestamp);
     }
@@ -566,8 +568,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     function _settleStreamingForToken(address token) internal {
-        uint64 start = _streamStartByToken[token];
-        uint64 end = _streamEndByToken[token];
+        // Use GLOBAL stream window (shared by all tokens)
+        uint64 start = _streamStart;
+        uint64 end = _streamEnd;
         if (end == 0 || start == 0) return;
 
         // Don't consume stream time if no stakers to preserve rewards
@@ -598,8 +601,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @param token The reward token to check
     /// @return unvested Amount of unvested rewards (0 if stream is complete or doesn't exist)
     function _calculateUnvested(address token) internal view returns (uint256 unvested) {
-        uint64 start = _streamStartByToken[token];
-        uint64 end = _streamEndByToken[token];
+        // Use GLOBAL stream window (shared by all tokens)
+        uint64 start = _streamStart;
+        uint64 end = _streamEnd;
 
         // No active stream
         if (end == 0 || start == 0) return 0;
