@@ -32,7 +32,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     mapping(address => uint64) private _lastUpdateByToken;
 
     uint256 private _totalStaked;
-    mapping(address => uint256) private _staked;
 
     // Governance: track when each user started staking for time-weighted voting power
     mapping(address => uint256) public stakeStartTime;
@@ -99,7 +98,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         IERC20(underlying).safeTransferFrom(staker, address(this), amount);
         _escrowBalance[underlying] += amount;
         _increaseDebtForAll(staker, amount);
-        _staked[staker] += amount;
         _totalStaked += amount;
         ILevrStakedToken_v1(stakedToken).mint(staker, amount);
         emit Staked(staker, amount);
@@ -113,15 +111,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (amount == 0) revert InvalidAmount();
         if (to == address(0)) revert ZeroAddress();
         address staker = _msgSender();
-        uint256 bal = _staked[staker];
+        uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(staker);
         if (bal < amount) revert InsufficientStake();
         // Settle streaming before changing balances
         _settleStreamingAll();
         _settleAll(staker, to, bal);
-        _staked[staker] = bal - amount;
-        _updateDebtAll(staker, _staked[staker]);
-        _totalStaked -= amount;
         ILevrStakedToken_v1(stakedToken).burn(staker, amount);
+        _totalStaked -= amount;
         uint256 esc = _escrowBalance[underlying];
         if (esc < amount) revert InsufficientEscrow();
         _escrowBalance[underlying] = esc - amount;
@@ -132,7 +128,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         // Calculate new voting power after unstake (for UI simulation)
         // Normalized to token-days for UI-friendly numbers
-        uint256 remainingBalance = _staked[staker];
+        uint256 remainingBalance = ILevrStakedToken_v1(stakedToken).balanceOf(staker);
         uint256 newStartTime = stakeStartTime[staker];
         if (remainingBalance > 0 && newStartTime > 0) {
             uint256 timeStaked = block.timestamp - newStartTime;
@@ -141,6 +137,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             newVotingPower = 0;
         }
 
+        // Update debt for all reward tokens with remaining balance
+        _updateDebtAll(staker, remainingBalance);
+
         emit Unstaked(staker, to, amount);
     }
 
@@ -148,7 +147,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     function claimRewards(address[] calldata tokens, address to) external nonReentrant {
         if (to == address(0)) revert ZeroAddress();
         address claimer = _msgSender();
-        uint256 bal = _staked[claimer];
+        uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(claimer);
         for (uint256 i = 0; i < tokens.length; i++) {
             _settleStreamingForToken(tokens[i]);
             _settle(tokens[i], claimer, to, bal);
@@ -247,7 +246,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address account,
         address token
     ) external view returns (uint256 claimable) {
-        uint256 bal = _staked[account];
+        uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(account);
         if (bal == 0) return 0;
 
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
@@ -318,7 +317,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function stakedBalanceOf(address account) external view returns (uint256) {
-        return _staked[account];
+        return ILevrStakedToken_v1(stakedToken).balanceOf(account);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -634,7 +633,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 startTime = stakeStartTime[user];
         if (startTime == 0) return 0; // User never staked or has unstaked
 
-        uint256 balance = _staked[user];
+        uint256 balance = ILevrStakedToken_v1(stakedToken).balanceOf(user);
         if (balance == 0) return 0; // No staked balance
 
         uint256 timeStaked = block.timestamp - startTime;
@@ -644,21 +643,17 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         return (balance * timeStaked) / (1e18 * 86400);
     }
 
-    /// @notice Calculate new stakeStartTime when staking additional tokens
+    // ============ Internal Wrappers for Stake/Unstake Operations ============
+
+    /// @notice Internal version for stake operation
     /// @dev Uses weighted average to preserve voting power while reflecting dilution
-    ///      Formula: newStartTime = currentTime - (oldBalance × timeAccumulated) / newTotalBalance
-    ///      Example: 100 tokens staked for 30 days, then stake 1000 more
-    ///               Old VP: 100 × 30 days = 3000 token-days
-    ///               New balance: 1100 tokens
-    ///               New time: 3000 / 1100 = 2.727 days
-    ///               Result: 1100 tokens with 2.727 days of accumulation (preserves 3000 token-days VP)
     /// @param stakeAmount Amount being staked
     /// @return newStartTime New timestamp to set
     function _onStakeNewTimestamp(
         uint256 stakeAmount
     ) internal view returns (uint256 newStartTime) {
         address staker = _msgSender();
-        uint256 oldBalance = _staked[staker];
+        uint256 oldBalance = ILevrStakedToken_v1(stakedToken).balanceOf(staker);
         uint256 currentStartTime = stakeStartTime[staker];
 
         // First stake: set timestamp to now
@@ -681,11 +676,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         newStartTime = block.timestamp - newTimeAccumulated;
     }
 
-    /// @notice Calculate new stakeStartTime after partial unstake
+    /// @notice Internal version for unstake operation
     /// @dev Reduces time accumulation proportionally to amount unstaked
-    ///      Formula: newTime = oldTime * (remainingBalance / originalBalance)
-    ///      Example: 1000 tokens staked for 100 days, unstake 300 (30%)
-    ///               Result: 700 tokens with 70 days of time accumulation
     /// @param unstakeAmount Amount being unstaked
     /// @return newStartTime New timestamp to set (0 if full unstake)
     function _onUnstakeNewTimestamp(
@@ -697,7 +689,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // If never staked, return 0
         if (currentStartTime == 0) return 0;
 
-        uint256 remainingBalance = _staked[staker];
+        uint256 remainingBalance = ILevrStakedToken_v1(stakedToken).balanceOf(staker);
 
         // If no balance remaining, reset to 0
         if (remainingBalance == 0) return 0;
@@ -708,11 +700,108 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Calculate time accumulated so far
         uint256 timeAccumulated = block.timestamp - currentStartTime;
 
-        // Proportionally reduce time accumulation
-        // newTime = oldTime * (remainingBalance / originalBalance)
+        // Preserve precision: calculate (oldTime * remaining) / original
         uint256 newTimeAccumulated = (timeAccumulated * remainingBalance) / originalBalance;
 
         // Calculate new start time
         newStartTime = block.timestamp - newTimeAccumulated;
+    }
+
+    // ============ External VP Calculation Functions for Transfers ============
+
+    /// @inheritdoc ILevrStaking_v1
+    function calcNewStakeStartTime(
+        address account,
+        uint256 stakeAmount
+    ) external view returns (uint256 newStartTime) {
+        uint256 oldBalance = ILevrStakedToken_v1(stakedToken).balanceOf(account);
+        uint256 currentStartTime = stakeStartTime[account];
+
+        // First stake: set timestamp to now
+        if (oldBalance == 0 || currentStartTime == 0) {
+            return block.timestamp;
+        }
+
+        // Calculate accumulated time so far
+        uint256 timeAccumulated = block.timestamp - currentStartTime;
+
+        // Calculate new total balance
+        uint256 newTotalBalance = oldBalance + stakeAmount;
+
+        // Calculate weighted average time: (oldBalance × timeAccumulated) / newTotalBalance
+        // This preserves voting power: oldVP = oldBalance × timeAccumulated
+        // After stake: newVP = newTotalBalance × newTimeAccumulated = oldVP (preserved)
+        uint256 newTimeAccumulated = (oldBalance * timeAccumulated) / newTotalBalance;
+
+        // Calculate new start time
+        newStartTime = block.timestamp - newTimeAccumulated;
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function calcNewUnstakeStartTime(
+        address account,
+        uint256 unstakeAmount
+    ) external view returns (uint256 newStartTime) {
+        uint256 currentStartTime = stakeStartTime[account];
+
+        // If never staked, return 0
+        if (currentStartTime == 0) return 0;
+
+        uint256 remainingBalance = ILevrStakedToken_v1(stakedToken).balanceOf(account);
+
+        // If no balance remaining, reset to 0
+        if (remainingBalance == 0) return 0;
+
+        // Calculate original balance before unstake
+        uint256 originalBalance = remainingBalance + unstakeAmount;
+
+        // Calculate time accumulated so far
+        uint256 timeAccumulated = block.timestamp - currentStartTime;
+
+        // Preserve precision: calculate (oldTime * remaining) / original
+        uint256 newTimeAccumulated = (timeAccumulated * remainingBalance) / originalBalance;
+
+        // Calculate new start time
+        newStartTime = block.timestamp - newTimeAccumulated;
+    }
+
+    // ============ Transfer Callbacks (with Staking/Unstaking Semantics) ============
+
+    /// @inheritdoc ILevrStaking_v1
+    /// @dev Maps transfer sender to unstake semantics (balance decreases)
+    function onTokenTransfer(address from, address to) external {
+        if (_msgSender() != stakedToken) revert('ONLY_STAKED_TOKEN');
+
+        // Settle streaming to get latest accPerShare values
+        _settleStreamingAll();
+
+        // Update both parties' reward debt based on their NEW balances
+        uint256 senderNewBalance = ILevrStakedToken_v1(stakedToken).balanceOf(from);
+        uint256 receiverNewBalance = ILevrStakedToken_v1(stakedToken).balanceOf(to);
+
+        // Sync debt based on current balances
+        _updateDebtAll(from, senderNewBalance);
+        _updateDebtAll(to, receiverNewBalance);
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    /// @dev Maps transfer receiver to stake semantics (balance increases)
+    ///      Uses weighted average to preserve VP
+    function onTokenTransferReceiver(address to, uint256 amount) external {
+        if (_msgSender() != stakedToken) revert('ONLY_STAKED_TOKEN');
+
+        // Settle streaming to get latest accPerShare values
+        _settleStreamingAll();
+
+        // Get receiver's current balance BEFORE the transfer
+        uint256 receiverCurrentBalance = ILevrStakedToken_v1(stakedToken).balanceOf(to);
+
+        // Use stake semantics for receiver: calculate weighted average to preserve VP
+        // Call through this to access external function
+        uint256 newReceiverStartTime = this.calcNewStakeStartTime(to, amount);
+        stakeStartTime[to] = newReceiverStartTime;
+
+        // Sync receiver's reward debt for their post-transfer balance
+        _updateDebtAll(to, receiverCurrentBalance + amount);
     }
 }

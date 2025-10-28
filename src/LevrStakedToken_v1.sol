@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ILevrStakedToken_v1} from "./interfaces/ILevrStakedToken_v1.sol";
+import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
+import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 
 contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
     address public immutable override underlying;
@@ -16,7 +17,7 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
         address underlying_,
         address staking_
     ) ERC20(name_, symbol_) {
-        require(underlying_ != address(0) && staking_ != address(0), "ZERO");
+        require(underlying_ != address(0) && staking_ != address(0), 'ZERO');
         underlying = underlying_;
         staking = staking_;
         _decimals = decimals_;
@@ -24,25 +25,47 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
 
     /// @inheritdoc ILevrStakedToken_v1
     function mint(address to, uint256 amount) external override {
-        require(msg.sender == staking, "ONLY_STAKING");
+        require(msg.sender == staking, 'ONLY_STAKING');
         _mint(to, amount);
         emit Mint(to, amount);
     }
 
     /// @inheritdoc ILevrStakedToken_v1
     function burn(address from, uint256 amount) external override {
-        require(msg.sender == staking, "ONLY_STAKING");
+        require(msg.sender == staking, 'ONLY_STAKING');
         _burn(from, amount);
         emit Burn(from, amount);
     }
 
     /// @inheritdoc ILevrStakedToken_v1
-    function decimals()
-        public
-        view
-        override(ERC20, ILevrStakedToken_v1)
-        returns (uint8)
-    {
+    function decimals() public view override(ERC20, ILevrStakedToken_v1) returns (uint8) {
         return _decimals;
+    }
+
+    /// @notice Override _update to handle transfers with Balance-Based Design
+    /// @dev Called on mint, burn, and transfer operations
+    ///      For transfers between users: syncs reward debt and recalculates VP
+    ///      Sender's VP scales with balance (like unstaking)
+    ///      Receiver's VP is weighted average (like staking)
+    function _update(address from, address to, uint256 value) internal override {
+        // Allow minting and burning normally (mint: from=0, burn: to=0)
+        if (from == address(0) || to == address(0)) {
+            super._update(from, to, value);
+            return;
+        }
+
+        // For transfers between users: callback BEFORE transfer to handle receiver VP
+        // using stake semantics (weighted average preservation)
+        if (staking != address(0)) {
+            try ILevrStaking_v1(staking).onTokenTransferReceiver(to, value) {} catch {}
+        }
+
+        // Execute the transfer via parent
+        super._update(from, to, value);
+
+        // After transfer: sync sender VP using unstake semantics
+        if (staking != address(0)) {
+            try ILevrStaking_v1(staking).onTokenTransfer(from, to) {} catch {}
+        }
     }
 }
