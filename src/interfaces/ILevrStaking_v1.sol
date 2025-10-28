@@ -162,15 +162,10 @@ interface ILevrStaking_v1 {
         uint256 unstakeAmount
     ) external view returns (uint256 newStartTime);
 
-    /// @notice Handle token transfer: sync reward debt for both parties
-    /// @dev Called by staked token during transfer
+    /// @notice Handle token transfer: settle rewards and update VP for both parties
+    /// @dev Called by staked token BEFORE transfer executes
     /// @param from The sender of tokens
     /// @param to The receiver of tokens
-    function onTokenTransfer(address from, address to) external;
-
-    /// @notice Handle token transfer receiver: recalculate stakeStartTime using stake semantics
-    /// @dev Called by staked token during transfer before transfer executes
-    /// @param to The receiver of tokens
     /// @param amount The amount being transferred
-    function onTokenTransferReceiver(address to, uint256 amount) external;
+    function onTokenTransfer(address from, address to, uint256 amount) external;
 }

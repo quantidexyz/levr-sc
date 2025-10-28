@@ -768,40 +768,47 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     // ============ Transfer Callbacks (with Staking/Unstaking Semantics) ============
 
     /// @inheritdoc ILevrStaking_v1
-    /// @dev Maps transfer sender to unstake semantics (balance decreases)
-    function onTokenTransfer(address from, address to) external {
+    /// @dev Called BEFORE transfer executes
+    ///      Sender: unstake semantics (balance decreases)
+    ///      Receiver: stake semantics (balance increases, VP preserved)
+    function onTokenTransfer(address from, address to, uint256 amount) external {
         if (_msgSender() != stakedToken) revert('ONLY_STAKED_TOKEN');
 
         // Settle streaming to get latest accPerShare values
         _settleStreamingAll();
 
-        // Update both parties' reward debt based on their NEW balances
-        uint256 senderNewBalance = ILevrStakedToken_v1(stakedToken).balanceOf(from);
-        uint256 receiverNewBalance = ILevrStakedToken_v1(stakedToken).balanceOf(to);
+        // Get both parties' balances BEFORE the transfer (current balances)
+        uint256 senderOldBalance = ILevrStakedToken_v1(stakedToken).balanceOf(from);
+        uint256 receiverOldBalance = ILevrStakedToken_v1(stakedToken).balanceOf(to);
 
-        // Sync debt based on current balances
-        _updateDebtAll(from, senderNewBalance);
-        _updateDebtAll(to, receiverNewBalance);
-    }
+        // CRITICAL: Settle (auto-claim) rewards for both parties BEFORE transfer
+        // Use their OLD balances (before transfer) to calculate correct rewards
+        _settleAll(from, from, senderOldBalance);
+        _settleAll(to, to, receiverOldBalance);
 
-    /// @inheritdoc ILevrStaking_v1
-    /// @dev Maps transfer receiver to stake semantics (balance increases)
-    ///      Uses weighted average to preserve VP
-    function onTokenTransferReceiver(address to, uint256 amount) external {
-        if (_msgSender() != stakedToken) revert('ONLY_STAKED_TOKEN');
+        // Calculate post-transfer balances
+        uint256 senderNewBalance = senderOldBalance - amount;
+        uint256 receiverNewBalance = receiverOldBalance + amount;
 
-        // Settle streaming to get latest accPerShare values
-        _settleStreamingAll();
+        // Update sender's VP using unstake semantics (proportional time reduction)
+        // Inline calculation since we have the correct balance context
+        uint256 senderCurrentStartTime = stakeStartTime[from];
+        if (senderNewBalance > 0 && senderCurrentStartTime > 0) {
+            uint256 senderTimeAccumulated = block.timestamp - senderCurrentStartTime;
+            // Formula: newTime = oldTime * (remaining / original)
+            uint256 senderNewTimeAccumulated = (senderTimeAccumulated * senderNewBalance) /
+                senderOldBalance;
+            stakeStartTime[from] = block.timestamp - senderNewTimeAccumulated;
+        } else if (senderNewBalance == 0) {
+            stakeStartTime[from] = 0; // Full transfer (like full unstake)
+        }
 
-        // Get receiver's current balance BEFORE the transfer
-        uint256 receiverCurrentBalance = ILevrStakedToken_v1(stakedToken).balanceOf(to);
-
-        // Use stake semantics for receiver: calculate weighted average to preserve VP
-        // Call through this to access external function
+        // Update receiver's VP using stake semantics (weighted average to preserve VP)
         uint256 newReceiverStartTime = this.calcNewStakeStartTime(to, amount);
         stakeStartTime[to] = newReceiverStartTime;
 
-        // Sync receiver's reward debt for their post-transfer balance
-        _updateDebtAll(to, receiverCurrentBalance + amount);
+        // Update both parties' debt for new balances (fresh start after claiming)
+        _updateDebtAll(from, senderNewBalance);
+        _updateDebtAll(to, receiverNewBalance);
     }
 }

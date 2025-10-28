@@ -44,7 +44,7 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
 
     /// @notice Override _update to handle transfers with Balance-Based Design
     /// @dev Called on mint, burn, and transfer operations
-    ///      For transfers between users: syncs reward debt and recalculates VP
+    ///      For transfers between users: settles rewards and recalculates VP
     ///      Sender's VP scales with balance (like unstaking)
     ///      Receiver's VP is weighted average (like staking)
     function _update(address from, address to, uint256 value) internal override {
@@ -54,18 +54,13 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
             return;
         }
 
-        // For transfers between users: callback BEFORE transfer to handle receiver VP
-        // using stake semantics (weighted average preservation)
+        // For transfers between users: single callback BEFORE transfer
+        // This callback settles rewards with BEFORE-transfer balances and updates VP
         if (staking != address(0)) {
-            try ILevrStaking_v1(staking).onTokenTransferReceiver(to, value) {} catch {}
+            try ILevrStaking_v1(staking).onTokenTransfer(from, to, value) {} catch {}
         }
 
         // Execute the transfer via parent
         super._update(from, to, value);
-
-        // After transfer: sync sender VP using unstake semantics
-        if (staking != address(0)) {
-            try ILevrStaking_v1(staking).onTokenTransfer(from, to) {} catch {}
-        }
     }
 }

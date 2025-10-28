@@ -180,14 +180,15 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         uint256 vpBefore = staking.getVotingPower(alice);
         assertGt(vpBefore, 0, 'Alice should have VP');
 
-        // Transfer 600 tokens to Bob (60%)
+        // Transfer 600 tokens to Bob (60%), Alice keeps 40%
         stakedToken.transfer(bob, 600 ether);
 
-        // Alice's VP should scale proportionally: 400/1000 * original
+        // Alice's VP uses UNSTAKE semantics: both balance and time scale
+        // 40% balance * 40% time = 16% of original VP
         uint256 vpAfter = staking.getVotingPower(alice);
-        uint256 expectedVp = (vpBefore * 400) / 1000;
+        uint256 expectedVp = (vpBefore * 40 * 40) / (100 * 100);
 
-        assertEq(vpAfter, expectedVp, 'Alice VP should scale with remaining balance');
+        assertEq(vpAfter, expectedVp, 'Alice VP follows unstake semantics (0.4 * 0.4 = 0.16)');
     }
 
     /// @notice Test EDGE CASE 2: Receiver gets 0 VP (fresh start)
@@ -399,15 +400,20 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         uint256 vpAfter = staking.getVotingPower(alice);
         console.log('Sender VP after transfer:', vpAfter);
 
-        // VP should decrease proportionally with balance, time is UNCHANGED
-        // stakeStartTime[alice] is still the same, so timeStaked = 100 days
-        // VP = (500 * 100 days) / normalization = 50,000
-        assertEq(vpAfter, 50_000, 'Alice VP should decrease to 50,000 (50% of original)');
+        // TRANSFER uses UNSTAKE semantics for sender
+        // When 50% of tokens transferred out, BOTH balance and time reduce to 50%
+        // VP = (50% balance) * (50% time) = 25% of original
+        // Expected: 100,000 * 0.5 * 0.5 = 25,000
+        assertEq(
+            vpAfter,
+            25_000,
+            'Alice VP should be 25% (unstake semantics: 50% balance * 50% time)'
+        );
 
-        // Verify the reduction formula: (balance * timeStaked) / (1e18 * 86400)
-        // Before: (1000e18 * 8640000) / (1e18 * 86400) = 100,000
-        // After: (500e18 * 8640000) / (1e18 * 86400) = 50,000
-        assertEq(vpAfter, vpBefore / 2, 'VP should scale exactly with balance reduction');
+        // Verify the reduction formula matches unstake behavior
+        // After 50% transfer: VP = originalVP * (remainingBalance/originalBalance)^2
+        uint256 expectedVP = (vpBefore * 50 * 50) / (100 * 100);
+        assertEq(vpAfter, expectedVP, 'VP should follow unstake formula');
     }
 
     /// @notice Test VP on receiver after transfer - Receiver's VP is preserved
@@ -488,12 +494,15 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         // Alice transfers to Bob (no prior stake)
         stakedToken.transfer(bob, 400 ether);
 
-        // After transfer: Alice's VP scales proportionally
+        // After transfer: Alice's VP uses UNSTAKE semantics
+        // Transferred 400/1000 = 40%, remaining 60%
+        // VP = 50,000 * 0.6 * 0.6 = 18,000 (balance and time both scale)
         uint256 aliceVpAfter = staking.getVotingPower(alice);
+        uint256 expectedVP = (50_000 * 60 * 60) / (100 * 100);
         assertEq(
             aliceVpAfter,
-            30_000,
-            'Alice VP scales with remaining balance (600/1000 * 50,000)'
+            expectedVP,
+            'Alice VP follows unstake semantics (both balance and time scale)'
         );
 
         // Bob just received tokens, starts fresh
@@ -534,11 +543,395 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         uint256 vpOriginal = staking.getVotingPower(alice);
         assertEq(vpOriginal, 1_000_000, 'Base VP: 10,000 tokens * 100 days');
 
-        // Test 25% transfer (2500 tokens)
+        // Test 25% transfer (2500 tokens) - 75% remains
         stakedToken.transfer(bob, 2500 ether);
         uint256 vpAfter25 = staking.getVotingPower(alice);
-        // After transfer: 7500 tokens, stakeTime unchanged, 100 days elapsed
-        // VP = (7500 * 100 days) = 750,000
-        assertEq(vpAfter25, 750_000, '75% remaining: 7500 * 100 days = 750,000');
+        // After transfer using UNSTAKE semantics: 75% balance, 75% time
+        // VP = 1,000,000 * 0.75 * 0.75 = 562,500
+        uint256 expected25 = (vpOriginal * 75 * 75) / (100 * 100);
+        assertEq(vpAfter25, expected25, '75% remaining: unstake semantics (0.75 * 0.75)');
+    }
+
+    // ============ CRITICAL: Reward Emission Tracking Tests ============
+
+    /// @notice Test that rewards are auto-claimed during transfer
+    /// @dev CRITICAL: Ensures users don't lose accumulated rewards when transferring
+    function test_transfer_rewardTracking_autoClaim() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // Accrue rewards (anyone can call accrueRewards)
+        vm.startPrank(alice);
+        underlying.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(underlying));
+
+        // Wait for some rewards to vest
+        vm.warp(block.timestamp + 1 days);
+
+        // Check Alice's claimable rewards BEFORE transfer
+        uint256 aliceRewardsBefore = staking.claimableRewards(alice, address(underlying));
+        console.log('Alice rewards before transfer:', aliceRewardsBefore);
+        assertTrue(aliceRewardsBefore > 0, 'Alice should have claimable rewards');
+
+        // Check Alice's underlying balance before (should increase after auto-claim)
+        uint256 aliceUnderlyingBefore = underlying.balanceOf(alice);
+
+        // Alice transfers to Bob
+        vm.startPrank(alice);
+        stakedToken.transfer(bob, 500 ether);
+
+        // CRITICAL: Alice's rewards should have been auto-claimed during transfer
+        uint256 aliceUnderlyingAfter = underlying.balanceOf(alice);
+        assertGt(
+            aliceUnderlyingAfter,
+            aliceUnderlyingBefore,
+            'Alice should have received rewards during transfer'
+        );
+        assertEq(
+            aliceUnderlyingAfter - aliceUnderlyingBefore,
+            aliceRewardsBefore,
+            'Alice should receive exact accumulated rewards'
+        );
+
+        // Alice's new claimable should be 0 (just claimed)
+        uint256 aliceRewardsAfter = staking.claimableRewards(alice, address(underlying));
+        assertEq(aliceRewardsAfter, 0, 'Alice rewards should be 0 after auto-claim');
+    }
+
+    /// @notice Test that _totalStaked remains correct after transfers
+    /// @dev CRITICAL: Ensures reward emission calculations stay accurate
+    function test_transfer_rewardTracking_totalStakedInvariant() public {
+        // Alice and Bob stake
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        vm.startPrank(bob);
+        underlying.approve(address(staking), 500 ether);
+        staking.stake(500 ether);
+
+        uint256 totalStakedBefore = staking.totalStaked();
+        assertEq(totalStakedBefore, 1500 ether, 'Total should be 1500');
+
+        // Alice transfers to Charlie
+        vm.startPrank(alice);
+        stakedToken.transfer(charlie, 300 ether);
+
+        // CRITICAL: _totalStaked should NOT change (transfer doesn't mint/burn)
+        uint256 totalStakedAfter = staking.totalStaked();
+        assertEq(totalStakedAfter, totalStakedBefore, 'Total staked should remain unchanged');
+        assertEq(totalStakedAfter, 1500 ether, 'Total should still be 1500');
+
+        // Verify sum of balances equals total
+        uint256 aliceBal = staking.stakedBalanceOf(alice);
+        uint256 bobBal = staking.stakedBalanceOf(bob);
+        uint256 charlieBal = staking.stakedBalanceOf(charlie);
+        assertEq(aliceBal + bobBal + charlieBal, totalStakedAfter, 'Sum should equal total');
+    }
+
+    /// @notice Test that both parties can claim rewards independently after transfer
+    /// @dev Ensures reward tracking stays accurate for all stakers
+    function test_transfer_rewardTracking_distributionAfterTransfer() public {
+        // Alice and Bob both stake initially
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        vm.startPrank(bob);
+        underlying.approve(address(staking), 500 ether);
+        staking.stake(500 ether);
+
+        // Accrue rewards
+        vm.startPrank(alice);
+        underlying.mint(address(staking), 1500 ether);
+        staking.accrueRewards(address(underlying));
+
+        // Let stream complete
+        vm.warp(block.timestamp + 3 days + 1);
+
+        // Both can claim their proportional share
+        uint256 aliceRewards = staking.claimableRewards(alice, address(underlying));
+        uint256 bobRewards = staking.claimableRewards(bob, address(underlying));
+
+        console.log('Alice rewards (before transfer):', aliceRewards);
+        console.log('Bob rewards (before transfer):', bobRewards);
+
+        // Alice has 1000/1500 = 66.67%, Bob has 500/1500 = 33.33%
+        assertTrue(aliceRewards > 0, 'Alice should have rewards');
+        assertTrue(bobRewards > 0, 'Bob should have rewards');
+
+        // Now Alice transfers to Charlie - this should auto-claim Alice's rewards
+        uint256 aliceBalanceBefore = underlying.balanceOf(alice);
+        vm.startPrank(alice);
+        stakedToken.transfer(charlie, 300 ether);
+        uint256 aliceBalanceAfter = underlying.balanceOf(alice);
+
+        // Verify Alice received her rewards during transfer
+        assertEq(
+            aliceBalanceAfter - aliceBalanceBefore,
+            aliceRewards,
+            'Alice should receive her rewards during transfer'
+        );
+    }
+
+    // ============ CRITICAL: Midstream Transfer Tests (Accrual Edge Cases) ============
+
+    /// @notice Test transfer during active reward stream
+    /// @dev Ensures rewards are correctly distributed when transfer happens mid-stream
+    function test_transfer_midstream_duringActiveStream() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // Accrue rewards (starts 3-day stream)
+        underlying.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(underlying));
+
+        // Wait 1 day (1/3 of stream) - 333.33 ether should be vested
+        vm.warp(block.timestamp + 1 days);
+
+        uint256 aliceRewardsMidstream = staking.claimableRewards(alice, address(underlying));
+        console.log('Alice rewards at day 1 (midstream):', aliceRewardsMidstream);
+        assertTrue(aliceRewardsMidstream > 333 ether, 'Should have ~333 ether vested');
+
+        // Alice transfers to Bob mid-stream
+        uint256 aliceBalanceBefore = underlying.balanceOf(alice);
+        stakedToken.transfer(bob, 500 ether);
+        uint256 aliceBalanceAfter = underlying.balanceOf(alice);
+
+        // Verify Alice got her midstream rewards
+        assertEq(
+            aliceBalanceAfter - aliceBalanceBefore,
+            aliceRewardsMidstream,
+            'Alice should receive midstream rewards during transfer'
+        );
+
+        // After transfer: Alice 500, Bob 500
+        // Remaining stream should distribute equally to both
+        vm.warp(block.timestamp + 2 days); // Complete the stream
+
+        uint256 aliceRewardsAfterStream = staking.claimableRewards(alice, address(underlying));
+        uint256 bobRewardsAfterStream = staking.claimableRewards(bob, address(underlying));
+
+        console.log('Alice rewards after stream ends:', aliceRewardsAfterStream);
+        console.log('Bob rewards after stream ends:', bobRewardsAfterStream);
+
+        // Both should have roughly equal rewards (same balance, same time)
+        assertTrue(aliceRewardsAfterStream > 0, 'Alice should earn post-transfer rewards');
+        assertTrue(bobRewardsAfterStream > 0, 'Bob should earn post-transfer rewards');
+    }
+
+    /// @notice Test multiple transfers during same stream
+    /// @dev Ensures midstream transfers don't cause reward loss or double-counting
+    function test_transfer_midstream_multipleTransfersDuringStream() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // Start stream
+        underlying.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(underlying));
+
+        uint256 totalRewardsAccrued = 1000 ether;
+        uint256 totalRewardsClaimed = 0;
+
+        // Day 1: Alice transfers 300 to Bob
+        vm.warp(block.timestamp + 1 days);
+        uint256 aliceRewards1 = staking.claimableRewards(alice, address(underlying));
+        uint256 aliceBal1 = underlying.balanceOf(alice);
+        stakedToken.transfer(bob, 300 ether);
+        uint256 aliceClaimed1 = underlying.balanceOf(alice) - aliceBal1;
+        totalRewardsClaimed += aliceClaimed1;
+        console.log('Day 1: Alice claimed during transfer:', aliceClaimed1);
+
+        // Day 2: Bob transfers 100 to Charlie
+        vm.warp(block.timestamp + 1 days);
+        vm.startPrank(bob);
+        uint256 bobBal1 = underlying.balanceOf(bob);
+        stakedToken.transfer(charlie, 100 ether);
+        uint256 bobClaimed1 = underlying.balanceOf(bob) - bobBal1;
+        totalRewardsClaimed += bobClaimed1;
+        console.log('Day 2: Bob claimed during transfer:', bobClaimed1);
+
+        // Wait for full stream to complete (3 days from initial accrual)
+        // Day 1 + Day 2 already passed, need 1 more day
+        vm.warp(block.timestamp + 1 days + 1);
+
+        vm.startPrank(alice);
+        uint256 aliceRewardsFinal = staking.claimableRewards(alice, address(underlying));
+        if (aliceRewardsFinal > 0) {
+            address[] memory tokens = new address[](1);
+            tokens[0] = address(underlying);
+            staking.claimRewards(tokens, alice);
+            totalRewardsClaimed += aliceRewardsFinal;
+        }
+
+        vm.startPrank(bob);
+        uint256 bobRewardsFinal = staking.claimableRewards(bob, address(underlying));
+        if (bobRewardsFinal > 0) {
+            address[] memory tokens = new address[](1);
+            tokens[0] = address(underlying);
+            staking.claimRewards(tokens, bob);
+            totalRewardsClaimed += bobRewardsFinal;
+        }
+
+        vm.startPrank(charlie);
+        uint256 charlieRewardsFinal = staking.claimableRewards(charlie, address(underlying));
+        if (charlieRewardsFinal > 0) {
+            address[] memory tokens = new address[](1);
+            tokens[0] = address(underlying);
+            staking.claimRewards(tokens, charlie);
+            totalRewardsClaimed += charlieRewardsFinal;
+        }
+
+        console.log('Total rewards accrued:', totalRewardsAccrued);
+        console.log('Total rewards claimed:', totalRewardsClaimed);
+
+        // CRITICAL: Verify no reward inflation (total claimed ≤ accrued)
+        assertLe(
+            totalRewardsClaimed,
+            totalRewardsAccrued,
+            'Total claimed should not exceed accrued (no inflation)'
+        );
+
+        // Verify all parties received some rewards (no complete loss)
+        assertTrue(aliceClaimed1 > 0, 'Alice should have claimed rewards');
+        assertTrue(bobClaimed1 > 0 || bobRewardsFinal > 0, 'Bob should have earned rewards');
+    }
+
+    /// @notice Test transfer immediately after new accrual
+    /// @dev Ensures new accruals don't interfere with transfer mechanics
+    function test_transfer_midstream_transferRightAfterAccrual() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // First accrual
+        underlying.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(underlying));
+
+        // Wait for partial vesting
+        vm.warp(block.timestamp + 1 days);
+
+        // Second accrual (midstream) - this resets the stream
+        underlying.mint(address(staking), 500 ether);
+        staking.accrueRewards(address(underlying));
+
+        // Immediately transfer after second accrual
+        uint256 aliceRewardsBefore = staking.claimableRewards(alice, address(underlying));
+        uint256 aliceBalBefore = underlying.balanceOf(alice);
+
+        stakedToken.transfer(bob, 500 ether);
+
+        uint256 aliceBalAfter = underlying.balanceOf(alice);
+
+        // Alice should have received rewards for the vested portion of first stream
+        assertGt(
+            aliceBalAfter - aliceBalBefore,
+            0,
+            'Alice should receive vested rewards from first stream'
+        );
+        assertEq(
+            aliceBalAfter - aliceBalBefore,
+            aliceRewardsBefore,
+            'Alice should receive exact vested amount'
+        );
+    }
+
+    /// @notice Test that sender and receiver both track streaming rewards correctly post-transfer
+    /// @dev Critical for ensuring no reward leakage or double-counting
+    function test_transfer_midstream_bothPartiesEarnProportionally() public {
+        // Alice and Bob both stake
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        vm.startPrank(bob);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // Accrue rewards (2000 total for 2000 staked)
+        vm.startPrank(alice);
+        underlying.mint(address(staking), 2000 ether);
+        staking.accrueRewards(address(underlying));
+
+        // Wait 1.5 days (half the stream)
+        vm.warp(block.timestamp + 1.5 days);
+
+        // At this point: 1000 ether vested, 1000 ether unvested
+        // Alice: 500 claimable, Bob: 500 claimable
+
+        // Alice transfers 500 to Charlie
+        vm.startPrank(alice);
+        stakedToken.transfer(charlie, 500 ether);
+
+        // After transfer balances: Alice=500, Bob=1000, Charlie=500, Total=2000
+        // Remaining unvested: 1000 ether over 1.5 days
+        // Expected distribution: Alice=25%, Bob=50%, Charlie=25%
+
+        // Complete the stream
+        vm.warp(block.timestamp + 1.5 days + 1);
+
+        uint256 aliceRewardsFinal = staking.claimableRewards(alice, address(underlying));
+        uint256 bobRewardsFinal = staking.claimableRewards(bob, address(underlying));
+        uint256 charlieRewardsFinal = staking.claimableRewards(charlie, address(underlying));
+
+        console.log('Alice final claimable:', aliceRewardsFinal);
+        console.log('Bob final claimable:', bobRewardsFinal);
+        console.log('Charlie final claimable:', charlieRewardsFinal);
+
+        // Verify proportional distribution of remaining stream
+        // Bob should have ~2x Alice's rewards (1000 vs 500 balance)
+        // Bob should have ~2x Charlie's rewards (1000 vs 500 balance)
+        assertTrue(bobRewardsFinal > aliceRewardsFinal, 'Bob should have more than Alice');
+        assertTrue(bobRewardsFinal > charlieRewardsFinal, 'Bob should have more than Charlie');
+
+        // Verify total is reasonable (includes Alice's auto-claimed 500 from first half)
+        uint256 totalClaimable = aliceRewardsFinal + bobRewardsFinal + charlieRewardsFinal;
+        console.log('Total claimable at end:', totalClaimable);
+
+        // Total shouldn't exceed total accrued (2000 ether)
+        assertLe(totalClaimable, 2000 ether, 'Total should not exceed total accrued');
+    }
+
+    /// @notice Test transfer at exact stream boundary
+    /// @dev Edge case: transfer when stream just completes
+    function test_transfer_midstream_atStreamBoundary() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        // Accrue rewards
+        underlying.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(underlying));
+
+        // Wait exactly until stream ends (3 days)
+        vm.warp(block.timestamp + 3 days);
+
+        // All rewards should be fully vested
+        uint256 aliceRewardsAtEnd = staking.claimableRewards(alice, address(underlying));
+        assertEq(aliceRewardsAtEnd, 1000 ether, 'All rewards should be vested');
+
+        // Transfer at exact boundary
+        uint256 aliceBalBefore = underlying.balanceOf(alice);
+        stakedToken.transfer(bob, 500 ether);
+        uint256 aliceBalAfter = underlying.balanceOf(alice);
+
+        // Alice should receive all 1000 ether rewards
+        assertEq(
+            aliceBalAfter - aliceBalBefore,
+            1000 ether,
+            'Alice should receive all vested rewards'
+        );
+
+        // Bob should have 0 rewards (no retroactive rewards)
+        uint256 bobRewards = staking.claimableRewards(bob, address(underlying));
+        assertEq(bobRewards, 0, 'Bob should have 0 rewards (no retroactive)');
     }
 }
