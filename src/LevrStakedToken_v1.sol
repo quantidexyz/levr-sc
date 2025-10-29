@@ -3,7 +3,6 @@ pragma solidity ^0.8.30;
 
 import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
-import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 
 contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
     address public immutable override underlying;
@@ -42,25 +41,14 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
         return _decimals;
     }
 
-    /// @notice Override _update to handle transfers with Balance-Based Design
-    /// @dev Called on mint, burn, and transfer operations
-    ///      For transfers between users: settles rewards and recalculates VP
-    ///      Sender's VP scales with balance (like unstaking)
-    ///      Receiver's VP is weighted average (like staking)
+    /// @notice Override _update to block transfers
+    /// @dev Staked tokens represent a position in the staking contract
+    ///      Transferring them would require complex VP and reward recalculations
+    ///      Blocking transfers keeps the system simple and secure
     function _update(address from, address to, uint256 value) internal override {
-        // Allow minting and burning normally (mint: from=0, burn: to=0)
-        if (from == address(0) || to == address(0)) {
-            super._update(from, to, value);
-            return;
-        }
-
-        // For transfers between users: single callback BEFORE transfer
-        // This callback settles rewards with BEFORE-transfer balances and updates VP
-        if (staking != address(0)) {
-            try ILevrStaking_v1(staking).onTokenTransfer(from, to, value) {} catch {}
-        }
-
-        // Execute the transfer via parent
+        // Allow minting (from == address(0)) and burning (to == address(0))
+        // Block all other transfers between users
+        require(from == address(0) || to == address(0), 'STAKED_TOKENS_NON_TRANSFERABLE');
         super._update(from, to, value);
     }
 }

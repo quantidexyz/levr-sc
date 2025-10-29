@@ -122,7 +122,8 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
     }
 
     /// @notice CRITICAL: SToken balance changes between vote and quorum check
-    function test_quorumCheck_sTokenBalanceChanges() public {
+    /// @dev DISABLED: Uses transfers which are now blocked
+    function skip_test_quorumCheck_sTokenBalanceChanges() public {
         console2.log('\n=== Quorum with SToken Balance Changes ===');
 
         // Three users stake
@@ -560,7 +561,8 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
     }
 
     /// @notice Stake then Vote then Transfer sToken then Vote again?
-    function test_ordering_stakeVoteTransferStoken() public {
+    /// @dev DISABLED: Staked tokens are now non-transferable (simplified design)
+    function skip_test_ordering_stakeVoteTransferStoken() public {
         console2.log('\n=== Stake then Vote then Transfer SToken ===');
 
         underlying.mint(alice, 1000 ether);

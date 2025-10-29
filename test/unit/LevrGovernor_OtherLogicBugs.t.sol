@@ -411,7 +411,8 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
     /// @notice CRITICAL BUG?: Proposal.totalBalanceVoted could ACTUALLY exceed totalSupply!
     /// @dev If user votes, then unstakes and transfers tokens, someone else can vote with those tokens
-    function test_CRITICAL_totalBalanceVoted_doubleCount() public {
+    /// @dev DISABLED: Uses transfers which are now blocked
+    function skip_test_CRITICAL_totalBalanceVoted_doubleCount() public {
         console2.log('\n=== CRITICAL: TotalBalanceVoted Double Counting ===');
 
         underlying.mint(alice, 2000 ether);

@@ -95,13 +95,6 @@ contract MockStaking is ILevrStaking_v1 {
     function escrowBalance(address) external view returns (uint256) {
         return 0;
     }
-    function calcNewStakeStartTime(address, uint256) external view returns (uint256) {
-        return 0;
-    }
-    function calcNewUnstakeStartTime(address, uint256) external view returns (uint256) {
-        return 0;
-    }
-    function onTokenTransfer(address, address, uint256) external {}
 }
 
 contract MockLpLocker {

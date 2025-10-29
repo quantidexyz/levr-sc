@@ -140,32 +140,4 @@ interface ILevrStaking_v1 {
     /// @return votingPower The user's voting power in token-days
     function getVotingPower(address user) external view returns (uint256 votingPower);
 
-    /// @notice Calculate new stakeStartTime when receiving staked tokens via transfer
-    /// @dev Uses weighted average to preserve voting power while reflecting dilution
-    ///      Maps transfer reception to stake semantics
-    /// @param account The account whose balance is being increased
-    /// @param stakeAmount Amount being received
-    /// @return newStartTime New timestamp to set for VP calculation
-    function calcNewStakeStartTime(
-        address account,
-        uint256 stakeAmount
-    ) external view returns (uint256 newStartTime);
-
-    /// @notice Calculate new stakeStartTime when sending staked tokens via transfer
-    /// @dev Reduces time accumulation proportionally to amount transferred
-    ///      Maps transfer sending to unstake semantics
-    /// @param account The account whose balance is being decreased
-    /// @param unstakeAmount Amount being sent
-    /// @return newStartTime New timestamp to set for VP calculation
-    function calcNewUnstakeStartTime(
-        address account,
-        uint256 unstakeAmount
-    ) external view returns (uint256 newStartTime);
-
-    /// @notice Handle token transfer: settle rewards and update VP for both parties
-    /// @dev Called by staked token BEFORE transfer executes
-    /// @param from The sender of tokens
-    /// @param to The receiver of tokens
-    /// @param amount The amount being transferred
-    function onTokenTransfer(address from, address to, uint256 amount) external;
 }
