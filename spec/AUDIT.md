@@ -1638,20 +1638,31 @@ Use Echidna or Foundry fuzzing for:
 
 ## Static Analysis (Aderyn)
 
-**Analysis Date:** October 29, 2025  
+**Initial Analysis Date:** October 29, 2025  
+**Latest Re-Analysis:** Current  
 **Tool:** Aderyn v0.1.0 (Cyfrin Static Analyzer)  
 **Files Analyzed:** 37 Solidity files (2,547 nSLOC)  
-**Findings:** 21 total (3 High, 18 Low)
+**Initial Findings:** 21 total (3 High, 18 Low)  
+**Current Findings:** 17 total (3 High, 14 Low) ✅ **IMPROVED**
 
 ### Summary
 
 | Category | Count | Status |
 | -------- | ----- | ------ |
 | Fixed | 5 | ✅ Code changes implemented and tested |
-| False Positives | 3 | ✅ Verified safe, documented |
-| By Design | 5 | ✅ Intentional, documented |
+| False Positives | 4 | ✅ Verified safe, documented (3 original + 1 new L-2) |
+| By Design | 4 | ✅ Intentional, documented |
 | Gas Optimizations | 6 | ✅ Acceptable, noted for future |
 | Platform Specific | 2 | ✅ Compatible with Base Chain |
+
+### Verification Status
+
+**✅ All Previous Fixes Verified:** Latest Aderyn run confirms all 5 fixes remain in place and working:
+- Findings reduced from 21 to 17 (4 eliminated)
+- No new security issues identified
+- All code changes verified working
+
+**For detailed re-analysis comparison, see:** `ADERYN_REANALYSIS.md`
 
 ### Fixes Implemented
 
@@ -1695,10 +1706,16 @@ Use Echidna or Foundry fuzzing for:
 - Existing coverage: 10 reentrancy tests
 - Test: 2 verification tests
 
-**3. L-11: Unused Errors** ✅
+**3. L-9: Unused Errors** ✅
 - 67/78 errors are in external interfaces (expected)
 - Interfaces define errors for external contracts to use
 - Test: 1 documentation test
+
+**4. L-2: ERC20 Operation in Governor** ✅ (New False Positive)
+- Finding: `LevrGovernor_v1.sol:261` calls `treasury.transfer()`
+- Reality: Treasury.transfer() uses SafeERC20.safeTransfer() internally
+- Conclusion: False positive - calling safe function through interface is safe
+- Test: Verified in existing Treasury tests
 
 ### Test Results
 
@@ -1706,7 +1723,8 @@ Use Echidna or Foundry fuzzing for:
 **All Tests:** 421/421 passing (100%)  
 **Coverage:** All Aderyn findings tested or documented
 
-**Detailed Analysis:** See `ADERYN_ANALYSIS.md` for complete breakdown.
+**Detailed Analysis:** See `ADERYN_ANALYSIS.md` for complete breakdown.  
+**Re-Analysis Comparison:** See `ADERYN_REANALYSIS.md` for latest findings comparison.
 
 ---
 
