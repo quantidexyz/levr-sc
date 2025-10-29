@@ -13,20 +13,7 @@ import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrFeeSplitter_v1} from '../../src/interfaces/ILevrFeeSplitter_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
-// Mock Clanker token with custom admin
-contract MockClankerTokenE2E {
-    address private _admin;
-    MockERC20 public token;
-
-    constructor(string memory name, string memory symbol, address admin_) {
-        _admin = admin_;
-        token = new MockERC20(name, symbol);
-    }
-
-    function admin() external view returns (address) {
-        return _admin;
-    }
-}
+import {MockClankerToken} from '../mocks/MockClankerToken.sol';
 
 /**
  * @title LevrV1 Stuck Funds Recovery E2E Test Suite
@@ -47,12 +34,12 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
     address internal bob = address(0xB0B);
     address internal charlie = address(0xC1E);
 
-    MockClankerTokenE2E internal clankerToken;
+    MockClankerToken internal clankerToken;
 
     function setUp() public {
         underlying = new MockERC20('Underlying', 'UND');
         weth = new MockERC20('WETH', 'WETH');
-        clankerToken = new MockClankerTokenE2E('Clanker', 'CLK', address(this));
+        clankerToken = new MockClankerToken('Clanker', 'CLK', address(this));
 
         // Deploy factory
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({

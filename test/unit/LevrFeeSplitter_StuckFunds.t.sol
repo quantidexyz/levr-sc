@@ -6,21 +6,7 @@ import {LevrFeeSplitter_v1} from '../../src/LevrFeeSplitter_v1.sol';
 import {ILevrFeeSplitter_v1} from '../../src/interfaces/ILevrFeeSplitter_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
-
-// Mock Clanker token with custom admin
-contract MockClankerTokenFS {
-    address private _admin;
-    MockERC20 public token;
-
-    constructor(string memory name, string memory symbol, address admin_) {
-        _admin = admin_;
-        token = new MockERC20(name, symbol);
-    }
-
-    function admin() external view returns (address) {
-        return _admin;
-    }
-}
+import {MockClankerToken} from '../mocks/MockClankerToken.sol';
 
 /**
  * @title LevrFeeSplitter_StuckFunds Test Suite
@@ -29,7 +15,7 @@ contract MockClankerTokenFS {
  */
 contract LevrFeeSplitter_StuckFundsTest is Test {
     LevrFeeSplitter_v1 internal feeSplitter;
-    MockClankerTokenFS internal clankerToken;
+    MockClankerToken internal clankerToken;
     MockERC20 internal weth;
 
     address internal tokenAdmin;
@@ -68,7 +54,7 @@ contract LevrFeeSplitter_StuckFundsTest is Test {
         receiver1 = makeAddr('receiver1');
         receiver2 = makeAddr('receiver2');
 
-        clankerToken = new MockClankerTokenFS('Clanker', 'CLK', tokenAdmin);
+        clankerToken = new MockClankerToken('Clanker', 'CLK', tokenAdmin);
         weth = new MockERC20('WETH', 'WETH');
 
         feeSplitter = new LevrFeeSplitter_v1(address(clankerToken), address(this), address(0));

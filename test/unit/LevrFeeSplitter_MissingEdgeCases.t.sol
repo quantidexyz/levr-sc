@@ -11,135 +11,13 @@ import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {IClankerToken} from '../../src/interfaces/external/IClankerToken.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
-
-/// @title Mock Contracts for FeeSplitter Edge Case Testing
-contract MockClankerToken is ERC20 {
-    address public admin;
-
-    constructor(address admin_) ERC20('Mock Clanker', 'MCLK') {
-        admin = admin_;
-        _mint(msg.sender, 1_000_000 ether);
-    }
-
-    function setAdmin(address newAdmin) external {
-        admin = newAdmin;
-    }
-}
-
-contract MockRewardToken is ERC20 {
-    constructor() ERC20('Mock WETH', 'MWETH') {
-        _mint(msg.sender, 1_000_000 ether);
-    }
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
-
-contract MockStaking is ILevrStaking_v1 {
-    bool public shouldRevertOnAccrue;
-
-    function setShouldRevertOnAccrue(bool _shouldRevert) external {
-        shouldRevertOnAccrue = _shouldRevert;
-    }
-
-    function accrueRewards(address) external {
-        if (shouldRevertOnAccrue) {
-            revert('Mock: Accrual failed');
-        }
-    }
-
-    // Minimal stubs
-    function stake(uint256) external {}
-    function unstake(uint256, address) external returns (uint256) {
-        return 0;
-    }
-    function claimRewards(address[] calldata, address) external {}
-    function accrueFromTreasury(address, uint256, bool) external {}
-    function outstandingRewards(address) external view returns (uint256, uint256) {
-        return (0, 0);
-    }
-    function claimableRewards(address, address) external view returns (uint256) {
-        return 0;
-    }
-    function stakeStartTime(address) external view returns (uint256) {
-        return 0;
-    }
-    function getVotingPower(address) external view returns (uint256) {
-        return 0;
-    }
-    function initialize(address, address, address, address) external {}
-    function streamWindowSeconds() external view returns (uint32) {
-        return 0;
-    }
-    function streamStart() external view returns (uint64) {
-        return 0;
-    }
-    function streamEnd() external view returns (uint64) {
-        return 0;
-    }
-    function rewardRatePerSecond(address) external view returns (uint256) {
-        return 0;
-    }
-    function aprBps() external view returns (uint256) {
-        return 0;
-    }
-    function stakedBalanceOf(address) external view returns (uint256) {
-        return 0;
-    }
-    function totalStaked() external view returns (uint256) {
-        return 0;
-    }
-    function escrowBalance(address) external view returns (uint256) {
-        return 0;
-    }
-}
-
-contract MockLpLocker {
-    function collectRewards(address) external {}
-}
-
-contract MockFactory {
-    address public clankerToken;
-    address public staking;
-    address public lpLocker;
-    bool public metadataExists;
-
-    function setProject(address _clankerToken, address _staking, address _lpLocker) external {
-        clankerToken = _clankerToken;
-        staking = _staking;
-        lpLocker = _lpLocker;
-        metadataExists = true;
-    }
-
-    function clearMetadata() external {
-        metadataExists = false;
-    }
-
-    function getProjectContracts(address) external view returns (ILevrFactory_v1.Project memory) {
-        return
-            ILevrFactory_v1.Project({
-                treasury: address(0),
-                governor: address(0),
-                staking: staking,
-                stakedToken: address(0)
-            });
-    }
-
-    function getClankerMetadata(
-        address
-    ) external view returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0),
-                lpLocker: lpLocker,
-                hook: address(0),
-                exists: metadataExists
-            });
-    }
-}
+import {MockClankerToken} from '../mocks/MockClankerToken.sol';
+import {MockRewardToken} from '../mocks/MockRewardToken.sol';
+import {MockStaking} from '../mocks/MockStaking.sol';
+import {MockLpLocker} from '../mocks/MockLpLocker.sol';
+import {MockFactory} from '../mocks/MockFactory.sol';
+import {MockERC20} from '../mocks/MockERC20.sol';
 
 /// @dev Malicious receiver that reverts on ERC20 transfers
 contract MaliciousReceiver {
@@ -211,20 +89,21 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
 
     function setUp() public {
         // Deploy mocks
-        clankerToken = new MockClankerToken(tokenAdmin);
+        clankerToken = new MockClankerToken('Mock Clanker', 'MCLK', tokenAdmin);
         rewardToken = new MockRewardToken();
         staking = new MockStaking();
         lpLocker = new MockLpLocker();
         mockFactory = new MockFactory();
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
-        // Setup factory metadata
-        mockFactory.setProject(address(clankerToken), address(staking), address(lpLocker));
+        // Setup factory metadata (use wrapped token address for ERC20 operations)
+        MockERC20 clankerERC20 = clankerToken.token();
+        mockFactory.setProject(address(clankerERC20), address(staking), address(lpLocker));
 
         // Deploy fee splitter factory
         factory = new LevrFeeSplitterFactory_v1(address(mockFactory), address(forwarder));
 
-        // Deploy fee splitter for our token
+        // Deploy fee splitter for our token (use wrapper address - it has admin() function)
         splitter = LevrFeeSplitter_v1(factory.deploy(address(clankerToken)));
     }
 
@@ -238,7 +117,7 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         console2.log('\n=== FACTORY EDGE 1: Deploy for Unregistered Token ===');
 
         // Create new token that's NOT registered in mockFactory
-        MockClankerToken unregisteredToken = new MockClankerToken(alice);
+        MockClankerToken unregisteredToken = new MockClankerToken('Unregistered', 'UNR', alice);
 
         console2.log('Deploying splitter for unregistered token...');
 
@@ -276,7 +155,7 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
 
         // Try to deploy again
         vm.expectRevert(ILevrFeeSplitterFactory_v1.AlreadyDeployed.selector);
-        factory.deploy(address(clankerToken));
+        factory.deploy(address(clankerToken)); // Use wrapper address (has admin())
 
         console2.log('[PASS] Cannot deploy twice for same token');
     }
@@ -286,8 +165,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
     function test_factory_sameSaltDifferentTokens_succeeds() public {
         console2.log('\n=== FACTORY EDGE 3: Same Salt for Different Tokens ===');
 
-        MockClankerToken token2 = new MockClankerToken(alice);
-        mockFactory.setProject(address(token2), address(staking), address(lpLocker));
+        MockClankerToken token2 = new MockClankerToken('Token2', 'TK2', alice);
+        mockFactory.setProject(address(token2.token()), address(staking), address(lpLocker));
 
         bytes32 salt = keccak256('test-salt');
 
@@ -297,8 +176,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         console2.log('Splitter for token2:', splitter2);
 
         // Create token3 and deploy with SAME salt
-        MockClankerToken token3 = new MockClankerToken(bob);
-        mockFactory.setProject(address(token3), address(staking), address(lpLocker));
+        MockClankerToken token3 = new MockClankerToken('Token3', 'TK3', bob);
+        mockFactory.setProject(address(token3.token()), address(staking), address(lpLocker));
 
         address splitter3 = factory.deployDeterministic(address(token3), salt);
 
@@ -317,8 +196,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
     function test_factory_computeDeterministicAddress_accurate() public {
         console2.log('\n=== FACTORY EDGE 4: Deterministic Address Computation ===');
 
-        MockClankerToken token2 = new MockClankerToken(alice);
-        mockFactory.setProject(address(token2), address(staking), address(lpLocker));
+        MockClankerToken token2 = new MockClankerToken('Token2', 'TK2', alice);
+        mockFactory.setProject(address(token2.token()), address(staking), address(lpLocker));
 
         bytes32 salt = keccak256('precise-test');
 
@@ -591,7 +470,7 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         console2.log('\n=== SPLITTER EDGE 10: Configure Before Project Registered ===');
 
         // Create unregistered token
-        MockClankerToken unregisteredToken = new MockClankerToken(alice);
+        MockClankerToken unregisteredToken = new MockClankerToken('Unregistered', 'UNR', alice);
         LevrFeeSplitter_v1 newSplitter = new LevrFeeSplitter_v1(
             address(unregisteredToken),
             address(mockFactory),
@@ -906,7 +785,7 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
 
         // Batch distribute (should call accrueRewards 3 times)
         address[] memory tokens = new address[](3);
-        tokens[0] = address(token1);
+        tokens[0] = address(token1); // MockRewardToken IS the ERC20 (no wrapper)
         tokens[1] = address(token2);
         tokens[2] = address(token3);
 
@@ -931,8 +810,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
     function test_factory_deployDeterministic_sameSaltSameToken_reverts() public {
         console2.log('\n=== FACTORY EDGE 6: Same Salt for Same Token ===');
 
-        MockClankerToken token2 = new MockClankerToken(alice);
-        mockFactory.setProject(address(token2), address(staking), address(lpLocker));
+        MockClankerToken token2 = new MockClankerToken('Token2', 'TK2', alice);
+        mockFactory.setProject(address(token2.token()), address(staking), address(lpLocker));
 
         bytes32 salt = keccak256('my-salt');
 
@@ -952,8 +831,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
     function test_factory_deployDeterministic_zeroSalt_succeeds() public {
         console2.log('\n=== FACTORY EDGE 7: Deterministic Deploy with Zero Salt ===');
 
-        MockClankerToken token2 = new MockClankerToken(alice);
-        mockFactory.setProject(address(token2), address(staking), address(lpLocker));
+        MockClankerToken token2 = new MockClankerToken('Token2', 'TK2', alice);
+        mockFactory.setProject(address(token2.token()), address(staking), address(lpLocker));
 
         bytes32 zeroSalt = bytes32(0);
 
@@ -1056,7 +935,7 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         console2.log('\n=== SPLITTER EDGE 24: Get Staking for Unregistered Project ===');
 
         // Create splitter for unregistered token
-        MockClankerToken unregistered = new MockClankerToken(alice);
+        MockClankerToken unregistered = new MockClankerToken('Unregistered', 'UNR', alice);
         LevrFeeSplitter_v1 newSplitter = new LevrFeeSplitter_v1(
             address(unregistered),
             address(mockFactory),
@@ -1433,7 +1312,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         console2.log('New staking created:', address(newStaking));
 
         // Update factory to return new staking address
-        mockFactory.setProject(address(clankerToken), address(newStaking), address(lpLocker));
+        MockERC20 clankerERC20Update = clankerToken.token();
+        mockFactory.setProject(address(clankerERC20Update), address(newStaking), address(lpLocker));
 
         console2.log('Factory updated to return new staking');
 

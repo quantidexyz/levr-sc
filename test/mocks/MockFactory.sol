@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+
+/**
+ * @title Mock Factory
+ * @notice Mock factory contract for testing fee splitter and project interactions
+ * @dev Provides mock implementations of factory functions for testing
+ */
+contract MockFactory {
+    address public clankerToken;
+    address public staking;
+    address public lpLocker;
+    bool public metadataExists;
+
+    /// @notice Set project addresses
+    function setProject(address _clankerToken, address _staking, address _lpLocker) external {
+        clankerToken = _clankerToken;
+        staking = _staking;
+        lpLocker = _lpLocker;
+        metadataExists = true;
+    }
+
+    /// @notice Clear metadata flag (for edge case testing)
+    function clearMetadata() external {
+        metadataExists = false;
+    }
+
+    /// @notice Get project contracts for a token
+    function getProjectContracts(address) external view returns (ILevrFactory_v1.Project memory) {
+        return
+            ILevrFactory_v1.Project({
+                treasury: address(0),
+                governor: address(0),
+                staking: staking,
+                stakedToken: address(0)
+            });
+    }
+
+    /// @notice Get Clanker metadata for a token
+    function getClankerMetadata(
+        address
+    ) external view returns (ILevrFactory_v1.ClankerMetadata memory) {
+        return
+            ILevrFactory_v1.ClankerMetadata({
+                feeLocker: address(0),
+                lpLocker: lpLocker,
+                hook: address(0),
+                exists: metadataExists
+            });
+    }
+}
