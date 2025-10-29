@@ -228,6 +228,104 @@ contract LevrStaking_ContractTransferRewardsTest is Test {
         assertEq(stakedToken.balanceOf(alice), 500 ether, 'Transfer should succeed');
         assertEq(stakedToken.balanceOf(address(pool)), 500 ether, 'Pool balance correct');
     }
+
+    /// @notice Test multi-hop contract transfer (Pool → Router → User)
+    /// @dev Verifies rewards flow correctly through intermediate contracts
+    function test_contractSender_multiHop_rewardsFlowCorrectly() public {
+        MockRouter router = new MockRouter();
+
+        // Pool stakes and earns
+        vm.startPrank(address(pool));
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        vm.startPrank(alice);
+        weth.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(weth));
+        vm.warp(block.timestamp + 3 days + 1);
+
+        uint256 poolRewards = staking.claimableRewards(address(pool), address(weth));
+        assertEq(poolRewards, 1000 ether, 'Pool earned 1000');
+
+        // Step 1: Pool → Router (50%)
+        vm.startPrank(address(pool));
+        stakedToken.transfer(address(router), 500 ether);
+
+        uint256 poolAfterRouter = staking.claimableRewards(address(pool), address(weth));
+        uint256 routerAfterPool = staking.claimableRewards(address(router), address(weth));
+
+        console.log('After Pool -> Router:');
+        console.log('  Pool claimable:', poolAfterRouter);
+        console.log('  Router claimable:', routerAfterPool);
+
+        assertEq(poolAfterRouter, 500 ether, 'Pool keeps 50%');
+        assertEq(routerAfterPool, 500 ether, 'Router gets 50%');
+
+        // Step 2: Router → Alice (100%)
+        vm.startPrank(address(router));
+        stakedToken.transfer(alice, 500 ether);
+
+        uint256 routerAfterAlice = staking.claimableRewards(address(router), address(weth));
+        uint256 aliceAfterRouter = staking.claimableRewards(alice, address(weth));
+
+        console.log('After Router -> Alice:');
+        console.log('  Router claimable:', routerAfterAlice);
+        console.log('  Alice claimable:', aliceAfterRouter);
+
+        assertEq(routerAfterAlice, 0, 'Router transferred all');
+        assertEq(aliceAfterRouter, 500 ether, 'Alice got Router rewards');
+
+        // Final state
+        console.log('Final distribution:');
+        console.log('  Pool:', staking.claimableRewards(address(pool), address(weth)));
+        console.log('  Router:', routerAfterAlice);
+        console.log('  Alice:', aliceAfterRouter);
+
+        // Total should equal original
+        uint256 total = poolAfterRouter + routerAfterAlice + aliceAfterRouter;
+        assertEq(total, 1000 ether, 'All rewards accounted for');
+    }
+
+    /// @notice Test: Contract → Contract → Contract → EOA chain
+    /// @dev Verifies rewards flow through multiple contract hops
+    function test_contractSender_longChain_finalUserGetsRewards() public {
+        MockRouter router1 = new MockRouter();
+        MockRouter router2 = new MockRouter();
+
+        // Pool earns
+        vm.startPrank(address(pool));
+        underlying.approve(address(staking), 1000 ether);
+        staking.stake(1000 ether);
+
+        vm.startPrank(alice);
+        weth.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(weth));
+        vm.warp(block.timestamp + 3 days + 1);
+
+        // Pool → Router1 (50%)
+        vm.startPrank(address(pool));
+        stakedToken.transfer(address(router1), 500 ether);
+
+        // Router1 → Router2 (100%)
+        vm.startPrank(address(router1));
+        stakedToken.transfer(address(router2), 500 ether);
+
+        // Router2 → Alice (100%)
+        vm.startPrank(address(router2));
+        stakedToken.transfer(alice, 500 ether);
+
+        // Alice should have 500 WETH (flowed through all hops)
+        uint256 aliceRewards = staking.claimableRewards(alice, address(weth));
+        assertEq(aliceRewards, 500 ether, 'Alice gets rewards after multi-hop');
+
+        // Pool should have 500 WETH (kept from first transfer)
+        uint256 poolRewards = staking.claimableRewards(address(pool), address(weth));
+        assertEq(poolRewards, 500 ether, 'Pool keeps its 50%');
+
+        // Routers should have 0 (passed everything along)
+        assertEq(staking.claimableRewards(address(router1), address(weth)), 0);
+        assertEq(staking.claimableRewards(address(router2), address(weth)), 0);
+    }
 }
 
 /**
@@ -235,5 +333,13 @@ contract LevrStaking_ContractTransferRewardsTest is Test {
  * @notice Simple contract to simulate Uniswap pool
  */
 contract MockPool {
+    // Empty contract with code
+}
+
+/**
+ * @title Mock Router
+ * @notice Simple contract to simulate routing contract
+ */
+contract MockRouter {
     // Empty contract with code
 }
