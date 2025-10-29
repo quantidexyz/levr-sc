@@ -814,26 +814,62 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 newReceiverStartTime = this.calcNewStakeStartTime(to, amount);
         stakeStartTime[to] = newReceiverStartTime;
 
-        // CRITICAL: Preserve sender's claimable, receiver starts fresh
-        // Rewards belong to addresses that earned them, not the tokens
+        // CRITICAL: Handle rewards based on SENDER type
+        // If sender is CONTRACT: Transfer proportional rewards to receiver (incentivize buyers)
+        // If sender is EOA: Sender keeps all rewards (protect sellers)
+        bool senderIsContract = from.code.length > 0;
+
         uint256 len = _rewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
             address token = _rewardTokens[i];
             uint256 acc = _rewardInfo[token].accPerShare;
 
-            // Sender: Preserve their claimable amount
+            // Calculate sender's current claimable
             int256 senderOldDebt = _rewardDebt[from][token];
             uint256 senderOldAccumulated = (senderOldBalance * acc) / ACC_SCALE;
             int256 senderClaimable = int256(senderOldAccumulated) - senderOldDebt;
 
-            // Adjust sender's debt to preserve claimable with new balance
-            uint256 senderNewAccumulated = (senderNewBalance * acc) / ACC_SCALE;
-            _rewardDebt[from][token] = int256(senderNewAccumulated) - senderClaimable;
+            if (senderIsContract) {
+                // Sender is a CONTRACT (e.g., Uniswap pool selling to buyer)
+                // Transfer proportional rewards to receiver (incentivizes buying from pool!)
 
-            // Receiver: Starts fresh (0 claimable)
-            // Set debt = accumulated, so claimable = accumulated - debt = 0
-            uint256 receiverNewAccumulated = (receiverNewBalance * acc) / ACC_SCALE;
-            _rewardDebt[to][token] = int256(receiverNewAccumulated);
+                // Calculate proportion: amountTransferred / senderOldBalance
+                int256 rewardsToTransfer = (senderClaimable * int256(amount)) /
+                    int256(senderOldBalance);
+                int256 senderKeeps = senderClaimable - rewardsToTransfer;
+
+                // Sender (contract) keeps proportional amount
+                uint256 senderNewAccumulated = (senderNewBalance * acc) / ACC_SCALE;
+                _rewardDebt[from][token] = int256(senderNewAccumulated) - senderKeeps;
+
+                // Receiver gets transferred rewards (whether EOA or contract)
+                // Calculate receiver's existing claimable
+                int256 receiverOldDebt = _rewardDebt[to][token];
+                uint256 receiverOldAccumulated = (receiverOldBalance * acc) / ACC_SCALE;
+                int256 receiverOldClaimable = int256(receiverOldAccumulated) - receiverOldDebt;
+
+                // Add transferred rewards to receiver's existing claimable
+                uint256 receiverNewAccumulated = (receiverNewBalance * acc) / ACC_SCALE;
+                _rewardDebt[to][token] =
+                    int256(receiverNewAccumulated) -
+                    receiverOldClaimable -
+                    rewardsToTransfer;
+            } else {
+                // Sender is EOA (normal user selling to pool or transferring to friend)
+                // Sender keeps ALL rewards (protect seller from losing rewards to pool)
+
+                // Preserve sender's full claimable
+                uint256 senderNewAccumulated = (senderNewBalance * acc) / ACC_SCALE;
+                _rewardDebt[from][token] = int256(senderNewAccumulated) - senderClaimable;
+
+                // Receiver keeps their existing claimable, doesn't get sender's rewards
+                int256 receiverOldDebt = _rewardDebt[to][token];
+                uint256 receiverOldAccumulated = (receiverOldBalance * acc) / ACC_SCALE;
+                int256 receiverOldClaimable = int256(receiverOldAccumulated) - receiverOldDebt;
+
+                uint256 receiverNewAccumulated = (receiverNewBalance * acc) / ACC_SCALE;
+                _rewardDebt[to][token] = int256(receiverNewAccumulated) - receiverOldClaimable;
+            }
         }
     }
 }
