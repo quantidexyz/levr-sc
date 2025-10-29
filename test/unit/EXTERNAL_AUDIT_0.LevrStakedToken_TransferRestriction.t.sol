@@ -554,16 +554,15 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
 
     // ============ CRITICAL: Reward Emission Tracking Tests ============
 
-    /// @notice Test that rewards are auto-claimed during transfer
-    /// @dev CRITICAL: Ensures users don't lose accumulated rewards when transferring
-    function test_transfer_rewardTracking_autoClaim() public {
+    /// @notice Test that rewards are PRESERVED during transfer (no auto-claim)
+    /// @dev CRITICAL: Sender keeps their rewards, receiver starts fresh
+    function test_transfer_rewardTracking_senderKeepsRewards() public {
         // Alice stakes
         vm.startPrank(alice);
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        // Accrue rewards (anyone can call accrueRewards)
-        vm.startPrank(alice);
+        // Accrue rewards
         underlying.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(underlying));
 
@@ -575,29 +574,35 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         console.log('Alice rewards before transfer:', aliceRewardsBefore);
         assertTrue(aliceRewardsBefore > 0, 'Alice should have claimable rewards');
 
-        // Check Alice's underlying balance before (should increase after auto-claim)
-        uint256 aliceUnderlyingBefore = underlying.balanceOf(alice);
-
-        // Alice transfers to Bob
-        vm.startPrank(alice);
+        // Alice transfers to Bob (NO auto-claim)
         stakedToken.transfer(bob, 500 ether);
 
-        // CRITICAL: Alice's rewards should have been auto-claimed during transfer
-        uint256 aliceUnderlyingAfter = underlying.balanceOf(alice);
-        assertGt(
-            aliceUnderlyingAfter,
-            aliceUnderlyingBefore,
-            'Alice should have received rewards during transfer'
-        );
+        // CRITICAL: Alice's claimable should be PRESERVED (not auto-claimed)
+        uint256 aliceRewardsAfter = staking.claimableRewards(alice, address(underlying));
+        console.log('Alice rewards after transfer:', aliceRewardsAfter);
         assertEq(
-            aliceUnderlyingAfter - aliceUnderlyingBefore,
+            aliceRewardsAfter,
             aliceRewardsBefore,
-            'Alice should receive exact accumulated rewards'
+            'Alice should KEEP her earned rewards after transfer'
         );
 
-        // Alice's new claimable should be 0 (just claimed)
-        uint256 aliceRewardsAfter = staking.claimableRewards(alice, address(underlying));
-        assertEq(aliceRewardsAfter, 0, 'Alice rewards should be 0 after auto-claim');
+        // Bob should have 0 claimable (just received, didn't earn yet)
+        uint256 bobRewards = staking.claimableRewards(bob, address(underlying));
+        assertEq(bobRewards, 0, 'Bob should have 0 rewards (starts fresh)');
+
+        // Alice can claim her rewards even after transferring tokens
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(underlying);
+        uint256 aliceBalBefore = underlying.balanceOf(alice);
+        staking.claimRewards(tokens, alice);
+        uint256 aliceBalAfter = underlying.balanceOf(alice);
+
+        // Alice receives her preserved rewards
+        assertEq(
+            aliceBalAfter - aliceBalBefore,
+            aliceRewardsBefore,
+            'Alice should be able to claim her preserved rewards'
+        );
     }
 
     /// @notice Test that _totalStaked remains correct after transfers
@@ -631,48 +636,54 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         assertEq(aliceBal + bobBal + charlieBal, totalStakedAfter, 'Sum should equal total');
     }
 
-    /// @notice Test that both parties can claim rewards independently after transfer
-    /// @dev Ensures reward tracking stays accurate for all stakers
-    function test_transfer_rewardTracking_distributionAfterTransfer() public {
-        // Alice and Bob both stake initially
+    /// @notice Test that sender keeps rewards after full transfer (even with 0 balance)
+    /// @dev CRITICAL: Rewards belong to address, not tokens
+    function test_transfer_rewardTracking_senderCanClaimAfterFullTransfer() public {
+        // Alice stakes
         vm.startPrank(alice);
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        vm.startPrank(bob);
-        underlying.approve(address(staking), 500 ether);
-        staking.stake(500 ether);
-
         // Accrue rewards
-        vm.startPrank(alice);
-        underlying.mint(address(staking), 1500 ether);
+        underlying.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(underlying));
 
         // Let stream complete
         vm.warp(block.timestamp + 3 days + 1);
 
-        // Both can claim their proportional share
+        // Alice has earned rewards
         uint256 aliceRewards = staking.claimableRewards(alice, address(underlying));
-        uint256 bobRewards = staking.claimableRewards(bob, address(underlying));
+        console.log('Alice rewards earned:', aliceRewards);
+        assertEq(aliceRewards, 1000 ether, 'Alice earned all rewards');
 
-        console.log('Alice rewards (before transfer):', aliceRewards);
-        console.log('Bob rewards (before transfer):', bobRewards);
+        // Alice transfers ALL tokens to Bob
+        stakedToken.transfer(bob, 1000 ether);
 
-        // Alice has 1000/1500 = 66.67%, Bob has 500/1500 = 33.33%
-        assertTrue(aliceRewards > 0, 'Alice should have rewards');
-        assertTrue(bobRewards > 0, 'Bob should have rewards');
-
-        // Now Alice transfers to Charlie - this should auto-claim Alice's rewards
-        uint256 aliceBalanceBefore = underlying.balanceOf(alice);
-        vm.startPrank(alice);
-        stakedToken.transfer(charlie, 300 ether);
-        uint256 aliceBalanceAfter = underlying.balanceOf(alice);
-
-        // Verify Alice received her rewards during transfer
+        // CRITICAL: Alice should STILL have her rewards claimable (even with 0 balance)
+        uint256 aliceRewardsAfterTransfer = staking.claimableRewards(alice, address(underlying));
+        console.log('Alice rewards after transferring all tokens:', aliceRewardsAfterTransfer);
         assertEq(
-            aliceBalanceAfter - aliceBalanceBefore,
+            aliceRewardsAfterTransfer,
             aliceRewards,
-            'Alice should receive her rewards during transfer'
+            'Alice should keep her rewards even after transferring all tokens'
+        );
+
+        // Bob should have 0 (just received, didn't earn)
+        uint256 bobRewards = staking.claimableRewards(bob, address(underlying));
+        assertEq(bobRewards, 0, 'Bob should have 0 rewards (just received tokens)');
+
+        // Alice claims her rewards (despite having 0 staked balance)
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(underlying);
+        uint256 aliceBalBefore = underlying.balanceOf(alice);
+        staking.claimRewards(tokens, alice);
+        uint256 aliceBalAfter = underlying.balanceOf(alice);
+
+        // Alice receives her earned rewards
+        assertEq(
+            aliceBalAfter - aliceBalBefore,
+            aliceRewards,
+            'Alice should claim her rewards even with 0 staked balance'
         );
     }
 
@@ -697,16 +708,15 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         console.log('Alice rewards at day 1 (midstream):', aliceRewardsMidstream);
         assertTrue(aliceRewardsMidstream > 333 ether, 'Should have ~333 ether vested');
 
-        // Alice transfers to Bob mid-stream
-        uint256 aliceBalanceBefore = underlying.balanceOf(alice);
+        // Alice transfers to Bob mid-stream (NO auto-claim)
         stakedToken.transfer(bob, 500 ether);
-        uint256 aliceBalanceAfter = underlying.balanceOf(alice);
 
-        // Verify Alice got her midstream rewards
+        // Verify Alice KEEPS her midstream rewards (not auto-claimed)
+        uint256 aliceRewardsAfterTransfer = staking.claimableRewards(alice, address(underlying));
         assertEq(
-            aliceBalanceAfter - aliceBalanceBefore,
+            aliceRewardsAfterTransfer,
             aliceRewardsMidstream,
-            'Alice should receive midstream rewards during transfer'
+            'Alice should keep her earned rewards after transfer'
         );
 
         // After transfer: Alice 500, Bob 500
@@ -739,23 +749,18 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         uint256 totalRewardsAccrued = 1000 ether;
         uint256 totalRewardsClaimed = 0;
 
-        // Day 1: Alice transfers 300 to Bob
+        // Day 1: Alice transfers 300 to Bob (NO auto-claim, rewards preserved)
         vm.warp(block.timestamp + 1 days);
         uint256 aliceRewards1 = staking.claimableRewards(alice, address(underlying));
-        uint256 aliceBal1 = underlying.balanceOf(alice);
+        console.log('Day 1: Alice rewards (preserved, not claimed):', aliceRewards1);
         stakedToken.transfer(bob, 300 ether);
-        uint256 aliceClaimed1 = underlying.balanceOf(alice) - aliceBal1;
-        totalRewardsClaimed += aliceClaimed1;
-        console.log('Day 1: Alice claimed during transfer:', aliceClaimed1);
 
         // Day 2: Bob transfers 100 to Charlie
         vm.warp(block.timestamp + 1 days);
         vm.startPrank(bob);
-        uint256 bobBal1 = underlying.balanceOf(bob);
+        uint256 bobRewards1 = staking.claimableRewards(bob, address(underlying));
+        console.log('Day 2: Bob rewards (preserved, not claimed):', bobRewards1);
         stakedToken.transfer(charlie, 100 ether);
-        uint256 bobClaimed1 = underlying.balanceOf(bob) - bobBal1;
-        totalRewardsClaimed += bobClaimed1;
-        console.log('Day 2: Bob claimed during transfer:', bobClaimed1);
 
         // Wait for full stream to complete (3 days from initial accrual)
         // Day 1 + Day 2 already passed, need 1 more day
@@ -798,9 +803,9 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
             'Total claimed should not exceed accrued (no inflation)'
         );
 
-        // Verify all parties received some rewards (no complete loss)
-        assertTrue(aliceClaimed1 > 0, 'Alice should have claimed rewards');
-        assertTrue(bobClaimed1 > 0 || bobRewardsFinal > 0, 'Bob should have earned rewards');
+        // Verify all parties have claimable rewards
+        assertTrue(aliceRewardsFinal > 0, 'Alice should have preserved + new rewards');
+        assertTrue(bobRewardsFinal > 0, 'Bob should have earned rewards');
     }
 
     /// @notice Test transfer immediately after new accrual
@@ -822,24 +827,31 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         underlying.mint(address(staking), 500 ether);
         staking.accrueRewards(address(underlying));
 
-        // Immediately transfer after second accrual
+        // Immediately transfer after second accrual (NO auto-claim)
         uint256 aliceRewardsBefore = staking.claimableRewards(alice, address(underlying));
-        uint256 aliceBalBefore = underlying.balanceOf(alice);
+        console.log('Alice rewards before transfer:', aliceRewardsBefore);
 
         stakedToken.transfer(bob, 500 ether);
 
+        // Alice should KEEP her rewards (not auto-claimed)
+        uint256 aliceRewardsAfter = staking.claimableRewards(alice, address(underlying));
+        assertEq(
+            aliceRewardsAfter,
+            aliceRewardsBefore,
+            'Alice should keep her rewards (no auto-claim)'
+        );
+
+        // Alice claims later
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(underlying);
+        uint256 aliceBalBefore = underlying.balanceOf(alice);
+        staking.claimRewards(tokens, alice);
         uint256 aliceBalAfter = underlying.balanceOf(alice);
 
-        // Alice should have received rewards for the vested portion of first stream
-        assertGt(
-            aliceBalAfter - aliceBalBefore,
-            0,
-            'Alice should receive vested rewards from first stream'
-        );
         assertEq(
             aliceBalAfter - aliceBalBefore,
             aliceRewardsBefore,
-            'Alice should receive exact vested amount'
+            'Alice should receive her preserved rewards'
         );
     }
 
@@ -918,20 +930,28 @@ contract EXTERNAL_AUDIT_0_LevrStakedTokenTransferRestrictionTest is Test {
         uint256 aliceRewardsAtEnd = staking.claimableRewards(alice, address(underlying));
         assertEq(aliceRewardsAtEnd, 1000 ether, 'All rewards should be vested');
 
-        // Transfer at exact boundary
-        uint256 aliceBalBefore = underlying.balanceOf(alice);
+        // Transfer at exact boundary (NO auto-claim)
         stakedToken.transfer(bob, 500 ether);
-        uint256 aliceBalAfter = underlying.balanceOf(alice);
 
-        // Alice should receive all 1000 ether rewards
-        assertEq(
-            aliceBalAfter - aliceBalBefore,
-            1000 ether,
-            'Alice should receive all vested rewards'
-        );
+        // Alice should KEEP her rewards (not auto-claimed)
+        uint256 aliceRewardsAfterTransfer = staking.claimableRewards(alice, address(underlying));
+        assertEq(aliceRewardsAfterTransfer, 1000 ether, 'Alice should keep all her earned rewards');
 
         // Bob should have 0 rewards (no retroactive rewards)
         uint256 bobRewards = staking.claimableRewards(bob, address(underlying));
         assertEq(bobRewards, 0, 'Bob should have 0 rewards (no retroactive)');
+
+        // Alice claims her preserved rewards
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(underlying);
+        uint256 aliceBalBefore = underlying.balanceOf(alice);
+        staking.claimRewards(tokens, alice);
+        uint256 aliceBalAfter = underlying.balanceOf(alice);
+
+        assertEq(
+            aliceBalAfter - aliceBalBefore,
+            1000 ether,
+            'Alice should receive all her preserved rewards'
+        );
     }
 }

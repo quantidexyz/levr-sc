@@ -245,11 +245,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address account,
         address token
     ) external view returns (uint256 claimable) {
-        uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(account);
-        if (bal == 0) return 0;
-
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
         if (!info.exists) return 0;
+
+        // Get current balance (can be 0 if user transferred all tokens)
+        uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(account);
 
         // Calculate what would be accumulated after settling streaming
         uint256 accPerShare = info.accPerShare;
@@ -275,8 +275,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 accumulated = (bal * accPerShare) / ACC_SCALE;
         int256 debt = _rewardDebt[account][token];
 
-        if (accumulated > uint256(debt)) {
-            claimable = accumulated - uint256(debt);
+        // Calculate claimable (handle negative debt from reward preservation)
+        int256 claimableInt = int256(accumulated) - debt;
+
+        if (claimableInt > 0) {
+            claimable = uint256(claimableInt);
         }
     }
 
@@ -539,10 +542,15 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         _settleStreamingForToken(token);
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
         if (!info.exists) return;
+
         uint256 accumulated = (bal * info.accPerShare) / ACC_SCALE;
         int256 debt = _rewardDebt[account][token];
-        if (accumulated > uint256(debt)) {
-            uint256 pending = accumulated - uint256(debt);
+
+        // Calculate claimable (handle negative debt from reward preservation)
+        int256 claimableInt = int256(accumulated) - debt;
+
+        if (claimableInt > 0) {
+            uint256 pending = uint256(claimableInt);
             if (pending > 0) {
                 uint256 reserve = _rewardReserve[token];
                 if (reserve < pending) revert InsufficientRewardLiquidity();
@@ -773,8 +781,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     /// @dev Called BEFORE transfer executes
-    ///      Sender: unstake semantics (balance decreases)
-    ///      Receiver: stake semantics (balance increases, VP preserved)
+    ///      Sender: Keeps their accumulated rewards (debt adjusted to preserve claimable)
+    ///      Receiver: Starts fresh with 0 claimable (earns from transfer point)
+    ///      Design: Rewards belong to addresses that earned them, not the tokens
     function onTokenTransfer(address from, address to, uint256 amount) external {
         if (_msgSender() != stakedToken) revert('ONLY_STAKED_TOKEN');
 
@@ -785,17 +794,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 senderOldBalance = ILevrStakedToken_v1(stakedToken).balanceOf(from);
         uint256 receiverOldBalance = ILevrStakedToken_v1(stakedToken).balanceOf(to);
 
-        // CRITICAL: Settle (auto-claim) rewards for both parties BEFORE transfer
-        // Use their OLD balances (before transfer) to calculate correct rewards
-        _settleAll(from, from, senderOldBalance);
-        _settleAll(to, to, receiverOldBalance);
-
         // Calculate post-transfer balances
         uint256 senderNewBalance = senderOldBalance - amount;
         uint256 receiverNewBalance = receiverOldBalance + amount;
 
         // Update sender's VP using unstake semantics (proportional time reduction)
-        // Inline calculation since we have the correct balance context
         uint256 senderCurrentStartTime = stakeStartTime[from];
         if (senderNewBalance > 0 && senderCurrentStartTime > 0) {
             uint256 senderTimeAccumulated = block.timestamp - senderCurrentStartTime;
@@ -811,8 +814,26 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 newReceiverStartTime = this.calcNewStakeStartTime(to, amount);
         stakeStartTime[to] = newReceiverStartTime;
 
-        // Update both parties' debt for new balances (fresh start after claiming)
-        _updateDebtAll(from, senderNewBalance);
-        _updateDebtAll(to, receiverNewBalance);
+        // CRITICAL: Preserve sender's claimable, receiver starts fresh
+        // Rewards belong to addresses that earned them, not the tokens
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address token = _rewardTokens[i];
+            uint256 acc = _rewardInfo[token].accPerShare;
+
+            // Sender: Preserve their claimable amount
+            int256 senderOldDebt = _rewardDebt[from][token];
+            uint256 senderOldAccumulated = (senderOldBalance * acc) / ACC_SCALE;
+            int256 senderClaimable = int256(senderOldAccumulated) - senderOldDebt;
+
+            // Adjust sender's debt to preserve claimable with new balance
+            uint256 senderNewAccumulated = (senderNewBalance * acc) / ACC_SCALE;
+            _rewardDebt[from][token] = int256(senderNewAccumulated) - senderClaimable;
+
+            // Receiver: Starts fresh (0 claimable)
+            // Set debt = accumulated, so claimable = accumulated - debt = 0
+            uint256 receiverNewAccumulated = (receiverNewBalance * acc) / ACC_SCALE;
+            _rewardDebt[to][token] = int256(receiverNewAccumulated);
+        }
     }
 }
