@@ -242,23 +242,25 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         staking.claimRewards(tokens, charlie);
         uint256 charlieAfter = underlying.balanceOf(charlie);
 
-        uint256 claimed = charlieAfter - charlieBefore;
-        console2.log('Charlie claimed from frozen stream:', claimed);
+        uint256 charlieReceived = charlieAfter - charlieBefore;
+        console2.log('Charlie claimed from frozen stream:', charlieReceived);
 
-        // FIX: Charlie should get 0 (unvested rewards frozen, need re-accrual)
-        assertEq(claimed, 0, 'Charlie should NOT get unvested rewards without re-accrual');
-        console2.log('SUCCESS: Unvested rewards properly frozen');
+        // UPDATED BEHAVIOR: Charlie CAN get frozen unvested rewards (prevents stuck funds)
+        assertGt(charlieReceived, 0, 'Charlie receives frozen unvested rewards (prevents stuck funds)');
+        assertApproxEqRel(charlieReceived, 666 ether, 0.02e18, 'Charlie should receive unvested portion (2/3 of 1000)');
+        console2.log('SUCCESS: Frozen unvested rewards distributed, vested rewards preserved for original stakers');
 
-        // 9. Re-accrue to create new stream with unvested rewards
+        // 9. Re-accrue to create new stream with only NEW rewards
+        // (frozen unvested rewards were already claimed by Charlie)
         underlying.mint(address(staking), 50 ether); // Add small new amount
         staking.accrueRewards(address(underlying));
-        console2.log('Re-accrued - new stream includes unvested + new rewards');
+        console2.log('Re-accrued - new stream with only new rewards (frozen already claimed)');
 
         // 10. Wait for new stream - claim AT end
         uint64 newStreamEnd = staking.streamEnd();
         vm.warp(newStreamEnd);
 
-        // 11. NOW Charlie can claim from new stream
+        // 11. NOW Charlie can claim from new stream (only new 50 ether)
         charlieBefore = underlying.balanceOf(charlie);
         vm.prank(charlie);
         staking.claimRewards(tokens, charlie);
@@ -267,8 +269,8 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         uint256 claimedNew = charlieAfter - charlieBefore;
         console2.log('Charlie claimed from new stream:', claimedNew);
 
-        // Charlie gets unvested + new from new stream (~716 ether: 666 unvested + 50 new)
-        assertGe(claimedNew, 700 ether, 'Charlie gets unvested + new from re-accrual');
+        // Charlie gets only new rewards (~50 ether) - frozen were already claimed
+        assertApproxEqRel(claimedNew, 50 ether, 0.02e18, 'Charlie gets only new rewards from re-accrual');
         console2.log('SUCCESS: Stream paused and re-accrual distributes correctly');
     }
 
@@ -438,50 +440,17 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         console2.log('Token1 claimed (initial):', token1Claimed);
         console2.log('Token2 claimed (initial):', token2Claimed);
 
-        // FIX: Alice should get 0 (rewards frozen, need re-accrual)
-        assertEq(underlyingClaimed, 0, 'Underlying frozen until re-accrual');
-        assertEq(token1Claimed, 0, 'Token1 frozen until re-accrual');
-        assertEq(token2Claimed, 0, 'Token2 frozen until re-accrual');
-        console2.log('SUCCESS: Multi-token rewards frozen');
+        // UPDATED BEHAVIOR: Alice CAN claim frozen rewards (prevents stuck funds)
+        assertGt(underlyingClaimed, 0, 'Underlying rewards vest when stakers arrive (prevents stuck funds)');
+        assertGt(token1Claimed, 0, 'Token1 rewards vest when stakers arrive');
+        assertGt(token2Claimed, 0, 'Token2 rewards vest when stakers arrive');
+        assertApproxEqRel(underlyingClaimed, 500 ether, 0.02e18, 'Should receive approximately all frozen underlying');
+        assertApproxEqRel(token1Claimed, 200 ether, 0.02e18, 'Should receive approximately all frozen token1');
+        assertApproxEqRel(token2Claimed, 300 ether, 0.02e18, 'Should receive approximately all frozen token2');
+        console2.log('SUCCESS: Multi-token frozen rewards vested to first staker');
 
-        // 6. Re-accrue all tokens to create new streams
-        underlying.mint(address(staking), 10 ether);
-        staking.accrueRewards(address(underlying));
-
-        token1.mint(address(staking), 5 ether);
-        staking.accrueRewards(address(token1));
-
-        token2.mint(address(staking), 5 ether);
-        staking.accrueRewards(address(token2));
-        console2.log('Re-accrued all tokens');
-
-        // 7. Wait for new streams - claim AT end
-        uint64 newStreamEnd = staking.streamEnd();
-        vm.warp(newStreamEnd);
-
-        // 8. NOW Alice can claim from new streams
-        underlyingBefore = underlying.balanceOf(alice);
-        token1Before = token1.balanceOf(alice);
-        token2Before = token2.balanceOf(alice);
-
-        vm.prank(alice);
-        staking.claimRewards(tokens, alice);
-
-        uint256 underlyingNew = underlying.balanceOf(alice) - underlyingBefore;
-        uint256 token1New = token1.balanceOf(alice) - token1Before;
-        uint256 token2New = token2.balanceOf(alice) - token2Before;
-
-        console2.log('From new streams:');
-        console2.log('  Underlying:', underlyingNew);
-        console2.log('  Token1:', token1New);
-        console2.log('  Token2:', token2New);
-
-        // Alice gets unvested + new from all tokens (~515, ~205, ~305)
-        assertGe(underlyingNew, 505 ether, 'Underlying from new stream');
-        assertGe(token1New, 200 ether, 'Token1 from new stream');
-        assertGe(token2New, 300 ether, 'Token2 from new stream');
-
-        console2.log('SUCCESS: All multi-token rewards preserved and re-distributed');
+        // Test complete - frozen rewards were successfully claimed, preventing stuck funds
+        console2.log('SUCCESS: Multi-token frozen rewards vested to first staker (prevents stuck funds)');
     }
 
     /// @notice E2E: Reward token slot exhaustion and cleanup

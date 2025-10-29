@@ -66,7 +66,13 @@ library RewardMath {
         if (current >= end) {
             // If last update didn't reach end, stream paused (no stakers) - return unvested
             if (last < end) {
-                // Calculate how much didn't vest due to pause
+                // FIX: If stream never started vesting (last == start or last < start), 
+                // don't include unvested in next stream - keeps rewards in reserve for manual re-accrual
+                // This prevents unvested rewards from getting stuck in infinite loop of paused streams
+                if (last <= start) {
+                    return 0; // Stream completely paused - rewards stay in reserve
+                }
+                // Stream partially vested then paused - calculate unvested portion
                 uint256 unvestedDuration = end - last;
                 return (total * unvestedDuration) / duration;
             }

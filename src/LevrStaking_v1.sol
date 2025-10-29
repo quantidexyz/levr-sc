@@ -318,25 +318,44 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             uint256 accPerShare = tokenState.accPerShare;
 
             // Add any pending streaming rewards using GLOBAL stream window
-            // FIX: Only calculate pending for ACTIVE streams (up to and including stream end)
-            // Ended streams have already settled - don't simulate vesting with current totalStaked
             uint64 start = _streamStart;
             uint64 end = _streamEnd;
-            if (end > 0 && start > 0 && block.timestamp > start && block.timestamp <= end) {
-                // Calculate pending streaming rewards using library
-                (uint256 vestAmount, ) = RewardMath.calculateVestedAmount(
-                    tokenState.streamTotal,
-                    start,
-                    end,
-                    tokenState.lastUpdate,
-                    uint64(block.timestamp)
-                );
-                if (vestAmount > 0 && _totalStaked > 0) {
-                    accPerShare = RewardMath.calculateAccPerShare(
-                        accPerShare,
-                        vestAmount,
-                        _totalStaked
+            if (end > 0 && start > 0 && _totalStaked > 0) {
+                uint64 last = tokenState.lastUpdate;
+                uint64 current = uint64(block.timestamp);
+
+                // Determine how far to vest for view calculation (matches _settleStreamingForToken logic)
+                uint64 settleTo;
+                if (current > end) {
+                    // Stream ended
+                    if (last >= end) {
+                        // Already fully settled - use accPerShare as-is
+                        settleTo = last;
+                    } else {
+                        // Stream ended but wasn't fully settled - vest up to end
+                        settleTo = end;
+                    }
+                } else {
+                    // Stream is still active - vest up to current time
+                    settleTo = current;
+                }
+
+                if (settleTo > last) {
+                    // Calculate pending rewards
+                    (uint256 vestAmount, ) = RewardMath.calculateVestedAmount(
+                        tokenState.streamTotal,
+                        start,
+                        end,
+                        last,
+                        settleTo
                     );
+                    if (vestAmount > 0) {
+                        accPerShare = RewardMath.calculateAccPerShare(
+                            accPerShare,
+                            vestAmount,
+                            _totalStaked
+                        );
+                    }
                 }
             }
 
@@ -694,14 +713,21 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         uint64 last = tokenState.lastUpdate;
+        uint64 current = uint64(block.timestamp);
 
-        // FIX: If stream ended and we haven't settled to end, don't vest the gap
-        // This prevents new stakers from claiming rewards that never vested
-        if (block.timestamp > end && last != end) {
-            // We're past stream end but last update didn't reach end
-            // This means totalStaked hit 0 before stream ended (pause)
-            // Don't vest the gap from 'last' to 'end'
-            return;
+        // Determine how far to vest
+        uint64 settleTo;
+        if (current > end) {
+            // Stream ended
+            if (last >= end) {
+                // Already fully settled - nothing to do
+                return;
+            }
+            // Stream ended but wasn't fully settled - vest up to end
+            settleTo = end;
+        } else {
+            // Stream is still active - vest up to current time
+            settleTo = current;
         }
 
         // Use library function for vesting calculation
@@ -710,7 +736,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             start,
             end,
             last,
-            uint64(block.timestamp)
+            settleTo
         );
 
         if (vestAmount > 0) {
@@ -720,7 +746,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
                 _totalStaked
             );
         }
-        // Advance last update only when there are stakers
+        // Advance last update to reflect settlement
         tokenState.lastUpdate = newLast;
     }
 
