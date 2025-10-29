@@ -51,21 +51,21 @@ contract ReentrantReceiver is IERC20 {
         return true;
     }
 
-    function balanceOf(address) external view returns (uint256) {
+    function balanceOf(address) external pure returns (uint256) {
         return 0;
     }
 
     // Stubs
-    function totalSupply() external view returns (uint256) {
+    function totalSupply() external pure returns (uint256) {
         return 0;
     }
-    function allowance(address, address) external view returns (uint256) {
+    function allowance(address, address) external pure returns (uint256) {
         return 0;
     }
-    function approve(address, uint256) external returns (bool) {
+    function approve(address, uint256) external pure returns (bool) {
         return true;
     }
-    function transferFrom(address, address, uint256) external returns (bool) {
+    function transferFrom(address, address, uint256) external pure returns (bool) {
         return true;
     }
 }

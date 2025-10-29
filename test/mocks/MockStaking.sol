@@ -17,7 +17,7 @@ contract MockStaking is ILevrStaking_v1 {
     }
 
     /// @notice Mock accrueRewards - can be configured to revert for testing
-    function accrueRewards(address) external {
+    function accrueRewards(address) external view {
         if (shouldRevertOnAccrue) {
             revert('Mock: Accrual failed');
         }
@@ -27,7 +27,7 @@ contract MockStaking is ILevrStaking_v1 {
 
     function stake(uint256) external override {}
 
-    function unstake(uint256, address) external override returns (uint256) {
+    function unstake(uint256, address) external pure override returns (uint256) {
         return 0;
     }
 
@@ -35,53 +35,53 @@ contract MockStaking is ILevrStaking_v1 {
 
     function accrueFromTreasury(address, uint256, bool) external override {}
 
-    function outstandingRewards(address) external view override returns (uint256, uint256) {
+    function outstandingRewards(address) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function claimableRewards(address, address) external view override returns (uint256) {
+    function claimableRewards(address, address) external pure override returns (uint256) {
         return 0;
     }
 
-    function stakeStartTime(address) external view override returns (uint256) {
+    function stakeStartTime(address) external pure override returns (uint256) {
         return 0;
     }
 
-    function getVotingPower(address) external view override returns (uint256) {
+    function getVotingPower(address) external pure override returns (uint256) {
         return 0;
     }
 
     function initialize(address, address, address, address) external override {}
 
-    function streamWindowSeconds() external view override returns (uint32) {
+    function streamWindowSeconds() external pure override returns (uint32) {
         return 0;
     }
 
-    function streamStart() external view override returns (uint64) {
+    function streamStart() external pure override returns (uint64) {
         return 0;
     }
 
-    function streamEnd() external view override returns (uint64) {
+    function streamEnd() external pure override returns (uint64) {
         return 0;
     }
 
-    function rewardRatePerSecond(address) external view override returns (uint256) {
+    function rewardRatePerSecond(address) external pure override returns (uint256) {
         return 0;
     }
 
-    function aprBps() external view override returns (uint256) {
+    function aprBps() external pure override returns (uint256) {
         return 0;
     }
 
-    function stakedBalanceOf(address) external view override returns (uint256) {
+    function stakedBalanceOf(address) external pure override returns (uint256) {
         return 0;
     }
 
-    function totalStaked() external view override returns (uint256) {
+    function totalStaked() external pure override returns (uint256) {
         return 0;
     }
 
-    function escrowBalance(address) external view override returns (uint256) {
+    function escrowBalance(address) external pure override returns (uint256) {
         return 0;
     }
 }
