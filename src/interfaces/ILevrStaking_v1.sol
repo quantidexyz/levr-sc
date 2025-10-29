@@ -6,7 +6,31 @@ pragma solidity ^0.8.30;
 interface ILevrStaking_v1 {
     // ============ Structs ============
 
-    /// @notice Reward token accumulator info.
+    /// @notice Consolidated token state - combines reward info, reserve, streaming, and whitelist status
+    /// @param accPerShare Accumulated rewards per staked token, scaled by 1e18
+    /// @param reserve Accounted rewards not yet claimed
+    /// @param streamTotal Total amount to vest in current stream
+    /// @param lastUpdate Last streaming settlement timestamp
+    /// @param exists Whether token is registered
+    /// @param whitelisted Whether token is whitelisted (exempt from MAX_REWARD_TOKENS)
+    struct RewardTokenState {
+        uint256 accPerShare;
+        uint256 reserve;
+        uint256 streamTotal;
+        uint64 lastUpdate;
+        bool exists;
+        bool whitelisted;
+    }
+
+    /// @notice Consolidated user reward state - combines debt and pending rewards
+    /// @param debt User's reward debt (prevents double-claiming)
+    /// @param pending Pending rewards from unstaking (claimable with zero balance)
+    struct UserRewardState {
+        int256 debt;
+        uint256 pending;
+    }
+
+    /// @notice Reward token accumulator info (deprecated - use RewardTokenState)
     /// @param accPerShare Accumulated rewards per staked token, scaled by 1e18
     /// @param exists Whether this reward token is registered
     struct RewardInfo {
