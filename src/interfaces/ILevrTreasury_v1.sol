@@ -9,6 +9,12 @@ interface ILevrTreasury_v1 {
     /// @notice Revert if caller is not the project governor.
     error OnlyGovernor();
 
+    /// @notice Revert if caller is not the factory.
+    error OnlyFactory();
+
+    /// @notice Revert if treasury is already initialized.
+    error AlreadyInitialized();
+
     /// @notice Revert if zero address is provided.
     error ZeroAddress();
 

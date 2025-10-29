@@ -11,6 +11,9 @@ interface ILevrDeployer_v1 {
     /// @notice Thrown when a function is called from an unauthorized context
     error UnauthorizedFactory();
 
+    /// @notice Thrown when zero address is provided
+    error ZeroAddress();
+
     /// @notice The factory address that is authorized to delegatecall this logic
     /// @dev Set once at construction time. During delegatecall, address(this) equals the factory.
     /// @return The authorized factory address

@@ -304,4 +304,5 @@ These are from an earlier design iteration exploring transferable staked tokens.
 | `CONFIG_GRIDLOCK_FINDINGS.md` | Added to spec/ (comprehensive report)                   |
 | Code fix applied to factory   | `LevrFactory_v1.sol` lines 222-237                      |
 | Tests created                 | `test/unit/LevrFactory_ConfigGridlock.t.sol` (15 tests) |
-| **Total tests:** 404          | 404 passing, comprehensive edge case coverage           |
+| **Total tests:** 421          | 421 passing, comprehensive edge case coverage           |
+| **Aderyn analysis (Oct 29)**  | 21 findings addressed, 17 tests added                   |

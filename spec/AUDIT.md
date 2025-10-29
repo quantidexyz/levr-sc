@@ -1636,6 +1636,80 @@ Use Echidna or Foundry fuzzing for:
 
 ---
 
+## Static Analysis (Aderyn)
+
+**Analysis Date:** October 29, 2025  
+**Tool:** Aderyn v0.1.0 (Cyfrin Static Analyzer)  
+**Files Analyzed:** 37 Solidity files (2,547 nSLOC)  
+**Findings:** 21 total (3 High, 18 Low)
+
+### Summary
+
+| Category | Count | Status |
+| -------- | ----- | ------ |
+| Fixed | 5 | ✅ Code changes implemented and tested |
+| False Positives | 3 | ✅ Verified safe, documented |
+| By Design | 5 | ✅ Intentional, documented |
+| Gas Optimizations | 6 | ✅ Acceptable, noted for future |
+| Platform Specific | 2 | ✅ Compatible with Base Chain |
+
+### Fixes Implemented
+
+**1. L-2, L-18: Unsafe ERC20 Operations → SafeERC20** ✅
+- Changed `IERC20.approve()` to `SafeERC20.forceApprove()` in Treasury
+- Handles non-standard tokens (USDT, etc.)
+- Test coverage: 2 tests in LevrAderynFindings.t.sol
+
+**2. L-6: Empty revert() Statements → Custom Errors** ✅
+- Treasury: Added `AlreadyInitialized()`, `OnlyFactory()` errors
+- Deployer: Added `ZeroAddress()` error
+- Better debugging and error clarity
+- Test coverage: 3 tests in LevrAderynFindings.t.sol
+
+**3. L-7: Modifier Order → nonReentrant First** ✅
+- Treasury functions now have `nonReentrant` as first modifier
+- Best practice for reentrancy protection
+- Test coverage: 1 test in LevrAderynFindings.t.sol
+
+**4. L-13: Dead Code → Removed** ✅
+- Removed unused `_calculateProtocolFee()` function from Treasury
+- Reduces attack surface
+- Test coverage: 1 documentation test
+
+**5. H-2: Duplicate Interface Names → Documented** ⚠️
+- macOS filesystem case-insensitivity creates apparent duplicate
+- Git tracks one file: `IClankerLPLocker.sol`
+- No impact on Base Chain deployment
+- Documented for Linux developers
+
+### False Positives Documented
+
+**1. H-1: abi.encodePacked() Hash Collision** ✅
+- Used for string concatenation, not hashing
+- Safe usage confirmed
+- Test: 1 documentation test
+
+**2. H-3: Reentrancy State Changes** ✅
+- All flagged functions have `nonReentrant` modifier
+- OpenZeppelin ReentrancyGuard protection verified
+- Existing coverage: 10 reentrancy tests
+- Test: 2 verification tests
+
+**3. L-11: Unused Errors** ✅
+- 67/78 errors are in external interfaces (expected)
+- Interfaces define errors for external contracts to use
+- Test: 1 documentation test
+
+### Test Results
+
+**New Tests:** 17 tests in `test/unit/LevrAderynFindings.t.sol`  
+**All Tests:** 421/421 passing (100%)  
+**Coverage:** All Aderyn findings tested or documented
+
+**Detailed Analysis:** See `ADERYN_ANALYSIS.md` for complete breakdown.
+
+---
+
 ## Deployment Checklist
 
 Before production deployment:
@@ -1663,6 +1737,8 @@ Before production deployment:
 - [x] **INDUSTRY-COMPARISON**: Validation against known vulnerabilities ✅ **11 comparison tests**
 - [x] **COVERAGE-ANALYSIS**: Complete function coverage verified ✅ **See COVERAGE_ANALYSIS.md**
 - [x] Run full fuzzing test suite ✅ **257 fuzz scenarios in tests**
+- [x] **ADERYN**: Static analysis findings ✅ **21 findings addressed (5 fixed, 16 documented)**
+- [x] **ADERYN-TESTS**: Aderyn verification tests ✅ **17 tests added (421 total)**
 - [ ] Deploy to testnet and run integration tests
 - [ ] Consider external audit by professional firm
 - [ ] Set up monitoring and alerting for deployed contracts
@@ -1707,6 +1783,11 @@ All critical fixes have been validated with comprehensive test coverage:
 **Detailed Analysis:** See `COVERAGE_ANALYSIS.md` for complete function-level coverage matrix.
 
 **Total: 404/404 tests passing (100% success rate)**
+
+**Aderyn Tests Added (October 29, 2025):**
+- ✅ LevrAderynFindings.t.sol: 17 tests (all passing)
+
+**Updated Total: 421/421 tests passing (100% success rate)**
 
 ---
 

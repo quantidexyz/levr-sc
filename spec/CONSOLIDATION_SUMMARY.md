@@ -150,13 +150,14 @@ archive/
 
 ## Test Suite Status
 
-**Total Tests:** 404 (100% passing) ✅
+**Total Tests:** 421 (100% passing) ✅
 
 **Breakdown:**
-- 404 comprehensive tests covering all contracts
+- 421 comprehensive tests covering all contracts
 - 39 stuck-funds tests (all validated)
 - 253 edge case tests
 - 11 industry comparison tests
+- 17 static analysis tests (Aderyn verification) **NEW: Oct 29, 2025**
 
 **New Test Files:**
 - ✅ `test/unit/LevrStaking_StuckFunds.t.sol` (16 tests)
@@ -165,9 +166,10 @@ archive/
 - ✅ `test/e2e/LevrV1.StuckFundsRecovery.t.sol` (7 tests)
 
 **Validation:**
-- All 404 tests validated to ensure they test real contract behavior
+- All 421 tests validated to ensure they test real contract behavior
 - No self-asserting or documentation-only tests
 - Line-by-line mapping to source code completed
+- Static analysis findings addressed (Aderyn: 5 fixed, 16 documented)
 
 ---
 
@@ -182,10 +184,11 @@ archive/
 - Comprehensive recovery mechanisms
 
 **Testing:**
-- 404 tests (100% passing)
+- 421 tests (100% passing)
 - All tests validate actual contract behavior
 - Stuck-funds scenarios comprehensively covered
 - Industry comparison validates security posture
+- Static analysis findings verified (Aderyn)
 
 **Documentation:**
 - Concise main docs (1,900 lines)

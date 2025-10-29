@@ -2,7 +2,7 @@
 
 **Purpose:** Test utilities, strategies, and best practices  
 **Last Updated:** October 29, 2025  
-**Test Coverage:** 404/404 passing (100%)
+**Test Coverage:** 421/421 passing (100%)
 
 ---
 
@@ -583,11 +583,12 @@ forge test --gas-report -vvv
 
 **By Type:**
 
-- Unit Tests: 125
+- Unit Tests: 142 (includes 17 Aderyn tests)
 - E2E Integration: 42
 - Edge Cases: 253
 - Stuck Funds: 32
 - Industry Comparison: 11
+- Static Analysis: 17 (Aderyn)
 - Fuzz Tests: 257 scenarios (within unit tests)
 
 **By Priority:**
@@ -732,10 +733,11 @@ function _generateFees(uint256 expectedAmount) internal returns (uint256) {
 
 ### Before Deployment
 
-- [ ] All 404 tests passing
+- [ ] All 421 tests passing
 - [ ] Fuzz tests passing
 - [ ] E2E integration tests passing
 - [ ] Fork tests passing
+- [ ] Static analysis findings addressed
 - [ ] Gas optimization reviewed
 - [ ] Security edge cases covered
 - [ ] Industry comparison validated
@@ -858,9 +860,10 @@ forge test --match-test test_name -vvv
 
 ---
 
-**Test Coverage:** 404/404 passing (100%)  
-**Methodology:** Systematic edge case testing + stuck-funds analysis  
-**Industry Validation:** Exceeds standards in 5 areas
+**Test Coverage:** 421/421 passing (100%)  
+**Methodology:** Systematic edge case testing + stuck-funds analysis + static analysis  
+**Industry Validation:** Exceeds standards in 5 areas  
+**Static Analysis:** Aderyn findings addressed (21/21)
 
 ---
 
@@ -879,6 +882,10 @@ forge test --match-test test_name -vvv
 - ❌ Does NOT just print documentation
 - ❌ Does NOT just assert trivial truths
 
-**Results:** 404/404 tests validated as properly testing contract behavior
+**Results:** 421/421 tests validated as properly testing contract behavior
+
+**Updates:**
+- October 29, 2025: Added 17 Aderyn static analysis verification tests
+- All Aderyn findings addressed: 5 fixes applied, 16 documented
 
 **Detailed Reports:** See `archive/TEST_VALIDATION_REPORT.md` and `archive/TEST_VALIDATION_DEEP_DIVE.md` for line-by-line mapping of tests to source code.

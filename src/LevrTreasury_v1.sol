@@ -24,8 +24,8 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
 
     function initialize(address governor_, address underlying_) external {
         // One-time initialization by factory only
-        if (governor != address(0)) revert();
-        if (_msgSender() != factory) revert();
+        if (governor != address(0)) revert ILevrTreasury_v1.AlreadyInitialized();
+        if (_msgSender() != factory) revert ILevrTreasury_v1.OnlyFactory();
         if (governor_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         if (underlying == address(0)) {
             if (underlying_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
@@ -44,13 +44,13 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         address token,
         address to,
         uint256 amount
-    ) external onlyGovernor nonReentrant {
+    ) external nonReentrant onlyGovernor {
         if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         IERC20(token).safeTransfer(to, amount);
     }
 
     /// @inheritdoc ILevrTreasury_v1
-    function applyBoost(address token, uint256 amount) external onlyGovernor nonReentrant {
+    function applyBoost(address token, uint256 amount) external nonReentrant onlyGovernor {
         if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
 
@@ -58,11 +58,11 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
             underlying
         );
         // Approve and pull via accrueFromTreasury for atomicity
-        IERC20(token).approve(project.staking, amount);
+        IERC20(token).forceApprove(project.staking, amount);
         ILevrStaking_v1(project.staking).accrueFromTreasury(token, amount, true);
 
         // Reset approval to 0 after use
-        IERC20(token).approve(project.staking, 0);
+        IERC20(token).forceApprove(project.staking, 0);
     }
 
     function getUnderlyingBalance() external view returns (uint256) {
@@ -75,10 +75,5 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
             underlying
         );
         return project.staking;
-    }
-
-    function _calculateProtocolFee(uint256 amount) internal view returns (uint256 protocolFee) {
-        uint16 protocolFeeBps = ILevrFactory_v1(factory).protocolFeeBps();
-        protocolFee = (amount * protocolFeeBps) / 10_000;
     }
 }

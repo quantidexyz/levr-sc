@@ -18,7 +18,7 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
     }
 
     constructor(address factory_) {
-        require(factory_ != address(0));
+        if (factory_ == address(0)) revert ZeroAddress();
         authorizedFactory = factory_;
     }
 
