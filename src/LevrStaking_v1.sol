@@ -41,6 +41,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     address[] private _rewardTokens;
     mapping(address => ILevrStaking_v1.RewardInfo) private _rewardInfo;
     mapping(address => mapping(address => int256)) private _rewardDebt;
+    // Track pending rewards for users who unstaked (allows claiming even with zero balance)
+    mapping(address => mapping(address => uint256)) private _pendingRewards;
     uint256 private constant ACC_SCALE = 1e18;
 
     // Track escrowed principal per token to separate it from reward liquidity
@@ -102,6 +104,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         _totalStaked += amount;
         ILevrStakedToken_v1(stakedToken).mint(staker, amount);
 
+        // CRITICAL FIX: Keep pending rewards separate when restaking
+        // Pending rewards are claimable independently of balance-based rewards
+        // No conversion needed - user can claim both pending (from unstake) and new rewards
+
         // Increase debt to match new accumulated amount, preventing instant rewards
         // pending = (balance * accPerShare) - debt, so increasing both keeps pending same
         _increaseDebtForAll(staker, amount);
@@ -148,6 +154,27 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             newVotingPower = 0;
         }
 
+        // CRITICAL FIX: Calculate and preserve pending rewards before resetting debt
+        // This prevents permanent fund loss when users unstake
+        uint256 oldBalance = bal; // Balance before unstake
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address rt = _rewardTokens[i];
+            ILevrStaking_v1.RewardInfo storage info = _rewardInfo[rt];
+            if (info.exists && oldBalance > 0) {
+                uint256 accPerShare = info.accPerShare;
+                uint256 accumulated = (oldBalance * accPerShare) / ACC_SCALE;
+                int256 currentDebt = _rewardDebt[staker][rt];
+
+                // Calculate pending rewards earned before unstaking
+                if (accumulated > uint256(currentDebt)) {
+                    uint256 pending = accumulated - uint256(currentDebt);
+                    // Add to existing pending rewards (in case of multiple unstakes)
+                    _pendingRewards[staker][rt] += pending;
+                }
+            }
+        }
+
         // Update debt to freeze rewards at current level (stop accumulating while unstaked)
         _updateDebtAll(staker, remainingBalance);
 
@@ -160,10 +187,27 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address claimer = _msgSender();
         uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(claimer);
         for (uint256 i = 0; i < tokens.length; i++) {
-            _settleStreamingForToken(tokens[i]);
-            _settle(tokens[i], claimer, to, bal);
-            uint256 acc = _rewardInfo[tokens[i]].accPerShare;
-            _rewardDebt[claimer][tokens[i]] = int256((bal * acc) / ACC_SCALE);
+            address token = tokens[i];
+            _settleStreamingForToken(token);
+
+            // Claim from balance-based rewards if user has balance
+            if (bal > 0) {
+                _settle(token, claimer, to, bal);
+                uint256 acc = _rewardInfo[token].accPerShare;
+                _rewardDebt[claimer][token] = int256((bal * acc) / ACC_SCALE);
+            }
+
+            // Claim from pending rewards (for users who unstaked)
+            uint256 pending = _pendingRewards[claimer][token];
+            if (pending > 0) {
+                uint256 reserve = _rewardReserve[token];
+                if (reserve < pending) revert InsufficientRewardLiquidity();
+                _rewardReserve[token] = reserve - pending;
+                IERC20(token).safeTransfer(to, pending);
+                emit RewardsClaimed(claimer, to, token, pending);
+                // Clear pending rewards after claiming
+                _pendingRewards[claimer][token] = 0;
+            }
         }
     }
 
@@ -256,39 +300,48 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address token
     ) external view returns (uint256 claimable) {
         uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(account);
-        if (bal == 0) return 0;
 
         ILevrStaking_v1.RewardInfo storage info = _rewardInfo[token];
-        if (!info.exists) return 0;
+        if (!info.exists) {
+            // If token doesn't exist, return only pending rewards
+            return _pendingRewards[account][token];
+        }
 
-        // Calculate what would be accumulated after settling streaming
-        uint256 accPerShare = info.accPerShare;
+        // Start with pending rewards (persisted from previous unstakes)
+        claimable = _pendingRewards[account][token];
 
-        // Add any pending streaming rewards using GLOBAL stream window
-        // FIX: Only calculate pending for ACTIVE streams (up to and including stream end)
-        // Ended streams have already settled - don't simulate vesting with current totalStaked
-        uint64 start = _streamStart;
-        uint64 end = _streamEnd;
-        if (end > 0 && start > 0 && block.timestamp > start && block.timestamp <= end) {
-            uint64 last = _lastUpdateByToken[token];
-            uint64 from = last < start ? start : last;
-            uint64 to = uint64(block.timestamp);
-            if (to > from) {
-                uint256 duration = end - start;
-                uint256 total = _streamTotalByToken[token];
-                if (duration > 0 && total > 0 && _totalStaked > 0) {
-                    uint256 vestAmount = (total * (to - from)) / duration;
-                    accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
+        // If user has balance, calculate balance-based rewards
+        if (bal > 0) {
+            // Calculate what would be accumulated after settling streaming
+            uint256 accPerShare = info.accPerShare;
+
+            // Add any pending streaming rewards using GLOBAL stream window
+            // FIX: Only calculate pending for ACTIVE streams (up to and including stream end)
+            // Ended streams have already settled - don't simulate vesting with current totalStaked
+            uint64 start = _streamStart;
+            uint64 end = _streamEnd;
+            if (end > 0 && start > 0 && block.timestamp > start && block.timestamp <= end) {
+                uint64 last = _lastUpdateByToken[token];
+                uint64 from = last < start ? start : last;
+                uint64 to = uint64(block.timestamp);
+                if (to > from) {
+                    uint256 duration = end - start;
+                    uint256 total = _streamTotalByToken[token];
+                    if (duration > 0 && total > 0 && _totalStaked > 0) {
+                        uint256 vestAmount = (total * (to - from)) / duration;
+                        accPerShare += (vestAmount * ACC_SCALE) / _totalStaked;
+                    }
                 }
             }
-        }
 
-        uint256 accumulated = (bal * accPerShare) / ACC_SCALE;
-        int256 debt = _rewardDebt[account][token];
+            uint256 accumulated = (bal * accPerShare) / ACC_SCALE;
+            int256 debt = _rewardDebt[account][token];
 
-        if (accumulated > uint256(debt)) {
-            claimable = accumulated - uint256(debt);
+            if (accumulated > uint256(debt)) {
+                claimable += accumulated - uint256(debt);
+            }
         }
+        // If bal == 0, claimable already contains only _pendingRewards[account][token]
     }
 
     /// @notice Get the ClankerFeeLocker address for the underlying token
