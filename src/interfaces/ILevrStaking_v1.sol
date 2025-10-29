@@ -139,5 +139,4 @@ interface ILevrStaking_v1 {
     /// @param user The user address
     /// @return votingPower The user's voting power in token-days
     function getVotingPower(address user) external view returns (uint256 votingPower);
-
 }

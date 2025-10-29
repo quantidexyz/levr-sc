@@ -84,4 +84,5 @@ contract MockStaking is ILevrStaking_v1 {
     function escrowBalance(address) external pure override returns (uint256) {
         return 0;
     }
+
 }

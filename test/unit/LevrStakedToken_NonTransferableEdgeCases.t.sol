@@ -328,8 +328,9 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         underlying.mint(address(staking), 2000 ether);
         staking.accrueRewards(address(underlying));
 
-        // Complete stream
-        vm.warp(block.timestamp + 3 days + 1);
+        // Complete stream - claim AT end, not after
+        uint64 streamEnd = staking.streamEnd();
+        vm.warp(streamEnd);
 
         // Both should have 1000 ether claimable (50/50 split)
         uint256 aliceClaimable = staking.claimableRewards(alice, address(underlying));
@@ -344,6 +345,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
         uint256 aliceBalBefore = underlying.balanceOf(alice);
         staking.claimRewards(tokens, alice);
+        vm.stopPrank();
         assertEq(underlying.balanceOf(alice) - aliceBalBefore, 1000 ether);
 
         vm.startPrank(bob);
@@ -432,7 +434,9 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         underlying.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(underlying));
 
-        vm.warp(block.timestamp + 100 days);
+        // Warp to stream end to fully vest
+        uint64 streamEnd = staking.streamEnd();
+        vm.warp(streamEnd);
 
         uint256 vpBefore = staking.getVotingPower(alice);
         uint256 rewardsBefore = staking.claimableRewards(alice, address(underlying));
@@ -440,14 +444,19 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         console.log('VP before unstake:', vpBefore);
         console.log('Rewards before unstake:', rewardsBefore);
 
-        // Partial unstake (30%)
+        // NEW DESIGN: Claim rewards BEFORE unstaking
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(underlying);
         uint256 aliceBalBefore = underlying.balanceOf(alice);
+        staking.claimRewards(tokens, alice);
+
+        // Partial unstake (30%) - now just returns principal
         staking.unstake(300 ether, alice);
         uint256 aliceBalAfter = underlying.balanceOf(alice);
 
-        // Should receive principal + rewards
+        // Should receive principal + rewards (claimed separately)
         uint256 received = aliceBalAfter - aliceBalBefore;
-        console.log('Received on unstake:', received);
+        console.log('Received total (claim + unstake):', received);
         assertGt(received, 300 ether, 'Should get principal + rewards');
 
         // VP should scale: 70% balance * 70% time = 49%

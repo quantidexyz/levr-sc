@@ -243,12 +243,33 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         uint256 charlieAfter = underlying.balanceOf(charlie);
 
         uint256 claimed = charlieAfter - charlieBefore;
-        console2.log('Charlie claimed:', claimed);
+        console2.log('Charlie claimed from frozen stream:', claimed);
 
-        // Charlie should get most unvested rewards (minus what Alice/Bob got)
-        assertGe(claimed, 650 ether, 'Charlie should get majority of unvested rewards');
+        // FIX: Charlie should get 0 (unvested rewards frozen, need re-accrual)
+        assertEq(claimed, 0, 'Charlie should NOT get unvested rewards without re-accrual');
+        console2.log('SUCCESS: Unvested rewards properly frozen');
 
-        console2.log('SUCCESS: Stream paused and resumed correctly');
+        // 9. Re-accrue to create new stream with unvested rewards
+        underlying.mint(address(staking), 50 ether); // Add small new amount
+        staking.accrueRewards(address(underlying));
+        console2.log('Re-accrued - new stream includes unvested + new rewards');
+
+        // 10. Wait for new stream - claim AT end
+        uint64 newStreamEnd = staking.streamEnd();
+        vm.warp(newStreamEnd);
+
+        // 11. NOW Charlie can claim from new stream
+        charlieBefore = underlying.balanceOf(charlie);
+        vm.prank(charlie);
+        staking.claimRewards(tokens, charlie);
+        charlieAfter = underlying.balanceOf(charlie);
+
+        uint256 claimedNew = charlieAfter - charlieBefore;
+        console2.log('Charlie claimed from new stream:', claimedNew);
+
+        // Charlie gets unvested + new from new stream (~716 ether: 666 unvested + 50 new)
+        assertGe(claimedNew, 700 ether, 'Charlie gets unvested + new from re-accrual');
+        console2.log('SUCCESS: Stream paused and re-accrual distributes correctly');
     }
 
     /// @notice E2E: Treasury balance depletes, governance continues with next proposal
@@ -413,16 +434,54 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         uint256 token1Claimed = token1.balanceOf(alice) - token1Before;
         uint256 token2Claimed = token2.balanceOf(alice) - token2Before;
 
-        console2.log('Underlying claimed:', underlyingClaimed);
-        console2.log('Token1 claimed:', token1Claimed);
-        console2.log('Token2 claimed:', token2Claimed);
+        console2.log('Underlying claimed (initial):', underlyingClaimed);
+        console2.log('Token1 claimed (initial):', token1Claimed);
+        console2.log('Token2 claimed (initial):', token2Claimed);
 
-        // All rewards preserved
-        assertGe(underlyingClaimed, 490 ether, 'Underlying preserved');
-        assertGe(token1Claimed, 195 ether, 'Token1 preserved');
-        assertGe(token2Claimed, 295 ether, 'Token2 preserved');
+        // FIX: Alice should get 0 (rewards frozen, need re-accrual)
+        assertEq(underlyingClaimed, 0, 'Underlying frozen until re-accrual');
+        assertEq(token1Claimed, 0, 'Token1 frozen until re-accrual');
+        assertEq(token2Claimed, 0, 'Token2 frozen until re-accrual');
+        console2.log('SUCCESS: Multi-token rewards frozen');
 
-        console2.log('SUCCESS: All multi-token rewards preserved during zero-staker period');
+        // 6. Re-accrue all tokens to create new streams
+        underlying.mint(address(staking), 10 ether);
+        staking.accrueRewards(address(underlying));
+
+        token1.mint(address(staking), 5 ether);
+        staking.accrueRewards(address(token1));
+
+        token2.mint(address(staking), 5 ether);
+        staking.accrueRewards(address(token2));
+        console2.log('Re-accrued all tokens');
+
+        // 7. Wait for new streams - claim AT end
+        uint64 newStreamEnd = staking.streamEnd();
+        vm.warp(newStreamEnd);
+
+        // 8. NOW Alice can claim from new streams
+        underlyingBefore = underlying.balanceOf(alice);
+        token1Before = token1.balanceOf(alice);
+        token2Before = token2.balanceOf(alice);
+
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+
+        uint256 underlyingNew = underlying.balanceOf(alice) - underlyingBefore;
+        uint256 token1New = token1.balanceOf(alice) - token1Before;
+        uint256 token2New = token2.balanceOf(alice) - token2Before;
+
+        console2.log('From new streams:');
+        console2.log('  Underlying:', underlyingNew);
+        console2.log('  Token1:', token1New);
+        console2.log('  Token2:', token2New);
+
+        // Alice gets unvested + new from all tokens (~515, ~205, ~305)
+        assertGe(underlyingNew, 505 ether, 'Underlying from new stream');
+        assertGe(token1New, 200 ether, 'Token1 from new stream');
+        assertGe(token2New, 300 ether, 'Token2 from new stream');
+
+        console2.log('SUCCESS: All multi-token rewards preserved and re-distributed');
     }
 
     /// @notice E2E: Reward token slot exhaustion and cleanup
@@ -459,8 +518,9 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         console2.log('Limit reached - 11th token rejected');
 
-        // 4. Wait for one token to finish streaming
-        vm.warp(block.timestamp + 3 days + 1);
+        // 4. Wait for one token to finish streaming - claim AT end
+        uint64 streamEnd = staking.streamEnd();
+        vm.warp(streamEnd);
 
         // 5. Alice claims from one token
         address[] memory claimTokens = new address[](1);

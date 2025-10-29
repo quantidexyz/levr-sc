@@ -289,9 +289,10 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         staking.accrueRewards(address(testToken));
         console2.log('Token added and accrued');
 
-        // Fast forward past stream window (default 3 days)
-        vm.warp(block.timestamp + 3.1 days);
-        console2.log('Fast forwarded past stream end');
+        // Fast forward to stream end - claim AT end
+        uint64 streamEnd = staking.streamEnd();
+        vm.warp(streamEnd);
+        console2.log('Fast forwarded to stream end');
 
         // Claim all rewards (alice is the only staker)
         address[] memory tokens = new address[](1);
@@ -446,7 +447,8 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
 
         // Cleanup first token (need to fast forward and claim)
         address firstToken = tokens[0];
-        vm.warp(block.timestamp + 3.1 days);
+        uint64 streamEnd = staking.streamEnd();
+        vm.warp(streamEnd);
         address[] memory claimTokens = new address[](1);
         claimTokens[0] = firstToken;
         vm.prank(alice);

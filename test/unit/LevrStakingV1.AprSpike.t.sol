@@ -164,7 +164,7 @@ contract LevrStakingV1AprSpikeTest is Test {
         console2.log('Time until stream end:', streamEnd - block.timestamp, 'seconds');
 
         // Fast forward to end of stream
-        vm.warp(streamEnd + 1);
+        vm.warp(streamEnd);
 
         // Try to claim all rewards
         address[] memory tokens = new address[](2);
@@ -257,7 +257,7 @@ contract LevrStakingV1AprSpikeTest is Test {
 
             // Fast forward to claim all
             uint64 streamEnd = staking.streamEnd();
-            vm.warp(streamEnd + 1);
+            vm.warp(streamEnd);
 
             address[] memory tokens = new address[](1);
             tokens[0] = address(underlying);

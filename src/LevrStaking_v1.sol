@@ -90,6 +90,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     function stake(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         address staker = _msgSender();
+
         // Settle streaming for all reward tokens before balance changes
         _settleStreamingAll();
 
@@ -98,9 +99,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         IERC20(underlying).safeTransferFrom(staker, address(this), amount);
         _escrowBalance[underlying] += amount;
-        _increaseDebtForAll(staker, amount);
         _totalStaked += amount;
         ILevrStakedToken_v1(stakedToken).mint(staker, amount);
+
+        // Increase debt to match new accumulated amount, preventing instant rewards
+        // pending = (balance * accPerShare) - debt, so increasing both keeps pending same
+        _increaseDebtForAll(staker, amount);
+
         emit Staked(staker, amount);
     }
 
@@ -114,9 +119,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address staker = _msgSender();
         uint256 bal = ILevrStakedToken_v1(stakedToken).balanceOf(staker);
         if (bal < amount) revert InsufficientStake();
+
         // Settle streaming before changing balances
         _settleStreamingAll();
-        _settleAll(staker, to, bal);
+
+        // NEW DESIGN: Don't auto-claim rewards on unstake
+        // Rewards stay tracked, user can claim manually anytime
+        // This prevents the "unvested rewards to new staker" bug
+
         ILevrStakedToken_v1(stakedToken).burn(staker, amount);
         _totalStaked -= amount;
         uint256 esc = _escrowBalance[underlying];
@@ -138,7 +148,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             newVotingPower = 0;
         }
 
-        // Update debt for all reward tokens with remaining balance
+        // Update debt to freeze rewards at current level (stop accumulating while unstaked)
         _updateDebtAll(staker, remainingBalance);
 
         emit Unstaked(staker, to, amount);
@@ -255,13 +265,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 accPerShare = info.accPerShare;
 
         // Add any pending streaming rewards using GLOBAL stream window
+        // FIX: Only calculate pending for ACTIVE streams (up to and including stream end)
+        // Ended streams have already settled - don't simulate vesting with current totalStaked
         uint64 start = _streamStart;
         uint64 end = _streamEnd;
-        if (end > 0 && start > 0 && block.timestamp > start) {
+        if (end > 0 && start > 0 && block.timestamp > start && block.timestamp <= end) {
             uint64 last = _lastUpdateByToken[token];
             uint64 from = last < start ? start : last;
             uint64 to = uint64(block.timestamp);
-            if (to > end) to = end;
             if (to > from) {
                 uint256 duration = end - start;
                 uint256 total = _streamTotalByToken[token];
@@ -581,6 +592,16 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint64 to = uint64(block.timestamp);
         if (to > end) to = end;
         if (to <= from) return;
+
+        // FIX: If stream ended and we haven't settled to end, don't vest the gap
+        // This prevents new stakers from claiming rewards that never vested
+        if (block.timestamp > end && last != end) {
+            // We're past stream end but last update didn't reach end
+            // This means totalStaked hit 0 before stream ended (pause)
+            // Don't vest the gap from 'last' to 'end'
+            return;
+        }
+
         uint256 duration = end - start;
         uint256 total = _streamTotalByToken[token];
         if (duration == 0 || total == 0) {
@@ -613,16 +634,25 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Stream hasn't started yet (shouldn't happen, but be safe)
         if (now_ < start) return _streamTotalByToken[token];
 
-        // Stream is complete
-        if (now_ >= end) return 0;
-
-        // Calculate how much is unvested
         uint256 total = _streamTotalByToken[token];
         uint256 duration = end - start;
 
         if (duration == 0) return 0;
 
-        // Calculate vested amount
+        // If stream ended, check if it fully vested
+        if (now_ >= end) {
+            uint64 last = _lastUpdateByToken[token];
+            // If last update didn't reach end, stream paused (no stakers) - return unvested
+            if (last < end) {
+                // Calculate how much didn't vest due to pause
+                uint256 unvestedDuration = end - last;
+                return (total * unvestedDuration) / duration;
+            }
+            // Stream fully vested
+            return 0;
+        }
+
+        // Stream still active - calculate unvested based on elapsed time
         uint256 elapsed = now_ - start;
         uint256 vested = (total * elapsed) / duration;
 

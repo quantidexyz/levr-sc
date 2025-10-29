@@ -107,7 +107,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
 
         // Complete the stream
         uint64 streamEnd = staking.streamEnd();
-        vm.warp(streamEnd + 1);
+        vm.warp(streamEnd);
 
         // Claim all rewards
         address[] memory tokens = new address[](1);
@@ -170,7 +170,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
 
         // Complete final stream
         uint64 streamEnd = staking.streamEnd();
-        vm.warp(streamEnd + 1);
+        vm.warp(streamEnd);
 
         // Claim
         address[] memory tokens = new address[](1);

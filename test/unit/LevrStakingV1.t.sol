@@ -109,9 +109,10 @@ contract LevrStakingV1_UnitTest is Test {
             uint256 diff = claimed > expected ? claimed - expected : expected - claimed;
             assertLe(diff, tol);
         }
-        // move to end of window and claim remainder
+        // move to end of window and claim remainder - claim AT end
         beforeBal = underlying.balanceOf(address(this));
-        vm.warp(block.timestamp + 3 days);
+        uint64 streamEnd = staking.streamEnd();
+        vm.warp(streamEnd);
         staking.claimRewards(toks, address(this));
         afterBal = underlying.balanceOf(address(this));
         claimed = afterBal - beforeBal;
@@ -1143,7 +1144,7 @@ contract LevrStakingV1_UnitTest is Test {
     function test_extremePrecisionLoss_tinyStake_hugeRewards() public {
         // Edge case from Synthetix audits: Very small stakes with very large rewards
         // Tests precision loss and overflow protection
-        
+
         // Stake tiny amount: 1 wei
         underlying.approve(address(staking), 1);
         staking.stake(1);
@@ -1162,13 +1163,13 @@ contract LevrStakingV1_UnitTest is Test {
         // Claim should work without overflow
         address[] memory tokens = new address[](1);
         tokens[0] = address(rewardToken);
-        
+
         uint256 balBefore = rewardToken.balanceOf(address(this));
         staking.claimRewards(tokens, address(this));
         uint256 balAfter = rewardToken.balanceOf(address(this));
 
         uint256 claimed = balAfter - balBefore;
-        
+
         // Should claim all 1B tokens (user is only staker)
         assertApproxEqAbs(
             claimed,
@@ -1181,7 +1182,7 @@ contract LevrStakingV1_UnitTest is Test {
     function test_veryLargeStake_noOverflow() public {
         // Edge case: Extremely large stake amounts
         // Note: Limited by total token supply in practice
-        
+
         uint256 largeAmount = 1_000_000_000 ether; // 1 billion tokens
         underlying.mint(address(this), largeAmount);
         underlying.approve(address(staking), largeAmount);
@@ -1205,7 +1206,7 @@ contract LevrStakingV1_UnitTest is Test {
         // Edge case from Curve audits: Block timestamp manipulation by miners
         // Miners can manipulate timestamp by ~15 seconds
         // Our VP normalization makes this manipulation COMPLETELY INEFFECTIVE
-        
+
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
@@ -1224,7 +1225,7 @@ contract LevrStakingV1_UnitTest is Test {
             vpNormal,
             'Timestamp manipulation has ZERO impact due to VP normalization'
         );
-        
+
         // VP = (balance * timeStaked) / (1e18 * 86400)
         // 15 seconds = 15 / 86400 ≈ 0.0001736 days
         // With 1000 tokens: 1000 * 0.0001736 = 0.1736 token-days
@@ -1234,7 +1235,7 @@ contract LevrStakingV1_UnitTest is Test {
     function test_flashLoan_zeroVotingPower() public {
         // Edge case from MasterChef audits: Flash loan attacks
         // Verify that same-block stake gives 0 VP
-        
+
         uint256 flashLoanAmount = 1_000_000 ether; // Huge flash loan
         underlying.mint(address(this), flashLoanAmount);
         underlying.approve(address(staking), flashLoanAmount);
@@ -1249,7 +1250,7 @@ contract LevrStakingV1_UnitTest is Test {
         // Even after 1 second, VP should be negligible
         vm.warp(block.timestamp + 1);
         uint256 vpAfter1Sec = staking.getVotingPower(address(this));
-        
+
         // 1 million tokens * 1 second / (1e18 * 86400) ≈ 0.01 token-days
         // Essentially nothing compared to long-term stakers
         assertLt(vpAfter1Sec, 100, 'VP after 1 second should be negligible');
@@ -1261,7 +1262,7 @@ contract LevrStakingV1_UnitTest is Test {
     function test_manyRewardTokens_gasReasonable() public {
         // Edge case: Many concurrent reward tokens
         // Verify gas costs don't become prohibitive
-        
+
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
@@ -1292,7 +1293,7 @@ contract LevrStakingV1_UnitTest is Test {
     function test_divisionByZero_protection() public {
         // Edge case from Synthetix: Division by zero when totalStaked = 0
         // Our contract should handle this gracefully
-        
+
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
         rewardToken.mint(address(this), 1000 ether);
 
@@ -1310,10 +1311,10 @@ contract LevrStakingV1_UnitTest is Test {
 
         // Wait and claim
         vm.warp(block.timestamp + 3 days);
-        
+
         address[] memory tokens = new address[](1);
         tokens[0] = address(rewardToken);
-        
+
         uint256 balBefore = rewardToken.balanceOf(address(this));
         staking.claimRewards(tokens, address(this));
         uint256 balAfter = rewardToken.balanceOf(address(this));

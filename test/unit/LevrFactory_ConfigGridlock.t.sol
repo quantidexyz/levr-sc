@@ -94,8 +94,9 @@ contract LevrFactory_ConfigGridlockTest is Test {
         rewardToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(rewardToken));
 
-        // Wait for stream to finish
-        vm.warp(block.timestamp + 3 days + 1);
+        // Wait for stream to finish - claim AT end
+        uint64 streamEnd = staking.streamEnd();
+        vm.warp(streamEnd);
 
         // Alice claims all
         address[] memory tokens = new address[](1);

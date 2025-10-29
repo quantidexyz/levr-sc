@@ -79,7 +79,7 @@ contract LevrStakingV1StreamCompletionTest is Test {
         // Warp to stream end
         uint64 streamEnd1 = staking.streamEnd();
         console2.log('\nStream ends at:', streamEnd1);
-        vm.warp(streamEnd1 + 1);
+        vm.warp(streamEnd1);
         console2.log('Warped to:', block.timestamp);
 
         console2.log('\nAFTER FIRST STREAM COMPLETE:');
@@ -106,7 +106,7 @@ contract LevrStakingV1StreamCompletionTest is Test {
         // Warp to second stream end
         uint64 streamEnd2 = staking.streamEnd();
         console2.log('\nSecond stream ends at:', streamEnd2);
-        vm.warp(streamEnd2 + 1);
+        vm.warp(streamEnd2);
         console2.log('Warped to:', block.timestamp);
 
         console2.log('\nAFTER SECOND STREAM COMPLETE:');

@@ -94,7 +94,7 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Second accrual:', secondAccrual / 1e18, 'tokens');
 
         // Fast forward to end of second stream
-        vm.warp(block.timestamp + STREAM_WINDOW + 1);
+        vm.warp(staking.streamEnd());
 
         // Claim all rewards
         address[] memory tokens = new address[](1);
@@ -142,7 +142,7 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         staking.accrueRewards(address(underlying));
 
         // Complete new stream
-        vm.warp(block.timestamp + STREAM_WINDOW + 1);
+        vm.warp(staking.streamEnd());
 
         // Check claimable
         uint256 claimable = staking.claimableRewards(alice, address(underlying));
@@ -288,7 +288,7 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('  Unaccounted:', unaccounted / 1e18);
 
         // Complete both streams
-        vm.warp(block.timestamp + STREAM_WINDOW + 1);
+        vm.warp(staking.streamEnd());
 
         // Claim all
         address[] memory tokens = new address[](1);
@@ -345,7 +345,7 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         staking.accrueRewards(address(underlying));
 
         // Complete stream
-        vm.warp(block.timestamp + STREAM_WINDOW + 1);
+        vm.warp(staking.streamEnd());
 
         // Claim
         address[] memory tokens = new address[](1);
@@ -380,16 +380,16 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
 
         // Wait for COMPLETE stream using streamEnd() to ensure precision
         uint64 streamEnd1 = staking.streamEnd();
-        vm.warp(streamEnd1 + 1);
+        vm.warp(streamEnd1);
 
         // Second accrual (after first completes)
         uint256 secondAccrual = 100_000 * 1e18;
         underlying.mint(address(staking), secondAccrual);
         staking.accrueRewards(address(underlying));
 
-        // Wait for second stream to complete using streamEnd()
+        // Wait for second stream to complete - claim AT end, not after
         uint64 streamEnd2 = staking.streamEnd();
-        vm.warp(streamEnd2 + 1);
+        vm.warp(streamEnd2);
 
         // Claim
         address[] memory tokens = new address[](1);
@@ -439,7 +439,7 @@ contract LevrStakingV1MidstreamAccrualTest is Test {
         console2.log('Second stream ends at:', streamEnd2);
 
         // Complete second stream
-        vm.warp(streamEnd2 + 1);
+        vm.warp(streamEnd2);
 
         // Claim
         address[] memory tokens = new address[](1);
