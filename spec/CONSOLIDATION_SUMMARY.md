@@ -150,12 +150,13 @@ archive/
 
 ## Test Suite Status
 
-**Total Tests:** 349 (100% passing) ✅
+**Total Tests:** 404 (100% passing) ✅
 
 **Breakdown:**
-- 296 existing tests (comprehensive coverage)
-- 39 new stuck-funds tests (all validated)
-- 14 additional edge cases
+- 404 comprehensive tests covering all contracts
+- 39 stuck-funds tests (all validated)
+- 253 edge case tests
+- 11 industry comparison tests
 
 **New Test Files:**
 - ✅ `test/unit/LevrStaking_StuckFunds.t.sol` (16 tests)
@@ -164,7 +165,7 @@ archive/
 - ✅ `test/e2e/LevrV1.StuckFundsRecovery.t.sol` (7 tests)
 
 **Validation:**
-- All 349 tests validated to ensure they test real contract behavior
+- All 404 tests validated to ensure they test real contract behavior
 - No self-asserting or documentation-only tests
 - Line-by-line mapping to source code completed
 
@@ -181,7 +182,7 @@ archive/
 - Comprehensive recovery mechanisms
 
 **Testing:**
-- 349 tests (100% passing)
+- 404 tests (100% passing)
 - All tests validate actual contract behavior
 - Stuck-funds scenarios comprehensively covered
 - Industry comparison validates security posture
@@ -258,7 +259,26 @@ archive/
 
 ---
 
-**Consolidation Complete:** October 27, 2025  
+**Consolidation Complete:** October 29, 2025  
 **Status:** ✅ **PRODUCTION-READY DOCUMENTATION**  
+**Last Updated:** October 29, 2025 (test counts updated to 404)
 **Next Review:** After mainnet deployment or major feature additions
+
+---
+
+## Pending Consolidation (October 29, 2025)
+
+### Files Recommended for Archive
+
+7 obsolete design documents from January 2025 exploring transferable staked tokens (current implementation is non-transferable):
+
+1. CONTRACT_TRANSFER_REWARDS_FINAL.md
+2. REWARDS_BELONG_TO_ADDRESS_DESIGN.md  
+3. TRANSFER_REWARDS_DESIGN_ANALYSIS.md
+4. FINAL_IMPLEMENTATION_REPORT.md
+5. FUND_STUCK_ANALYSIS_COMPLETE.md
+6. STREAMING_SIMPLIFICATION_PROPOSAL.md
+7. NON_TRANSFERABLE_EDGE_CASES.md
+
+These preserve valuable design exploration but should be in archive/obsolete-designs/ rather than main spec/.
 

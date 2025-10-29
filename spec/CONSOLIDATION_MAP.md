@@ -268,13 +268,34 @@ All improvements made:
 ---
 
 **Created:** October 27, 2025  
-**Updated:** October 27, 2025 (added config gridlock findings)  
+**Updated:** October 29, 2025 (test counts updated, obsolete files identified)  
 **Purpose:** Documentation consolidation tracking  
 **Result:** 81% reduction in main spec, 0% information loss, 100% improved navigation
 
 ---
 
-## Latest Updates (October 27, 2025)
+## Latest Updates
+
+### October 29, 2025 - Test Count Updates & Obsolete File Identification
+
+| Update | Status |
+| ------ | ------ |
+| Test counts updated | 404/404 (from 364) |
+| Obsolete design docs identified | 7 files for archive |
+| Coverage analysis created | COVERAGE_ANALYSIS.md |
+
+**Obsolete Files (Transferable Token Design - Superseded):**
+- CONTRACT_TRANSFER_REWARDS_FINAL.md
+- REWARDS_BELONG_TO_ADDRESS_DESIGN.md
+- TRANSFER_REWARDS_DESIGN_ANALYSIS.md
+- FINAL_IMPLEMENTATION_REPORT.md
+- FUND_STUCK_ANALYSIS_COMPLETE.md
+- STREAMING_SIMPLIFICATION_PROPOSAL.md
+- NON_TRANSFERABLE_EDGE_CASES.md
+
+These are from an earlier design iteration exploring transferable staked tokens. Current implementation uses non-transferable tokens (99 tests covering this). Files preserved for historical reference but recommended for archive/obsolete-designs/.
+
+### October 27, 2025 - Config Gridlock Analysis
 
 ### Config Gridlock Analysis
 
@@ -283,4 +304,4 @@ All improvements made:
 | `CONFIG_GRIDLOCK_FINDINGS.md` | Added to spec/ (comprehensive report)                   |
 | Code fix applied to factory   | `LevrFactory_v1.sol` lines 222-237                      |
 | Tests created                 | `test/unit/LevrFactory_ConfigGridlock.t.sol` (15 tests) |
-| **Total tests:** 364          | 363 passing, 1 edge case documentation                  |
+| **Total tests:** 404          | 404 passing, comprehensive edge case coverage           |

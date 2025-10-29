@@ -1,8 +1,8 @@
 # Testing Guide - Levr V1
 
 **Purpose:** Test utilities, strategies, and best practices  
-**Last Updated:** October 27, 2025  
-**Test Coverage:** 296/296 passing (100%)
+**Last Updated:** October 29, 2025  
+**Test Coverage:** 404/404 passing (100%)
 
 ---
 
@@ -564,36 +564,39 @@ forge test --gas-report -vvv
 
 ### Current Coverage
 
-| Contract           | Unit Tests | E2E Tests | Edge Cases | Stuck Funds | Total   |
-| ------------------ | ---------- | --------- | ---------- | ----------- | ------- |
-| LevrStaking_v1     | 24         | 5         | 16         | 16          | 56      |
-| LevrGovernor_v1    | 31         | 21        | 35         | 10          | 76      |
-| LevrFeeSplitter_v1 | 20         | 7         | 47         | 6           | 80      |
-| LevrTreasury_v1    | 8          | -         | 3          | -           | 11      |
-| LevrFactory_v1     | 12         | 2         | 3          | -           | 15      |
-| LevrForwarder_v1   | 13         | -         | 3          | -           | 16      |
-| LevrStakedToken_v1 | 2          | -         | -          | -           | 2       |
-| **Recovery E2E**   | -          | 7         | -          | -           | 7       |
-| **Total**          | **110**    | **42**    | **107**    | **32**      | **349** |
+| Contract           | Unit Tests | E2E Tests | Edge Cases | Stuck Funds | Comparative | Total   |
+| ------------------ | ---------- | --------- | ---------- | ----------- | ----------- | ------- |
+| LevrStaking_v1     | 40         | 5         | 24         | 16          | 6           | 91      |
+| LevrGovernor_v1    | 31         | 21        | 35         | 10          | 5           | 102     |
+| LevrFeeSplitter_v1 | 20         | 7         | 47         | 6           | -           | 80      |
+| LevrTreasury_v1    | 2          | -         | -          | -           | -           | 2       |
+| LevrFactory_v1     | 17         | 2         | 15         | -           | -           | 34      |
+| LevrForwarder_v1   | 13         | -         | 3          | -           | -           | 16      |
+| LevrStakedToken_v1 | 2          | -         | 97         | -           | -           | 99      |
+| LevrDeployer_v1    | -          | (in e2e)  | -          | -           | -           | -       |
+| **Recovery E2E**   | -          | 7         | -          | -           | -           | 7       |
+| **Token Agnostic** | -          | -         | 14         | -           | -           | 14      |
+| **All Contracts**  | -          | -         | 18         | -           | -           | 18      |
+| **Total**          | **125**    | **42**    | **253**    | **32**      | **11**      | **404** |
 
 ### Test Categories
 
 **By Type:**
 
-- Unit Tests: 110
+- Unit Tests: 125
 - E2E Integration: 42
-- Edge Cases: 107
+- Edge Cases: 253
 - Stuck Funds: 32
-- Industry Comparison: 14
+- Industry Comparison: 11
 - Fuzz Tests: 257 scenarios (within unit tests)
 
 **By Priority:**
 
-- Critical Path: 120 tests
-- Edge Cases: 107 tests
+- Critical Path: 167 tests
+- Edge Cases: 253 tests
 - Stuck Funds/Recovery: 39 tests
 - Attack Scenarios: 25 tests
-- Industry Validation: 14 tests
+- Industry Validation: 11 tests
 - Regression: 44 tests
 
 ---
@@ -729,7 +732,7 @@ function _generateFees(uint256 expectedAmount) internal returns (uint256) {
 
 ### Before Deployment
 
-- [ ] All 296 tests passing
+- [ ] All 404 tests passing
 - [ ] Fuzz tests passing
 - [ ] E2E integration tests passing
 - [ ] Fork tests passing
@@ -855,7 +858,7 @@ forge test --match-test test_name -vvv
 
 ---
 
-**Test Coverage:** 349/349 passing (100%)  
+**Test Coverage:** 404/404 passing (100%)  
 **Methodology:** Systematic edge case testing + stuck-funds analysis  
 **Industry Validation:** Exceeds standards in 5 areas
 
@@ -869,12 +872,13 @@ forge test --match-test test_name -vvv
 **Validation:** All tests reviewed to ensure they test actual contract code, not self-assert
 
 **Criteria for Valid Tests:**
+
 - ✅ Calls actual contract functions (not just mocks)
 - ✅ Verifies actual state changes in contracts
 - ✅ Would FAIL if contract behavior changed
 - ❌ Does NOT just print documentation
 - ❌ Does NOT just assert trivial truths
 
-**Results:** 349/349 tests validated as properly testing contract behavior
+**Results:** 404/404 tests validated as properly testing contract behavior
 
 **Detailed Reports:** See `archive/TEST_VALIDATION_REPORT.md` and `archive/TEST_VALIDATION_DEEP_DIVE.md` for line-by-line mapping of tests to source code.

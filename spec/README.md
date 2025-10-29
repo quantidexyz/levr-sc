@@ -1,8 +1,8 @@
 # Levr V1 Documentation
 
-**Last Updated:** October 27, 2025  
+**Last Updated:** October 29, 2025  
 **Status:** Production Ready ✅  
-**Test Coverage:** 364/364 tests passing (100%) ✅
+**Test Coverage:** 404/404 tests passing (100%) ✅
 
 ---
 
@@ -26,6 +26,8 @@
 | **[FUTURE_ENHANCEMENTS.md](./FUTURE_ENHANCEMENTS.md)** | Emergency rescue system & upgradeability designs      |
 | **[CHANGELOG.md](./CHANGELOG.md)**                     | Major feature additions and migrations                |
 | **[TESTING.md](./TESTING.md)**                         | Test utilities and testing guidance                   |
+| **[COVERAGE_ANALYSIS.md](./COVERAGE_ANALYSIS.md)**     | Comprehensive test coverage analysis (404 tests)      |
+| **[SPEC_UPDATE_SUMMARY.md](./SPEC_UPDATE_SUMMARY.md)** | October 29, 2025 spec update completion summary       |
 
 ---
 
@@ -64,12 +66,12 @@
 
 **Test Coverage:**
 
-- ✅ 364/364 tests passing (100%)
+- ✅ 404/404 tests passing (100%)
 - ✅ 76 governance tests (snapshot + stuck process + config validation)
 - ✅ 80 fee splitter tests (stuck funds scenarios)
 - ✅ 56 staking tests (stuck funds + zero-staker scenarios)
 - ✅ 15 factory config tests (gridlock prevention validated)
-- ✅ 54 additional tests (stuck-funds/recovery/edge cases)
+- ✅ 94 additional tests (stuck-funds/recovery/edge cases/comparative audit)
 - ✅ Comprehensive edge case coverage
 - ✅ All config gridlock scenarios prevented by validation
 
@@ -102,9 +104,9 @@
 
 ## 📊 Key Metrics
 
-**Contracts:** 7 (Factory, Staking, Governor, Treasury, Forwarder, StakedToken, FeeSplitter)  
+**Contracts:** 9 (Factory, Staking, Governor, Treasury, Forwarder, StakedToken, FeeSplitter, FeeSplitterFactory, Deployer)  
 **Total Issues Found:** 24 (all resolved with validation)  
-**Test Coverage:** 364 tests (100% passing)  
+**Test Coverage:** 404 tests (100% passing)  
 **Documentation:** 9 focused documents + comprehensive archive  
 **Security Level:** Exceeds industry standards
 
