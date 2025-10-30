@@ -504,8 +504,9 @@ contract LevrFeeSplitterV1Test is Test {
         rewardToken.transfer(address(splitter), 500 ether);
 
         // Check pending includes balance
-        uint256 pending = splitter.pendingFeesInclBalance(address(rewardToken));
-        assertEq(pending, 500 ether, 'Should include contract balance');
+        // AUDIT 2: pendingFeesInclBalance removed, query balance directly
+        uint256 balance = rewardToken.balanceOf(address(splitter));
+        assertEq(balance, 500 ether, 'Should have 500 ether in splitter');
     }
 
     function test_isSplitsConfigured_validatesTotal() public {

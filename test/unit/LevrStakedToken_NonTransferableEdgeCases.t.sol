@@ -374,24 +374,24 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
     /// @notice Test multiple users with independent operations
     function test_multipleUsers_independentOperations() public {
-        // Alice stakes
+        // Alice stakes at time 0
         vm.startPrank(alice);
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        // Bob stakes
+        // Bob stakes at time 0
         vm.startPrank(bob);
         underlying.approve(address(staking), 500 ether);
         staking.stake(500 ether);
 
         vm.warp(block.timestamp + 50 days);
 
-        // Charlie stakes
+        // Charlie stakes at day 50
         vm.startPrank(charlie);
         underlying.approve(address(staking), 300 ether);
         staking.stake(300 ether);
 
-        vm.warp(block.timestamp + 50 days);
+        vm.warp(block.timestamp + 50 days); // Now at day 100
 
         // VP should be independent for each user
         uint256 aliceVP = staking.getVotingPower(alice);
@@ -403,13 +403,17 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         console.log('Charlie VP (50 days):', charlieVP);
 
         // VP values depend on exact timing
-        // Alice and Bob have been staking for 100 days, Charlie just staked
+        // Alice and Bob have been staking for 100 days
+        // Charlie has been staking for 50 days (not "just staked")
         assertTrue(aliceVP > 0, 'Alice should have VP');
         assertTrue(bobVP > 0, 'Bob should have VP');
-        assertEq(charlieVP, 0, 'Charlie just staked, VP = 0');
+        assertTrue(charlieVP > 0, 'Charlie should have VP (50 days staked)');
 
         // Alice staked more tokens than Bob for same time
         assertGt(aliceVP, bobVP, 'Alice staked more tokens');
+        
+        // Alice has been staking 2x longer than Charlie
+        assertGt(aliceVP, charlieVP, 'Alice staked longer');
 
         // No interference between users (no transfers to complicate)
     }

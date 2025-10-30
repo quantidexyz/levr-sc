@@ -123,17 +123,6 @@ interface ILevrFeeSplitter_v1 {
     /// @return totalBps Total basis points (should always be 10,000 if configured)
     function getTotalBps() external view returns (uint256 totalBps);
 
-    /// @notice Get pending fees for a reward token (in fee locker only)
-    /// @param rewardToken The reward token to check
-    /// @return pending Pending fees in fee locker
-    function pendingFees(address rewardToken) external view returns (uint256 pending);
-
-    /// @notice Get total pending fees including tokens already in the splitter's balance
-    /// @dev This includes tokens from fee locker AND any tokens in contract balance
-    /// @param rewardToken The reward token to check
-    /// @return pending Total pending fees (fee locker + contract balance)
-    function pendingFeesInclBalance(address rewardToken) external view returns (uint256 pending);
-
     /// @notice Get distribution state for a reward token
     /// @param rewardToken The reward token to check
     /// @return state Distribution state (total distributed, last distribution time)

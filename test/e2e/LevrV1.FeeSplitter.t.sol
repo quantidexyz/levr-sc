@@ -222,9 +222,10 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
         _generateFeesWithSwaps(feeSplitter, targetFees);
 
         // 7. Check pending fees in the fee splitter (including balance)
-        uint256 pendingWETH = feeSplitter.pendingFeesInclBalance(WETH);
-        console2.log('Pending WETH fees (incl balance):', pendingWETH);
-        assertGt(pendingWETH, 0, 'Should have WETH fees');
+        // AUDIT 2: pendingFeesInclBalance removed, query balance directly
+        uint256 pendingWETH = IERC20(WETH).balanceOf(address(feeSplitter));
+        console2.log('Splitter WETH balance:', pendingWETH);
+        assertGt(pendingWETH, 0, 'Should have WETH fees in splitter');
 
         // 8. Distribute fees (anyone can trigger)
         uint256 deployerBalanceBefore = IERC20(WETH).balanceOf(deployer);

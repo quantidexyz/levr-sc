@@ -87,16 +87,17 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         _onlyTokenAdmin();
         if (to == address(0)) revert ZeroAddress();
 
-        // Get pending fees in locker only (not including current balance)
-        uint256 pendingInLocker = this.pendingFees(token);
+        // AUDIT 2 FIX: External locker calls removed, so entire balance is recoverable
+        // Since fees are collected by SDK (not from external lockers), 
+        // all tokens in the splitter are either:
+        // 1. Waiting to be distributed, OR
+        // 2. Dust from rounding
+        // Admin can recover any balance not yet distributed
         uint256 balance = IERC20(token).balanceOf(address(this));
 
-        // Can only recover the difference (dust from rounding)
-        // Dust = current balance - fees still pending in locker
-        if (balance > pendingInLocker) {
-            uint256 dust = balance - pendingInLocker;
-            IERC20(token).safeTransfer(to, dust);
-            emit DustRecovered(token, to, dust);
+        if (balance > 0) {
+            IERC20(token).safeTransfer(to, balance);
+            emit DustRecovered(token, to, balance);
         }
     }
 
@@ -173,20 +174,6 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
         for (uint256 i = 0; i < _splits.length; i++) {
             totalBps += _splits[i].bps;
         }
-    }
-
-    /// @inheritdoc ILevrFeeSplitter_v1
-    function pendingFees(address rewardToken) external view returns (uint256 pending) {
-        // SECURITY FIX (External Audit 2): Removed external contract queries
-        // Fee collection now handled via SDK - this just returns local balance
-        return IERC20(rewardToken).balanceOf(address(this));
-    }
-
-    /// @inheritdoc ILevrFeeSplitter_v1
-    function pendingFeesInclBalance(address rewardToken) external view returns (uint256 pending) {
-        // SECURITY FIX (External Audit 2): Removed external contract queries
-        // Fee collection now handled via SDK - this just returns local balance
-        return IERC20(rewardToken).balanceOf(address(this));
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1

@@ -907,8 +907,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
 
     /// @notice Test: Distribute when metadata doesn't exist
     /// @dev Should revert with ClankerMetadataNotFound
-    function test_splitter_distributeWithoutMetadata_reverts() public {
-        console2.log('\n=== SPLITTER EDGE 23: Distribute Without Metadata ===');
+    function test_splitter_distributeWithoutMetadata_succeeds() public {
+        console2.log('\n=== SPLITTER EDGE 23: Distribute Without Metadata (Post-AUDIT-2) ===');
 
         ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](1);
         splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: alice, bps: 10_000});
@@ -921,12 +921,16 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
 
         rewardToken.transfer(address(splitter), 100 ether);
 
-        // Try to distribute - should fail
-        vm.expectRevert(ILevrFeeSplitter_v1.ClankerMetadataNotFound.selector);
+        // AUDIT 2 FIX: External calls removed, so distribute works WITHOUT metadata
+        // Fees are collected by SDK, not from Clanker lockers
         splitter.distribute(address(rewardToken));
 
-        console2.log('[PASS] Cannot distribute without Clanker metadata');
-        console2.log('[SAFE] Fees stuck until metadata restored');
+        // Verify alice received the distribution
+        assertEq(rewardToken.balanceOf(alice), 100 ether, 'Alice should receive distribution');
+        assertEq(rewardToken.balanceOf(address(splitter)), 0, 'Splitter should be empty');
+
+        console2.log('[PASS] Distribute works without metadata (post-AUDIT-2 behavior)');
+        console2.log('[NOTE] SDK handles fee collection, not external locker calls');
     }
 
     /// @notice Test: getStakingAddress when project not registered
@@ -1130,21 +1134,19 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
     /// @notice Test: pendingFees vs pendingFeesInclBalance consistency
     /// @dev pendingFeesInclBalance should always >= pendingFees
     function test_splitter_pendingFeesConsistency() public {
-        console2.log('\n=== SPLITTER EDGE 30: Pending Fees Consistency ===');
+        console2.log('\n=== SPLITTER EDGE 30: Balance Query (Post-AUDIT-2) ===');
 
-        // Send tokens directly to splitter (not via fee locker)
+        // Send tokens directly to splitter
         rewardToken.transfer(address(splitter), 500 ether);
 
-        uint256 pending = splitter.pendingFees(address(rewardToken));
-        uint256 pendingIncl = splitter.pendingFeesInclBalance(address(rewardToken));
+        // AUDIT 2: pendingFees removed, query balance directly off-chain
+        uint256 balance = rewardToken.balanceOf(address(splitter));
 
-        console2.log('pendingFees:', pending / 1e18);
-        console2.log('pendingFeesInclBalance:', pendingIncl / 1e18);
+        console2.log('Splitter balance:', balance / 1e18);
+        assertEq(balance, 500 ether, 'Should have received 500 ether');
 
-        assertGe(pendingIncl, pending, 'pendingFeesInclBalance should be >= pendingFees');
-        assertEq(pendingIncl, pending + 500 ether, 'Should include balance');
-
-        console2.log('[PASS] View functions consistent');
+        console2.log('[PASS] Balance queryable off-chain (pendingFees functions removed)');
+        console2.log('[NOTE] SDK queries balance directly via ERC20.balanceOf()');
     }
 
     /// @notice Test: Distribute when collectRewards reverts
