@@ -12,26 +12,26 @@
 
 ### Final Status After Validation
 
-| Metric                             | Count                                   |
-| ---------------------------------- | --------------------------------------- |
-| **Original Findings**              | 31 issues                               |
-| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)       |
-| **Already Fixed (Current)**        | 3 issues (C-3, H-3, M-4, M-5)           |
-| **Design Decisions (Intentional)** | 6 issues (C-4, H-8, M-2, M-7, M-8, M-9) |
-| **Optional (Low Priority)**        | 1 issue (M-1)                           |
-| **Duplicates**                     | 1 issue (M-6 = C-4)                     |
-| **Audit Errors**                   | 1 issue (C-3)                           |
-| **REMAINING TO FIX**               | **18 issues** 🎉                        |
+| Metric                             | Count                                             |
+| ---------------------------------- | ------------------------------------------------- |
+| **Original Findings**              | 31 issues                                         |
+| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)                 |
+| **Already Fixed (Current)**        | 3 issues (C-3, H-3, M-4, M-5)                     |
+| **Design Decisions (Intentional)** | 8 issues (C-4, H-5, H-6, H-8, M-2, M-7, M-8, M-9) |
+| **Optional (Low Priority)**        | 1 issue (M-1)                                     |
+| **Duplicates**                     | 1 issue (M-6 = C-4)                               |
+| **Audit Errors**                   | 1 issue (C-3)                                     |
+| **REMAINING TO FIX**               | **16 issues** 🎉 ⚡ UPDATED                       |
 
 ### Severity Breakdown (Remaining)
 
-| Severity    | Count  | Must Fix          |
-| ----------- | ------ | ----------------- |
-| 🔴 CRITICAL | 2      | Before mainnet    |
-| 🟠 HIGH     | 5      | Before mainnet    |
-| 🟡 MEDIUM   | 3      | Post-launch OK    |
-| 🟢 LOW      | 8      | Optimization      |
-| **TOTAL**   | **18** | **7 pre-mainnet** |
+| Severity    | Count  | Must Fix             |
+| ----------- | ------ | -------------------- |
+| 🔴 CRITICAL | 2      | Before mainnet       |
+| 🟠 HIGH     | 3      | Before mainnet       |
+| 🟡 MEDIUM   | 3      | Post-launch OK       |
+| 🟢 LOW      | 8      | Optimization         |
+| **TOTAL**   | **16** | **5 pre-mainnet** ⚡ |
 
 ---
 
@@ -49,12 +49,14 @@
 ### 📝 Design Decisions (Won't Fix)
 
 7. **C-4** - VP caps → Time-weighting without cap is intentional design
-8. **H-8** - Fee split manipulation → Token admin = community, should have control
-9. **M-2** - Proposal front-running → Time-weighted VP prevents manipulation
-10. **M-7** - Treasury velocity limits → `maxProposalAmountBps` sufficient
-11. **M-8** - Keeper incentives → Permissionless, SDK handles, no MEV
-12. **M-9** - Minimum stake duration → Capital efficiency preferred
-13. **M-1** - Initialize reentrancy → Factory-only, acceptable risk (optional)
+8. **H-5** - Deployment fee → DoS risk acceptable, minimal impact
+9. **H-6** - Pausable pattern → Conflicts with existing architecture (user to choose alternative)
+10. **H-8** - Fee split manipulation → Token admin = community, should have control
+11. **M-2** - Proposal front-running → Time-weighted VP prevents manipulation
+12. **M-7** - Treasury velocity limits → `maxProposalAmountBps` sufficient
+13. **M-8** - Keeper incentives → Permissionless, SDK handles, no MEV
+14. **M-9** - Minimum stake duration → Capital efficiency preferred
+15. **M-1** - Initialize reentrancy → Factory-only, acceptable risk (optional)
 
 ### ⚠️ Duplicate
 
@@ -66,43 +68,125 @@
 
 **5 total issues: 2 to implement, 2 already fixed, 1 design decision**
 
+**⚠️ USER CORRECTIONS APPLIED:**
+
+- C-1: Fix updated to use factory-side verification (ungameable)
+- Time estimate increased to 6 hours (was 4 hours)
+
 ---
 
 ### C-1: Unchecked Clanker Token Trust ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrFactory_v1.sol:register()`  
 **Priority:** 1/18  
-**Estimated Time:** 4 hours
+**Estimated Time:** 6 hours
 
 **Issue:**
 Factory accepts ANY token claiming to be from Clanker without factory validation.
 
-**Fix:**
+**Original Fix Was Flawed:**
+The proposed `trustedClankerFactories` mapping is easily gameable - a malicious token can simply return the trusted factory address when `factory()` is called:
+
+```solidity
+// ATTACK: Fake token lies about its factory
+contract FakeToken {
+    function factory() external pure returns (address) {
+        return TRUSTED_FACTORY; // Just return the trusted address!
+    }
+}
+```
+
+**Correct Fix - Verify From Factory Side (Multiple Factories):**
 
 ```solidity
 // Add to LevrFactory_v1.sol
-mapping(address => bool) public trustedClankerFactories;
+address[] private _trustedClankerFactories;
+mapping(address => bool) private _isTrustedClankerFactory;
 
-function setTrustedFactory(address factory, bool trusted) external onlyOwner {
-    trustedClankerFactories[factory] = trusted;
-    emit TrustedFactoryUpdated(factory, trusted);
+function addTrustedClankerFactory(address factory) external onlyOwner {
+    require(factory != address(0), "Zero address");
+    require(!_isTrustedClankerFactory[factory], "Already trusted");
+
+    _trustedClankerFactories.push(factory);
+    _isTrustedClankerFactory[factory] = true;
+
+    emit TrustedClankerFactoryAdded(factory);
+}
+
+function removeTrustedClankerFactory(address factory) external onlyOwner {
+    require(_isTrustedClankerFactory[factory], "Not trusted");
+
+    _isTrustedClankerFactory[factory] = false;
+
+    // Remove from array (swap with last element)
+    uint256 length = _trustedClankerFactories.length;
+    for (uint256 i = 0; i < length; i++) {
+        if (_trustedClankerFactories[i] == factory) {
+            _trustedClankerFactories[i] = _trustedClankerFactories[length - 1];
+            _trustedClankerFactories.pop();
+            break;
+        }
+    }
+
+    emit TrustedClankerFactoryRemoved(factory);
+}
+
+function getTrustedClankerFactories() external view returns (address[] memory) {
+    return _trustedClankerFactories;
+}
+
+function isTrustedClankerFactory(address factory) external view returns (bool) {
+    return _isTrustedClankerFactory[factory];
 }
 
 function register(address token) external override nonReentrant returns (Project memory) {
-    // Validate Clanker factory
-    address factory = IClankerToken(token).factory();
-    require(trustedClankerFactories[factory], "Untrusted factory");
+    // Validate with trusted factories, not the token
+    if (_trustedClankerFactories.length > 0) {
+        bool validFactory = false;
+
+        // Check each trusted factory
+        for (uint256 i = 0; i < _trustedClankerFactories.length; i++) {
+            address factory = _trustedClankerFactories[i];
+
+            // Call factory to verify this token was deployed by it
+            try IClanker(factory).tokenDeploymentInfo(token) returns (IClanker.DeploymentInfo memory info) {
+                // If call succeeds and token matches, this is valid
+                if (info.token == token) {
+                    validFactory = true;
+                    break;
+                }
+            } catch {
+                // Factory doesn't know this token, try next factory
+                continue;
+            }
+        }
+
+        require(validFactory, "Token not from any trusted Clanker factory");
+    }
 
     // ... rest of registration
 }
 ```
 
-**Test:** `test/unit/LevrFactory.ClankerValidation.t.sol` (4 tests)
+**Why This Works:**
 
-- Reject untrusted factory tokens
-- Accept trusted factory tokens
-- Admin can update trusted factories
-- Only owner can set trusted factories
+- Supports **multiple Clanker factory versions** (v1, v2, etc.)
+- We call `IClanker.tokenDeploymentInfo(token)` on **each trusted factory** (not the token)
+- Each factory maintains a registry of tokens it deployed
+- A fake token cannot fake this - it must exist in at least one trusted factory's registry
+- The factory reverts with `NotFound()` error if token wasn't deployed by it
+- If no factories are configured, all tokens are allowed (backward compatible)
+
+**Test:** `test/unit/LevrFactory.ClankerValidation.t.sol` (8 tests)
+
+- Reject tokens not deployed by any trusted factory
+- Accept tokens deployed by factory v1
+- Accept tokens deployed by factory v2
+- Admin can add multiple trusted factories
+- Admin can remove trusted factory
+- Only owner can manage trusted factories
+- Works correctly when no factories configured (allows all)
+- Token valid in one factory is accepted even if other factories don't know it
 
 **Files Modified:** 1 source, 1 interface, 1 test
 
@@ -185,7 +269,12 @@ function stake(uint256 amount) external nonReentrant {
 
 ## 🟠 PHASE 2: HIGH SEVERITY (Week 2)
 
-**8 total issues: 5 to implement, 3 already fixed/skipped**
+**8 total issues: 3 to implement, 5 skipped (fixed/design decisions)**
+
+**⚠️ USER CORRECTIONS APPLIED:**
+
+- H-5: Deployment fee NOT needed (user decision)
+- H-6: Pausable conflicts with architecture (user to choose alternative)
 
 ---
 
@@ -310,82 +399,99 @@ Factory owner is single address (god-mode control).
 
 ---
 
-### H-5: Unprotected prepareForDeployment() ⚠️ TO IMPLEMENT
+### H-5: Unprotected prepareForDeployment() 📝 WON'T FIX (USER DECISION)
 
 **File:** `src/LevrFactory_v1.sol:prepareForDeployment()`  
-**Priority:** 7/18  
-**Estimated Time:** 3 hours
+**Status:** 📝 Deployment fee not needed  
+**Reason:** User decision - DoS risk acceptable or mitigated differently
 
 **Issue:**
-Anyone can call `prepareForDeployment()`, causing DoS.
+Anyone can call `prepareForDeployment()`, potentially causing DoS by filling storage.
 
-**Fix:**
+**Analysis:**
+The risk is low because:
 
-```solidity
-uint256 public deploymentFee = 0.01 ether;
+1. Each deployer can only have ONE prepared deployment (mapping overwrites)
+2. Storage cost is minimal (2 addresses per deployer)
+3. Attacker pays gas to grief themselves
+4. No actual protocol harm - just wasted attacker gas
+5. Prepared contracts are deleted on registration (line 89)
 
-function prepareForDeployment() external payable override returns (...) {
-    require(msg.value >= deploymentFee, "Insufficient fee");
+**Alternative Mitigations (if needed later):**
 
-    address deployer = _msgSender();
-    // ... existing logic
-}
+- Rate limiting per address
+- Expiration on prepared contracts
+- Admin cleanup function
 
-function setDeploymentFee(uint256 fee) external onlyOwner {
-    deploymentFee = fee;
-    emit DeploymentFeeUpdated(fee);
-}
-```
+**Decision:** No action required - acceptable risk
 
-**Test:** `test/unit/LevrFactory.DeploymentProtection.t.sol` (3 tests)  
-**Files Modified:** 1 source, 1 interface, 1 test
+**Files Modified:** None
 
 ---
 
-### H-6: No Emergency Pause Mechanism ⚠️ TO IMPLEMENT
+### H-6: No Emergency Pause Mechanism 📝 WON'T FIX (ARCHITECTURAL CONFLICT)
 
 **Files:** Core contracts  
-**Priority:** 8/18  
-**Estimated Time:** 6 hours
+**Status:** 📝 Pausable conflicts with existing extensions  
+**Reason:** User feedback - multiple extensions already exist in contracts
 
 **Issue:**
 Cannot pause operations if critical bug discovered.
 
-**Fix:**
+**Why Pausable Won't Work:**
+
+- Contracts already have multiple inheritance (ReentrancyGuard, ERC2771ContextBase)
+- Adding Pausable would conflict with existing architecture
+- Modifier ordering complexity (`whenNotPaused` vs `nonReentrant`)
+- ERC2771 (meta-transactions) adds additional inheritance constraints
+
+**Alternative Emergency Mechanisms:**
+
+**Option 1: Circuit Breaker State Variables (Recommended)**
 
 ```solidity
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+// Add to each contract
+bool public emergencyStop;
 
-contract LevrStaking_v1 is ..., Pausable {
-    // Add to all state-changing functions
-    function stake(uint256 amount) external nonReentrant whenNotPaused {
-        // ...
-    }
+modifier whenNotStopped() {
+    require(!emergencyStop, "Emergency stop active");
+    _;
+}
 
-    function unstake(uint256 amount, address to) external nonReentrant whenNotPaused {
-        // ...
-    }
+function setEmergencyStop(bool stopped) external onlyTokenAdmin {
+    emergencyStop = stopped;
+    emit EmergencyStopUpdated(stopped);
+}
 
-    // Admin functions
-    function pause() external onlyTokenAdmin {
-        _pause();
-    }
+// Apply to critical functions
+function stake(uint256 amount) external nonReentrant whenNotStopped { ... }
+```
 
-    function unpause() external onlyTokenAdmin {
-        _unpause();
-    }
+**Option 2: Factory-Level Kill Switch**
+
+```solidity
+// In LevrFactory_v1.sol
+mapping(address => bool) public projectsPaused;
+
+function pauseProject(address token, bool paused) external onlyOwner {
+    projectsPaused[token] = paused;
+}
+
+// Each contract checks factory
+modifier whenNotPaused() {
+    require(!ILevrFactory_v1(factory).projectsPaused(underlying), "Project paused");
+    _;
 }
 ```
 
-**Apply to:**
+**Option 3: Time-Delayed Admin Actions**
 
-- `LevrStaking_v1`
-- `LevrGovernor_v1`
-- `LevrFeeSplitter_v1`
-- `LevrTreasury_v1`
+- Allow emergency withdrawal after X hours if bug found
+- No immediate pause, but escape hatch for users
 
-**Test:** `test/unit/LevrProtocol.EmergencyPause.t.sol` (8 tests)  
-**Files Modified:** 4 source, 1 test
+**Decision:** Needs user input on preferred approach
+
+**Files Modified:** TBD based on chosen option
 
 ---
 
@@ -933,74 +1039,85 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 | Phase                  | Items  | Dev Days | Calendar Days | Team       |
 | ---------------------- | ------ | -------- | ------------- | ---------- |
-| **Phase 1 (Critical)** | 2      | 2.0      | 5 (Week 1)    | 2 devs     |
-| **Phase 2 (High)**     | 5      | 3.0      | 5 (Week 2)    | 2 devs     |
-| **Phase 3 (Medium)**   | 3      | 2.0      | 5 (Week 3-4)  | 1 dev      |
-| **Phase 4 (Low)**      | 8      | 4.5      | 10 (Week 5-6) | 1 dev      |
-| **TOTAL**              | **18** | **11.5** | **25 days**   | **2 devs** |
+| **Phase 1 (Critical)** | 2      | 2.4      | 5 (Week 1)    | 2 devs     |
+| **Phase 2 (High)**     | 3      | 1.2      | 3 (Week 1.5)  | 2 devs     |
+| **Phase 3 (Medium)**   | 3      | 2.0      | 5 (Week 2-3)  | 1 dev      |
+| **Phase 4 (Low)**      | 8      | 4.5      | 10 (Week 4-5) | 1 dev      |
+| **TOTAL**              | **16** | **10.1** | **23 days**   | **2 devs** |
+
+**⚠️ UPDATED:** H-5 and H-6 removed from implementation plan per user feedback
 
 ---
 
 ## 🎯 RECOMMENDED APPROACH
 
-### ⭐ **Option 1: Aggressive (2 weeks)** ✅ RECOMMENDED
+### ⭐ **Option 1: Aggressive (1.5 weeks)** ✅ RECOMMENDED - UPDATED
 
-**Scope:** Critical + High (7 items - excludes L-8)  
-**Effort:** 5.1 dev days  
-**Timeline:** 2 weeks  
+**Scope:** Critical + High (5 items - excludes L-8, H-5, H-6)  
+**Effort:** 3.6 dev days  
+**Timeline:** 1.5 weeks  
 **Status:** ✅ **READY FOR MAINNET**
 
 **Items:**
 
-- 2 Critical: C-1, C-2
-- 5 High: H-1, H-2, H-4, H-5, H-6
+- 2 Critical: C-1 (corrected fix), C-2
+- 3 High: H-1, H-2, H-4
+
+**Removed per user:**
+
+- H-5: Deployment fee (not needed)
+- H-6: Pausable (architectural conflict - user to decide alternative)
 
 **Why This Works:**
 
-- All security vulnerabilities addressed
+- All critical security vulnerabilities addressed
+- Corrected C-1 fix is ungameable
 - Medium items are minor improvements
 - Low items are polish only
 
 ---
 
-### Option 2: Production Ready (4 weeks)
+### Option 2: Production Ready (3 weeks)
 
-**Scope:** Critical + High + Medium (10 items)  
-**Effort:** 7.1 dev days  
-**Timeline:** 4 weeks  
+**Scope:** Critical + High + Medium (8 items)  
+**Effort:** 5.6 dev days  
+**Timeline:** 3 weeks  
 **Status:** ✅ **IDEAL FOR MAINNET**
 
 ---
 
-### Option 3: Complete (6 weeks)
+### Option 3: Complete (5 weeks)
 
-**Scope:** All issues (18 items)  
-**Effort:** 11.5 dev days  
-**Timeline:** 6 weeks  
+**Scope:** All issues (16 items)  
+**Effort:** 10.1 dev days  
+**Timeline:** 5 weeks  
 **Status:** ✅ **MAXIMUM ASSURANCE**
 
 ---
 
 ## 🚀 IMPLEMENTATION SEQUENCE
 
-### Week 1: Critical Issues (2 items)
+### Week 1: Critical Issues (2 items) - UPDATED
 
-**Mon-Tue:** C-1 (Clanker validation) - 4 hours  
-**Wed-Thu:** C-2 (Fee-on-transfer) - 6 hours  
-**Total:** 10 hours (2 devs)
+**Mon-Wed:** C-1 (Clanker validation - corrected fix) - 6 hours  
+**Thu-Fri:** C-2 (Fee-on-transfer) - 6 hours  
+**Total:** 12 hours (2 devs)
 
-### Week 2: High Severity (5 items)
+### Week 1.5: High Severity (3 items) - UPDATED
 
 **Mon:** H-1 (Quorum 80%) - 1 hour  
 **Tue:** H-2 (Winner manipulation) - 3 hours  
 **Wed:** H-4 (Multisig setup) - 2 hours  
-**Thu:** H-5 (Deployment fee) - 3 hours  
-**Fri:** H-6 (Emergency pause) - 6 hours  
-**Total:** 15 hours (2 devs)
+**Total:** 6 hours (2 devs)
 
-### Weeks 3-4: Medium Issues (3 items)
+**REMOVED:**
 
-**Optional if time allows**
+- ~~H-5: Deployment fee~~ (user decision: not needed)
+- ~~H-6: Emergency pause~~ (architectural conflict)
+
+### Weeks 2-3: Medium Issues (3 items)
+
+**Optional if time allows** - Can defer post-launch
 
 ---
 
@@ -1078,32 +1195,54 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ### What's Left
 
-**Only 18 items** remain (down from 31!)
+**Only 16 items** remain (down from 31!) ⚡ **UPDATED**
 
-**For mainnet:** Only **7 items** (2 Critical + 5 High)  
+**For mainnet:** Only **5 items** (2 Critical + 3 High)  
 **Testing verification:** L-8 confirms existing protections work
 
-**Timeline:** **2 weeks** to production-ready! 🚀
+**Timeline:** **1.5 weeks** to production-ready! 🚀
+
+**User Feedback Applied:**
+
+- C-1: Fixed the gameable solution (now uses factory-side verification)
+- H-5: Deployment fee NOT needed (acceptable risk)
+- H-6: Pausable conflicts with architecture (3 alternatives provided)
 
 ---
 
 ## ⚠️ QUICK REFERENCE
 
-### Must Fix Before Mainnet (7 items)
+### Must Fix Before Mainnet (5 items) ✅ UPDATED
 
 **Critical (2):**
 
-1. C-1: Clanker factory validation (4h)
+1. C-1: Clanker factory validation (6h) - **CORRECTED FIX**
 2. C-2: Fee-on-transfer protection (6h)
 
-**High (5):** 3. H-1: Quorum 70% → 80% (1h) 4. H-2: Winner by approval ratio (3h) 5. H-4: Deploy multisig (2h) 6. H-5: Deployment fee (3h) 7. H-6: Emergency pause (6h)
+**High (3):**
 
-**Total: 25 hours = 3.1 dev days = 2 calendar weeks**
+3. H-1: Quorum 70% → 80% (1h)
+4. H-2: Winner by approval ratio (3h)
+5. H-4: Deploy multisig (2h)
+
+**REMOVED:**
+
+- ~~H-5: Deployment fee~~ → User decision: not needed
+- ~~H-6: Emergency pause~~ → Architectural conflict (needs alternative)
+
+**Total: 18 hours = 2.25 dev days = 1.5 calendar weeks**
 
 ### Can Defer (11 items)
 
 **Medium (3):** M-3, M-10, M-11  
 **Low (8):** L-1 through L-8
+
+### User Needs to Decide (1 item)
+
+**H-6:** Emergency pause mechanism
+
+- **Options:** Circuit breaker, factory kill switch, or time-delayed escape hatch
+- **See:** H-6 section for detailed alternatives
 
 ---
 
@@ -1118,10 +1257,13 @@ A: 14 items were already fixed, design decisions, or audit errors
 A: Yes! Only 7 items are deployment blockers
 
 **Q: How long to mainnet-ready?**  
-A: 2 weeks for Critical + High (Option 1)
+A: 1.5 weeks for Critical + High (Option 1) - UPDATED from 2 weeks
 
 **Q: Which items are quick wins?**  
-A: H-1 (change one number), H-4 (deployment task), L-2 (move one line)
+A: H-1 (change one number - 1h), H-4 (deployment task - 2h), L-2 (move one line - 1h)
+
+**Q: What about H-6 (emergency pause)?**  
+A: User needs to choose: Circuit breaker, factory kill switch, or time-delayed escape hatch
 
 ---
 
@@ -1136,18 +1278,20 @@ A: H-1 (change one number), H-4 (deployment task), L-2 (move one line)
 
 ### Phase 2 Complete
 
-- ✅ All 7 pre-mainnet issues fixed
-- ✅ 23 new tests passing
-- ✅ Gas increase < 10%
+- ✅ All 5 pre-mainnet issues fixed (C-1, C-2, H-1, H-2, H-4)
+- ✅ 15 new tests passing
+- ✅ Gas increase < 5%
 - ✅ Multisig deployed and ownership transferred
+- ✅ H-6 alternative implemented (user decision)
 
 ### Final Validation
 
-- ✅ 430+ tests passing
+- ✅ 405+ tests passing (was 430+ before H-5/H-6 removal)
 - ✅ All Critical + High fixed
 - ✅ Gas profiling complete
 - ✅ External audit verification
 - ✅ L-8 edge case coverage confirms security
+- ✅ H-6 alternative chosen and implemented
 
 ---
 
@@ -1219,4 +1363,4 @@ A: H-1 (change one number), H-4 (deployment task), L-2 (move one line)
 
 ---
 
-_This consolidated document replaces EXTERNAL_AUDIT_3_ACTIONS.md, EXTERNAL_AUDIT_3_VALIDATION.md, and EXTERNAL_AUDIT_3_SUMMARY.md. All validation evidence and corrections have been incorporated. Only 18 items remain, with 7 being deployment blockers requiring 2 weeks of work. C-4 (VP caps) is a design decision - time-weighting without cap is intentional. L-8 (maxRewardTokens testing) added per user security review request - confirms existing protections are secure._
+_This consolidated document replaces EXTERNAL_AUDIT_3_ACTIONS.md, EXTERNAL_AUDIT_3_VALIDATION.md, and EXTERNAL_AUDIT_3_SUMMARY.md. All validation evidence and corrections have been incorporated. **UPDATED Oct 30, 2025:** Only 16 items remain (was 18), with 5 being deployment blockers requiring 1.5 weeks of work (was 7 items, 2 weeks). User corrections: C-1 fix corrected to be ungameable, H-5 deployment fee removed (not needed), H-6 pausable mechanism deferred (architectural conflict). C-4 (VP caps) is a design decision - time-weighting without cap is intentional. L-8 (maxRewardTokens testing) added per user security review request - confirms existing protections are secure._
