@@ -275,6 +275,184 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         vm.expectRevert('NOT_TRUSTED');
         factory.removeTrustedClankerFactory(mockClankerFactoryV1);
     }
+
+    /// @notice Test: Removing all trusted factories falls back to allow-all mode
+    function test_removeAllFactories_fallsBackToAllowAll() public {
+        console2.log('\n=== C-1 Test 9: Remove All Factories = Fallback to Allow-All ===');
+
+        // Step 1: Add trusted factory
+        factory.addTrustedClankerFactory(mockClankerFactoryV1);
+        console2.log('Added trusted factory v1');
+
+        // Deploy token from v1
+        MockClankerTokenForTest token1 = MockClankerFactory(mockClankerFactoryV1).deployToken(
+            alice,
+            'TokenV1',
+            'TV1'
+        );
+
+        // Should succeed (from trusted factory)
+        vm.prank(alice);
+        factory.prepareForDeployment();
+
+        vm.prank(alice);
+        ILevrFactory_v1.Project memory project1 = factory.register(address(token1));
+        assertNotEq(project1.staking, address(0), 'Token 1 should register');
+        console2.log('SUCCESS: Token from trusted factory v1 registered');
+
+        // Step 2: Remove the trusted factory
+        factory.removeTrustedClankerFactory(mockClankerFactoryV1);
+        console2.log('Removed trusted factory v1');
+
+        // Verify array is empty
+        address[] memory factories = factory.getTrustedClankerFactories();
+        assertEq(factories.length, 0, 'Should have no factories');
+
+        // Deploy token from FAKE factory (untrusted)
+        MockClankerTokenForTest token2 = MockClankerFactory(fakeClankerFactory).deployToken(
+            bob,
+            'FakeToken',
+            'FAKE'
+        );
+
+        // Step 3: Should NOW succeed even though it's from untrusted factory
+        // Because validation is skipped when array is empty (fallback to allow-all)
+        vm.prank(bob);
+        factory.prepareForDeployment();
+
+        vm.prank(bob);
+        ILevrFactory_v1.Project memory project2 = factory.register(address(token2));
+
+        assertNotEq(project2.staking, address(0), 'Token 2 should register');
+        console2.log('SUCCESS: Token from untrusted factory registered after removing all');
+        console2.log('Fallback to allow-all mode confirmed (empty array = no validation)');
+    }
+
+    /// @notice Test: Dynamic factory rotation (remove old, add new)
+    function test_dynamicFactoryRotation() public {
+        console2.log('\n=== C-1 Test 10: Dynamic Factory Rotation ===');
+
+        // Setup: Add v1 factory
+        factory.addTrustedClankerFactory(mockClankerFactoryV1);
+        console2.log('Phase 1: Added factory v1');
+
+        // Token from v1 should work
+        MockClankerTokenForTest tokenV1 = MockClankerFactory(mockClankerFactoryV1).deployToken(
+            alice,
+            'TokenV1',
+            'TV1'
+        );
+
+        vm.prank(alice);
+        factory.prepareForDeployment();
+
+        vm.prank(alice);
+        factory.register(address(tokenV1));
+        console2.log('Phase 1: Token from v1 registered');
+
+        // Token from v2 should fail (not trusted yet)
+        MockClankerTokenForTest tokenV2 = MockClankerFactory(mockClankerFactoryV2).deployToken(
+            bob,
+            'TokenV2',
+            'TV2'
+        );
+
+        vm.prank(bob);
+        factory.prepareForDeployment();
+
+        vm.prank(bob);
+        vm.expectRevert('TOKEN_NOT_FROM_TRUSTED_FACTORY');
+        factory.register(address(tokenV2));
+        console2.log('Phase 1: Token from v2 blocked (not trusted)');
+
+        // Rotation: Remove v1, add v2
+        factory.removeTrustedClankerFactory(mockClankerFactoryV1);
+        factory.addTrustedClankerFactory(mockClankerFactoryV2);
+        console2.log('Phase 2: Rotated factories (v1 -> v2)');
+
+        // Token from v2 should now work
+        MockClankerTokenForTest tokenV2_new = MockClankerFactory(mockClankerFactoryV2).deployToken(
+            bob,
+            'TokenV2New',
+            'TV2N'
+        );
+
+        vm.prank(bob);
+        factory.prepareForDeployment();
+
+        vm.prank(bob);
+        factory.register(address(tokenV2_new));
+        console2.log('Phase 2: Token from v2 registered (now trusted)');
+
+        // Token from v1 should now fail (no longer trusted)
+        MockClankerTokenForTest tokenV1_new = MockClankerFactory(mockClankerFactoryV1).deployToken(
+            alice,
+            'TokenV1New',
+            'TV1N'
+        );
+
+        vm.prank(alice);
+        factory.prepareForDeployment();
+
+        vm.prank(alice);
+        vm.expectRevert('TOKEN_NOT_FROM_TRUSTED_FACTORY');
+        factory.register(address(tokenV1_new));
+        console2.log('Phase 2: Token from v1 blocked (no longer trusted)');
+
+        console2.log('SUCCESS: Dynamic factory rotation works');
+    }
+
+    /// @notice Test: Emergency fallback (remove all during crisis)
+    function test_emergencyFallback_removeAllFactories() public {
+        console2.log('\n=== C-1 Test 11: Emergency Fallback (Remove All Factories) ===');
+
+        // Setup: Add multiple factories
+        factory.addTrustedClankerFactory(mockClankerFactoryV1);
+        factory.addTrustedClankerFactory(mockClankerFactoryV2);
+        console2.log('Setup: Added factories v1 and v2');
+
+        // Verify both are trusted
+        assertTrue(factory.isTrustedClankerFactory(mockClankerFactoryV1), 'V1 should be trusted');
+        assertTrue(factory.isTrustedClankerFactory(mockClankerFactoryV2), 'V2 should be trusted');
+
+        address[] memory initialFactories = factory.getTrustedClankerFactories();
+        assertEq(initialFactories.length, 2, 'Should have 2 factories');
+
+        // Emergency: Remove all factories
+        factory.removeTrustedClankerFactory(mockClankerFactoryV1);
+        factory.removeTrustedClankerFactory(mockClankerFactoryV2);
+        console2.log('Emergency: Removed all factories');
+
+        // Verify all are removed
+        assertFalse(
+            factory.isTrustedClankerFactory(mockClankerFactoryV1),
+            'V1 should not be trusted'
+        );
+        assertFalse(
+            factory.isTrustedClankerFactory(mockClankerFactoryV2),
+            'V2 should not be trusted'
+        );
+
+        address[] memory finalFactories = factory.getTrustedClankerFactories();
+        assertEq(finalFactories.length, 0, 'Should have no factories');
+
+        // During emergency: any token can be registered (no validation)
+        MockClankerTokenForTest emergencyToken = MockClankerFactory(fakeClankerFactory).deployToken(
+            alice,
+            'EmergencyToken',
+            'EMG'
+        );
+
+        vm.prank(alice);
+        factory.prepareForDeployment();
+
+        vm.prank(alice);
+        ILevrFactory_v1.Project memory project = factory.register(address(emergencyToken));
+
+        assertNotEq(project.staking, address(0), 'Emergency token should register');
+        console2.log('Emergency: Token registered (validation skipped)');
+        console2.log('SUCCESS: Emergency fallback to allow-all mode works');
+    }
 }
 
 /// @notice Mock Clanker Token that implements both IClankerToken and ERC20
