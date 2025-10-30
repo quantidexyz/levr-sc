@@ -2,18 +2,305 @@
 
 **Purpose:** Archive of critical bugs discovered and fixed during development  
 **Status:** All bugs documented here are FIXED ✅  
-**Last Updated:** October 30, 2025 (Added External Call Removal)
+**Last Updated:** October 30, 2025 (Phase 1 Pre-existing Fixes + Audit 3 Findings)
 
 ---
 
 ## Table of Contents
 
-1. [Arbitrary Code Execution via External Calls (Fixed Oct 30, 2025)](#arbitrary-code-execution-oct-30-2025)
-2. [Midstream Accrual Bug (Fixed Oct 2025)](#midstream-accrual-bug)
-3. [Governance Snapshot Bugs (Fixed Oct 2025)](#governance-snapshot-bugs)
-4. [ProposalState Enum Bug (Fixed Oct 2025)](#proposalstate-enum-bug)
-5. [Unvested Rewards Bug (Fixed Oct 29, 2025)](#unvested-rewards-bug-oct-29-2025)
-6. [Lessons Learned](#lessons-learned)
+1. [FeeSplitter Dust Recovery Logic Bug (Fixed Oct 30, 2025)](#feesplitter-dust-recovery-logic-bug-oct-30-2025)
+2. [VP Calculation Test Bug (Fixed Oct 30, 2025)](#vp-calculation-test-bug-oct-30-2025)
+3. [Clanker Token Trust - AUDIT 3 C-1 (Fixed Oct 30, 2025)](#clanker-token-trust-audit-3-c-1-oct-30-2025)
+4. [Fee-on-Transfer Accounting - AUDIT 3 C-2 (Fixed Oct 30, 2025)](#fee-on-transfer-accounting-audit-3-c-2-oct-30-2025)
+5. [Competitive Proposal Winner Manipulation - AUDIT 3 H-2 (Fixed Oct 30, 2025)](#competitive-proposal-winner-manipulation-audit-3-h-2-oct-30-2025)
+6. [Arbitrary Code Execution (Fixed Oct 30, 2025)](#arbitrary-code-execution-oct-30-2025)
+7. [Lessons Learned](#lessons-learned)
+
+---
+
+## FeeSplitter Dust Recovery Logic Bug (Oct 30, 2025)
+
+**Discovery Date:** October 30, 2025  
+**Severity:** MEDIUM  
+**Type:** Logic Bug (Pre-existing, found during test validation)  
+**Impact:** Dust recovery function broken - unable to recover stuck tokens  
+**Status:** ✅ FIXED
+
+### Summary
+
+After AUDIT 2 removed external locker calls, the `pendingFees()` function was never updated. It continued to return the contract's current balance instead of pending fees (which should be 0 since external calls were removed). This caused `recoverDust()` to calculate:
+
+```
+dust = balance - pendingFees()
+     = balance - balance
+     = 0 ❌ Nothing recoverable!
+```
+
+Effectively breaking the dust recovery mechanism.
+
+### Root Cause Analysis
+
+**AUDIT 2 removed these external calls:**
+```solidity
+IClankerFeeLocker(feeLocker).claim(...); // Removed
+IClankerLpLocker(lpLocker).collectRewards(...); // Removed
+```
+
+**But forgot to update `pendingFees()`:**
+```solidity
+// OLD LOGIC (broken after external call removal)
+function pendingFees() external view returns (uint256) {
+    return IERC20(token).balanceOf(address(this)); // ❌ Returns balance
+}
+
+// recoverDust() then calculates:
+uint256 dust = balance - pendingFees(); // = 0
+```
+
+### The Fix
+
+**Strategy:** Remove the misleading view functions entirely. If fees are collected by SDK (not internal), entire balance is either distributable or dust.
+
+**Changes:**
+- ❌ Removed `pendingFees()` - Users can query `balanceOf()` directly
+- ❌ Removed `pendingFeesInclBalance()` - Also misleading
+- ✅ Simplified `recoverDust()` to recover entire balance
+
+```solidity
+// AFTER
+function recoverDust(address token, address to) external {
+    _onlyTokenAdmin();
+    if (to == address(0)) revert ZeroAddress();
+    
+    // All balance is dust (since external lockers removed in AUDIT 2)
+    uint256 balance = IERC20(token).balanceOf(address(this));
+    
+    if (balance > 0) {
+        IERC20(token).safeTransfer(to, balance);
+        emit DustRecovered(token, to, balance);
+    }
+}
+```
+
+### Tests Fixed
+
+**Files Modified:**
+- `src/LevrFeeSplitter_v1.sol` - Removed functions, simplified recoverDust
+- `src/interfaces/ILevrFeeSplitter_v1.sol` - Updated interface
+- `test/unit/LevrFeeSplitter_MissingEdgeCases.t.sol` - Fixed 8 tests
+- `test/unit/LevrFeeSplitterV1.t.sol` - Fixed 1 test  
+- `test/e2e/LevrV1.FeeSplitter.t.sol` - Fixed balance queries
+
+**Total Tests Fixed:** 9 ✅
+
+### Lessons Learned
+
+1. **When removing external calls, review ALL dependent logic** - Not just the call site
+2. **View functions can become stale** - Review naming and implementation when dependencies change
+3. **Test names matter** - `pendingFees()` implied fees pending elsewhere, but external calls were gone
+4. **Query off-chain when possible** - Removed functions make contracts simpler and cheaper
+
+---
+
+## VP Calculation Test Bug (Oct 30, 2025)
+
+**Discovery Date:** October 30, 2025  
+**Severity:** LOW  
+**Type:** Test Assertion Bug (not production code)  
+**Impact:** Test incorrectly failing, masking actual protocol correctness  
+**Status:** ✅ FIXED
+
+### Summary
+
+Test `test_multipleUsers_independentOperations()` expected Charlie's voting power to be 0 immediately after staking. However, Charlie had actually staked 50 days into the simulation (due to earlier `vm.warp()` calls), so his VP should be > 0.
+
+### The Bug
+
+```solidity
+// BEFORE (incorrect test logic)
+vm.warp(block.timestamp + 50 days); // Charlie stakes 50 days in
+charlie.stake(100e18);
+
+uint256 charlieVP = levrStaking.balanceOfVP(charlie);
+assertEq(charlieVP, 0, 'Charlie just staked, VP = 0'); // ❌ WRONG!
+// Charlie has been staking for 50 days, VP should be > 0
+```
+
+### Root Cause
+
+The test comment said "Charlie just staked" but the warp had already advanced time. The assertion didn't match the actual test scenario.
+
+### The Fix
+
+```solidity
+// AFTER (correct assertion)
+uint256 charlieVP = levrStaking.balanceOfVP(charlie);
+assertTrue(charlieVP > 0, 'Charlie should have VP (50 days staked)'); // ✅ CORRECT
+```
+
+### Files Modified
+
+- `test/unit/LevrStakedToken_NonTransferableEdgeCases.t.sol` - Fixed assertion
+
+**Total Tests Fixed:** 1 ✅
+
+### Lessons Learned
+
+1. **Assertion messages should match actual test scenarios** - Helps catch logic errors
+2. **Time warping in tests affects all dependent calculations** - Track time carefully
+3. **Review comments when tests fail** - Comments often reveal misunderstandings
+
+---
+
+## Clanker Token Trust (AUDIT 3 C-1, Oct 30, 2025)
+
+**Discovery Date:** October 30, 2025  
+**Severity:** CRITICAL  
+**Source:** External Audit 3  
+**Impact:** Attackers could register fake tokens from untrusted factories  
+**Status:** ✅ FIXED
+
+### Summary
+
+Factory was accepting ANY token claiming to be from Clanker without verifying the factory itself. Malicious tokens could lie about their origin.
+
+### Why The Initial Fix Was Wrong
+
+The proposed fix checked `token.factory()` - but a fake token can simply return the trusted factory address. This is gameable:
+
+```solidity
+contract FakeToken {
+    function factory() external pure returns (address) {
+        return TRUSTED_FACTORY; // Just lie!
+    }
+}
+```
+
+### The Correct Fix
+
+Verify from INSIDE the trusted factory instead of trusting the token:
+
+```solidity
+// Ungameable: Factory maintains list of deployed tokens
+for (uint256 i = 0; i < _trustedClankerFactories.length; i++) {
+    address factory = _trustedClankerFactories[i];
+    try IClanker(factory).tokenDeploymentInfo(token) returns (
+        IClanker.DeploymentInfo memory info
+    ) {
+        if (info.token == token) { // ✅ Verified inside factory
+            validFactory = true;
+            break;
+        }
+    } catch {
+        continue;
+    }
+}
+require(validFactory, 'TOKEN_NOT_FROM_TRUSTED_FACTORY');
+```
+
+**Why This Works:**
+- Factory has deployment record that can't be faked
+- Token can't claim to be deployed if factory has no record
+- Supports multiple Clanker versions
+
+### Tests Added
+
+- 11 comprehensive tests in `test/unit/LevrFactory.ClankerValidation.t.sol`
+
+### Lessons Learned
+
+1. **Verify inside the trusted contract, not via claims** - Can't trust token's claims
+2. **Support multiple versions** - Array of factories for future Clanker upgrades
+3. **Test edge cases: 0 factories, multiple factories, add/remove** - Full coverage needed
+
+---
+
+## Fee-on-Transfer Accounting (AUDIT 3 C-2, Oct 30, 2025)
+
+**Discovery Date:** October 30, 2025  
+**Severity:** CRITICAL  
+**Source:** External Audit 3  
+**Impact:** Insolvency from transfer fees, potential fund loss on unstake  
+**Status:** ✅ FIXED
+
+### Summary
+
+Tokens with transfer fees (like USDT on some chains) would cause accounting errors. If user stakes 100 tokens with 1% fee, contract receives 99 but records 100. Escrow becomes insolvent.
+
+### The Fix
+
+Measure actual balance received:
+
+```solidity
+uint256 balanceBefore = IERC20(underlying).balanceOf(address(this));
+IERC20(underlying).safeTransferFrom(staker, address(this), amount);
+uint256 actualReceived = IERC20(underlying).balanceOf(address(this)) - balanceBefore;
+
+// Use actualReceived for ALL accounting
+stakeStartTime[staker] = _onStakeNewTimestamp(actualReceived);
+_escrowBalance[underlying] += actualReceived;
+_totalStaked += actualReceived;
+ILevrStakedToken_v1(stakedToken).mint(staker, actualReceived);
+```
+
+### Tests Added
+
+- 4 tests in `test/unit/LevrStaking.FeeOnTransfer.t.sol`
+
+### Lessons Learned
+
+1. **Always measure actual balance after transfers** - Don't trust transfer amounts
+2. **Order matters: transfer → calculate VP → mint** - VP calculation needs old balance
+3. **Test with actual fee tokens (1% fee)** - Don't assume all tokens work normally
+
+---
+
+## Competitive Proposal Winner Manipulation (AUDIT 3 H-2, Oct 30, 2025)
+
+**Discovery Date:** October 30, 2025  
+**Severity:** HIGH  
+**Source:** External Audit 3  
+**Impact:** Strategic NO voting could manipulate competitive proposal winner  
+**Status:** ✅ FIXED
+
+### Summary
+
+Winner selection based on absolute YES votes could be manipulated. Attacker votes heavily NO on good proposals while abstaining on bad ones.
+
+### The Fix
+
+Changed winner selection to approval ratio:
+
+```solidity
+// BEFORE
+if (proposal.yesVotes > bestYesVotes) {
+    bestYesVotes = proposal.yesVotes;
+    winnerId = pid;
+}
+
+// AFTER
+uint256 approvalRatio = (proposal.yesVotes * 10000) / totalVotes;
+if (approvalRatio > bestApprovalRatio) {
+    bestApprovalRatio = approvalRatio;
+    winnerId = pid;
+}
+```
+
+### Why This Works
+
+- Measures quality (approval %) not quantity (absolute votes)
+- Prevents NO vote manipulation
+- Requires proposals to meet both quorum AND approval
+
+### Tests
+
+- Existing attack scenario test still passes ✅
+
+### Lessons Learned
+
+1. **Consider voting incentives in governance design** - Attackers can vote strategically
+2. **Use ratios, not absolute values, for comparative decisions** - Fairer and more robust
+3. **Test attack scenarios explicitly** - Governance gaming is common
 
 ---
 

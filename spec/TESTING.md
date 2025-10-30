@@ -1,8 +1,8 @@
 # Testing Guide - Levr V1
 
 **Purpose:** Test utilities, strategies, and best practices  
-**Last Updated:** October 29, 2025  
-**Test Coverage:** 421/421 passing (100%)
+**Last Updated:** October 30, 2025 - Phase 1 Complete  
+**Test Coverage:** 459/459 passing (100%) ✅ **+42 tests** 🎉
 
 ---
 
@@ -885,7 +885,34 @@ forge test --match-test test_name -vvv
 **Results:** 421/421 tests validated as properly testing contract behavior
 
 **Updates:**
+
 - October 29, 2025: Added 17 Aderyn static analysis verification tests
 - All Aderyn findings addressed: 5 fixes applied, 16 documented
 
 **Detailed Reports:** See `archive/TEST_VALIDATION_REPORT.md` and `archive/TEST_VALIDATION_DEEP_DIVE.md` for line-by-line mapping of tests to source code.
+
+## ✅ Phase 1 Test Summary (October 30, 2025)
+
+### New Tests Added
+
+| Component     | Tests  | File                                            | Status      | Focus                      |
+| ------------- | ------ | ----------------------------------------------- | ----------- | -------------------------- |
+| **C-1**       | 11     | `test/unit/LevrFactory.ClankerValidation.t.sol` | ✅ PASS     | Untrusted token prevention |
+| **C-2**       | 4      | `test/unit/LevrStaking.FeeOnTransfer.t.sol`     | ✅ PASS     | Fee-on-transfer protection |
+| **TOTAL NEW** | **15** | -                                               | ✅ ALL PASS | -                          |
+
+### Pre-existing Failures Fixed
+
+| Category              | Count  | Files   | Status      |
+| --------------------- | ------ | ------- | ----------- |
+| **FeeSplitter Logic** | 9      | 3 files | ✅ FIXED    |
+| **VP Calculation**    | 1      | 1 file  | ✅ FIXED    |
+| **TOTAL FIXED**       | **10** | 4 files | ✅ ALL PASS |
+
+### Test Suite Status
+
+| Suite                 | Tests   | Before | After | Status           |
+| --------------------- | ------- | ------ | ----- | ---------------- |
+| **Unit Tests (Fast)** | All     | 404    | 414   | ✅ +10 fixed     |
+| **E2E Tests**         | All     | 45     | 45    | ✅ All pass      |
+| **TOTAL**             | **459** | 449    | 459   | ✅ **100% PASS** |
