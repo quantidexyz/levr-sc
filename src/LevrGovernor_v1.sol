@@ -338,44 +338,47 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         }
 
         uint256 cycleId = _currentCycleId;
-        Cycle memory cycle = _cycles[cycleId];
 
-        // Check proposal window is open (should always be true after auto-start)
-        if (
-            block.timestamp < cycle.proposalWindowStart || block.timestamp > cycle.proposalWindowEnd
-        ) {
-            revert ProposalWindowClosed();
-        }
-
-        // Check minimum stake requirement
-        uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit();
-        if (minStakeBps > 0) {
-            uint256 totalSupply = IERC20(stakedToken).totalSupply();
-            uint256 minStake = (totalSupply * minStakeBps) / 10_000;
-            uint256 proposerBalance = IERC20(stakedToken).balanceOf(proposer);
-            if (proposerBalance < minStake) {
-                revert InsufficientStake();
+        // Validate proposal timing
+        {
+            Cycle memory cycle = _cycles[cycleId];
+            if (
+                block.timestamp < cycle.proposalWindowStart ||
+                block.timestamp > cycle.proposalWindowEnd
+            ) {
+                revert ProposalWindowClosed();
             }
         }
 
-        // TOKEN AGNOSTIC: Validate treasury has sufficient balance of the proposed token
-        uint256 treasuryBalance = IERC20(token).balanceOf(treasury);
-        if (treasuryBalance < amount) {
-            revert InsufficientTreasuryBalance();
+        // Validate proposer stake
+        {
+            uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit();
+            if (minStakeBps > 0) {
+                uint256 totalSupply = IERC20(stakedToken).totalSupply();
+                if (
+                    IERC20(stakedToken).balanceOf(proposer) < (totalSupply * minStakeBps) / 10_000
+                ) {
+                    revert InsufficientStake();
+                }
+            }
         }
 
-        // Check proposal amount doesn't exceed maximum percentage of treasury balance
-        uint16 maxProposalBps = ILevrFactory_v1(factory).maxProposalAmountBps();
-        if (maxProposalBps > 0) {
-            uint256 maxProposalAmount = (treasuryBalance * maxProposalBps) / 10_000;
-            if (amount > maxProposalAmount) {
+        // Validate treasury balance and proposal amount
+        uint256 treasuryBalance;
+        {
+            treasuryBalance = IERC20(token).balanceOf(treasury);
+            if (treasuryBalance < amount) {
+                revert InsufficientTreasuryBalance();
+            }
+
+            uint16 maxProposalBps = ILevrFactory_v1(factory).maxProposalAmountBps();
+            if (maxProposalBps > 0 && amount > (treasuryBalance * maxProposalBps) / 10_000) {
                 revert ProposalAmountExceedsLimit();
             }
         }
 
         // Check max active proposals per type
-        uint16 maxActive = ILevrFactory_v1(factory).maxActiveProposals();
-        if (_activeProposalCount[proposalType] >= maxActive) {
+        if (_activeProposalCount[proposalType] >= ILevrFactory_v1(factory).maxActiveProposals()) {
             revert MaxProposalsReached();
         }
 
@@ -384,43 +387,38 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert AlreadyProposedInCycle();
         }
 
-        // Create proposal
+        // Create proposal with snapshots
         proposalId = ++_proposalCount;
 
-        // FIX [NEW-C-1, NEW-C-2, NEW-C-3]: Capture snapshots at proposal creation
-        // to prevent manipulation via supply/config changes after voting
-        uint256 totalSupplySnapshot = IERC20(stakedToken).totalSupply();
-        uint16 quorumBpsSnapshot = ILevrFactory_v1(factory).quorumBps();
-        uint16 approvalBpsSnapshot = ILevrFactory_v1(factory).approvalBps();
-
-        _proposals[proposalId] = Proposal({
-            id: proposalId,
-            proposalType: proposalType,
-            proposer: proposer,
-            token: token, // TOKEN AGNOSTIC: Store token address
-            amount: amount,
-            recipient: recipient,
-            description: description,
-            createdAt: block.timestamp,
-            votingStartsAt: cycle.proposalWindowEnd,
-            votingEndsAt: cycle.votingWindowEnd,
-            yesVotes: 0,
-            noVotes: 0,
-            totalBalanceVoted: 0,
-            executed: false,
-            cycleId: cycleId,
-            state: ProposalState.Pending,
-            meetsQuorum: false,
-            meetsApproval: false,
-            totalSupplySnapshot: totalSupplySnapshot,
-            quorumBpsSnapshot: quorumBpsSnapshot,
-            approvalBpsSnapshot: approvalBpsSnapshot
-        });
+        {
+            Cycle memory cycle = _cycles[cycleId];
+            _proposals[proposalId] = Proposal({
+                id: proposalId,
+                proposalType: proposalType,
+                proposer: proposer,
+                token: token,
+                amount: amount,
+                recipient: recipient,
+                description: description,
+                createdAt: block.timestamp,
+                votingStartsAt: cycle.proposalWindowEnd,
+                votingEndsAt: cycle.votingWindowEnd,
+                yesVotes: 0,
+                noVotes: 0,
+                totalBalanceVoted: 0,
+                executed: false,
+                cycleId: cycleId,
+                state: ProposalState.Pending,
+                meetsQuorum: false,
+                meetsApproval: false,
+                totalSupplySnapshot: IERC20(stakedToken).totalSupply(),
+                quorumBpsSnapshot: ILevrFactory_v1(factory).quorumBps(),
+                approvalBpsSnapshot: ILevrFactory_v1(factory).approvalBps()
+            });
+        }
 
         _activeProposalCount[proposalType]++;
         _cycleProposals[cycleId].push(proposalId);
-
-        // Mark that user has proposed this type in this cycle
         _hasProposedInCycle[cycleId][proposalType][proposer] = true;
 
         emit ProposalCreated(

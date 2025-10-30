@@ -86,6 +86,24 @@ contract DeployLevr is Script {
     uint256 constant SAFETY_BUFFER_BPS = 2000; // 20% buffer
     uint256 constant MIN_DEPLOYER_BALANCE = 0.1 ether; // Fallback minimum
 
+    // Deployment parameters struct to avoid stack-too-deep
+    struct DeployParams {
+        uint256 privateKey;
+        address deployer;
+        address protocolTreasury;
+        address clankerFactory;
+        uint16 protocolFeeBps;
+        uint32 streamWindowSeconds;
+        uint32 proposalWindowSeconds;
+        uint32 votingWindowSeconds;
+        uint16 maxActiveProposals;
+        uint16 quorumBps;
+        uint16 approvalBps;
+        uint16 minSTokenBpsToSubmit;
+        uint16 maxProposalAmountBps;
+        uint16 maxRewardTokens;
+    }
+
     /**
      * @notice Get Clanker factory address for the current chain
      * @param chainId The chain ID to get the factory for
@@ -100,85 +118,70 @@ contract DeployLevr is Script {
         revert('Unsupported chain - no Clanker factory available');
     }
 
-    function run() external {
-        // =======================================================================
-        // CONFIGURATION - READ FROM ENVIRONMENT
-        // =======================================================================
-
-        uint256 privateKey = vm.envUint('PRIVATE_KEY');
-        address deployer = vm.addr(privateKey);
-
-        // Optional: Protocol treasury (defaults to deployer for testing)
-        address protocolTreasury = vm.envExists('PROTOCOL_TREASURY')
+    /**
+     * @notice Load configuration from environment
+     * @return params Deployment parameters
+     */
+    function loadConfig() internal view returns (DeployParams memory params) {
+        params.privateKey = vm.envUint('PRIVATE_KEY');
+        params.deployer = vm.addr(params.privateKey);
+        params.protocolTreasury = vm.envExists('PROTOCOL_TREASURY')
             ? vm.envAddress('PROTOCOL_TREASURY')
-            : deployer;
-
-        // Optional: Configuration parameters with defaults
-        uint16 protocolFeeBps = vm.envExists('PROTOCOL_FEE_BPS')
+            : params.deployer;
+        params.protocolFeeBps = vm.envExists('PROTOCOL_FEE_BPS')
             ? uint16(vm.envUint('PROTOCOL_FEE_BPS'))
             : DEFAULT_PROTOCOL_FEE_BPS;
-
-        uint32 streamWindowSeconds = vm.envExists('STREAM_WINDOW_SECONDS')
+        params.streamWindowSeconds = vm.envExists('STREAM_WINDOW_SECONDS')
             ? uint32(vm.envUint('STREAM_WINDOW_SECONDS'))
             : DEFAULT_STREAM_WINDOW_SECONDS;
-
-        uint32 proposalWindowSeconds = vm.envExists('PROPOSAL_WINDOW_SECONDS')
+        params.proposalWindowSeconds = vm.envExists('PROPOSAL_WINDOW_SECONDS')
             ? uint32(vm.envUint('PROPOSAL_WINDOW_SECONDS'))
             : DEFAULT_PROPOSAL_WINDOW_SECONDS;
-
-        uint32 votingWindowSeconds = vm.envExists('VOTING_WINDOW_SECONDS')
+        params.votingWindowSeconds = vm.envExists('VOTING_WINDOW_SECONDS')
             ? uint32(vm.envUint('VOTING_WINDOW_SECONDS'))
             : DEFAULT_VOTING_WINDOW_SECONDS;
-
-        uint16 maxActiveProposals = vm.envExists('MAX_ACTIVE_PROPOSALS')
+        params.maxActiveProposals = vm.envExists('MAX_ACTIVE_PROPOSALS')
             ? uint16(vm.envUint('MAX_ACTIVE_PROPOSALS'))
             : DEFAULT_MAX_ACTIVE_PROPOSALS;
-
-        uint16 quorumBps = vm.envExists('QUORUM_BPS')
+        params.quorumBps = vm.envExists('QUORUM_BPS')
             ? uint16(vm.envUint('QUORUM_BPS'))
             : DEFAULT_QUORUM_BPS;
-
-        uint16 approvalBps = vm.envExists('APPROVAL_BPS')
+        params.approvalBps = vm.envExists('APPROVAL_BPS')
             ? uint16(vm.envUint('APPROVAL_BPS'))
             : DEFAULT_APPROVAL_BPS;
-
-        uint16 minSTokenBpsToSubmit = vm.envExists('MIN_STOKEN_BPS_TO_SUBMIT')
+        params.minSTokenBpsToSubmit = vm.envExists('MIN_STOKEN_BPS_TO_SUBMIT')
             ? uint16(vm.envUint('MIN_STOKEN_BPS_TO_SUBMIT'))
             : DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT;
-
-        uint16 maxProposalAmountBps = vm.envExists('MAX_PROPOSAL_AMOUNT_BPS')
+        params.maxProposalAmountBps = vm.envExists('MAX_PROPOSAL_AMOUNT_BPS')
             ? uint16(vm.envUint('MAX_PROPOSAL_AMOUNT_BPS'))
             : DEFAULT_MAX_PROPOSAL_AMOUNT_BPS;
-
-        uint16 maxRewardTokens = vm.envExists('MAX_REWARD_TOKENS')
+        params.maxRewardTokens = vm.envExists('MAX_REWARD_TOKENS')
             ? uint16(vm.envUint('MAX_REWARD_TOKENS'))
             : DEFAULT_MAX_REWARD_TOKENS;
+        params.clankerFactory = vm.envExists('CLANKER_FACTORY')
+            ? vm.envAddress('CLANKER_FACTORY')
+            : getClankerFactory(block.chainid);
+    }
 
-        // =======================================================================
-        // PRE-DEPLOYMENT VALIDATION
-        // =======================================================================
+    function run() external {
+        // Load configuration from environment
+        DeployParams memory params = loadConfig();
 
+        // Validate network and display info
         console.log('=== LEVR PROTOCOL V1 DEPLOYMENT ===');
         console.log('Network Chain ID:', block.chainid);
-        console.log('Deployer Address:', deployer);
-        console.log('Deployer Balance:', deployer.balance / 1e18, 'ETH');
+        console.log('Deployer Address:', params.deployer);
+        console.log('Deployer Balance:', params.deployer.balance / 1e18, 'ETH');
         console.log('');
 
-        // Validate network is supported (Base mainnet or Base Sepolia)
         require(
             block.chainid == 8453 || block.chainid == 84532,
             'Unsupported network - deploy on Base mainnet (8453) or Base Sepolia (84532)'
         );
 
-        // Get Clanker factory address for this chain (can be overridden via env)
-        address clankerFactory = vm.envExists('CLANKER_FACTORY')
-            ? vm.envAddress('CLANKER_FACTORY')
-            : getClankerFactory(block.chainid);
-
-        // Display network name
         string memory networkName = block.chainid == 8453 ? 'Base Mainnet' : 'Base Sepolia';
         console.log('Network:', networkName);
-        console.log('Clanker Factory (auto-selected):', clankerFactory);
+        console.log('Clanker Factory (auto-selected):', params.clankerFactory);
         console.log('');
 
         // =======================================================================
@@ -187,80 +190,79 @@ contract DeployLevr is Script {
 
         console.log('=== GAS REQUIREMENT VALIDATION ===');
 
-        // Calculate required ETH based on current gas price
-        uint256 currentGasPrice = tx.gasprice > 0 ? tx.gasprice : 1 gwei; // Fallback to 1 gwei
-        uint256 estimatedCostWei = TOTAL_ESTIMATED_GAS * currentGasPrice;
-        uint256 requiredWithBuffer = estimatedCostWei +
-            ((estimatedCostWei * SAFETY_BUFFER_BPS) / 10000);
+        // Scope for gas calculations to avoid stack-too-deep
+        {
+            uint256 currentGasPrice = tx.gasprice > 0 ? tx.gasprice : 1 gwei;
+            uint256 estimatedCostWei = TOTAL_ESTIMATED_GAS * currentGasPrice;
+            uint256 requiredWithBuffer = estimatedCostWei +
+                ((estimatedCostWei * SAFETY_BUFFER_BPS) / 10000);
+            uint256 requiredBalance = requiredWithBuffer > MIN_DEPLOYER_BALANCE
+                ? requiredWithBuffer
+                : MIN_DEPLOYER_BALANCE;
 
-        // Use the higher of calculated requirement or MIN_DEPLOYER_BALANCE
-        uint256 requiredBalance = requiredWithBuffer > MIN_DEPLOYER_BALANCE
-            ? requiredWithBuffer
-            : MIN_DEPLOYER_BALANCE;
+            console.log('Current Gas Price:', currentGasPrice / 1 gwei, 'gwei');
+            console.log('Estimated Total Gas:', TOTAL_ESTIMATED_GAS);
+            console.log('Estimated Cost:', estimatedCostWei / 1e18, 'ETH');
+            console.log('Required (with 20% buffer):', requiredBalance / 1e18, 'ETH');
+            console.log('Deployer Balance:', params.deployer.balance / 1e18, 'ETH');
 
-        console.log('Current Gas Price:', currentGasPrice / 1 gwei, 'gwei');
-        console.log('Estimated Total Gas:', TOTAL_ESTIMATED_GAS);
-        console.log('Estimated Cost:', estimatedCostWei / 1e18, 'ETH');
-        console.log('Required (with 20% buffer):', requiredBalance / 1e18, 'ETH');
-        console.log('Deployer Balance:', deployer.balance / 1e18, 'ETH');
-
-        // Validate deployer has sufficient ETH (LOCKED CHECK)
-        require(
-            deployer.balance >= requiredBalance,
-            string(
-                abi.encodePacked(
-                    'Insufficient deployer balance - need at least ',
-                    vm.toString(requiredBalance / 1e18),
-                    ' ETH'
+            require(
+                params.deployer.balance >= requiredBalance,
+                string(
+                    abi.encodePacked(
+                        'Insufficient deployer balance - need at least ',
+                        vm.toString(requiredBalance / 1e18),
+                        ' ETH'
+                    )
                 )
-            )
-        );
+            );
 
-        console.log('[OK] Sufficient balance locked for deployment');
-        console.log('');
+            console.log('[OK] Sufficient balance locked for deployment');
+            console.log('');
+        }
 
         // Show if protocol treasury is using default
-        if (protocolTreasury == deployer) {
+        if (params.protocolTreasury == params.deployer) {
             console.log('Protocol Treasury: Using deployer address (default)');
         } else {
-            console.log('Protocol Treasury:', protocolTreasury);
+            console.log('Protocol Treasury:', params.protocolTreasury);
         }
         console.log('');
 
         // Validate configuration parameters
-        require(protocolFeeBps <= 10000, 'Protocol fee BPS cannot exceed 100%');
-        require(streamWindowSeconds >= 1 days, 'Stream window must be at least 1 day');
-        require(proposalWindowSeconds > 0, 'Proposal window must be positive');
-        require(votingWindowSeconds > 0, 'Voting window must be positive');
-        require(maxActiveProposals > 0, 'Max active proposals must be positive');
-        require(quorumBps <= 10000, 'Quorum BPS cannot exceed 100%');
-        require(approvalBps <= 10000, 'Approval BPS cannot exceed 100%');
-        require(minSTokenBpsToSubmit <= 10000, 'Min sToken BPS cannot exceed 100%');
-        require(maxProposalAmountBps <= 10000, 'Max proposal amount BPS cannot exceed 100%');
-        require(clankerFactory != address(0), 'Clanker factory cannot be zero address');
+        require(params.protocolFeeBps <= 10000, 'Protocol fee BPS cannot exceed 100%');
+        require(params.streamWindowSeconds >= 1 days, 'Stream window must be at least 1 day');
+        require(params.proposalWindowSeconds > 0, 'Proposal window must be positive');
+        require(params.votingWindowSeconds > 0, 'Voting window must be positive');
+        require(params.maxActiveProposals > 0, 'Max active proposals must be positive');
+        require(params.quorumBps <= 10000, 'Quorum BPS cannot exceed 100%');
+        require(params.approvalBps <= 10000, 'Approval BPS cannot exceed 100%');
+        require(params.minSTokenBpsToSubmit <= 10000, 'Min sToken BPS cannot exceed 100%');
+        require(params.maxProposalAmountBps <= 10000, 'Max proposal amount BPS cannot exceed 100%');
+        require(params.clankerFactory != address(0), 'Clanker factory cannot be zero address');
 
         // Build factory configuration
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: protocolFeeBps,
-            streamWindowSeconds: streamWindowSeconds,
-            protocolTreasury: protocolTreasury,
-            proposalWindowSeconds: proposalWindowSeconds,
-            votingWindowSeconds: votingWindowSeconds,
-            maxActiveProposals: maxActiveProposals,
-            quorumBps: quorumBps,
-            approvalBps: approvalBps,
-            minSTokenBpsToSubmit: minSTokenBpsToSubmit,
-            maxProposalAmountBps: maxProposalAmountBps,
-            maxRewardTokens: maxRewardTokens
+            protocolFeeBps: params.protocolFeeBps,
+            streamWindowSeconds: params.streamWindowSeconds,
+            protocolTreasury: params.protocolTreasury,
+            proposalWindowSeconds: params.proposalWindowSeconds,
+            votingWindowSeconds: params.votingWindowSeconds,
+            maxActiveProposals: params.maxActiveProposals,
+            quorumBps: params.quorumBps,
+            approvalBps: params.approvalBps,
+            minSTokenBpsToSubmit: params.minSTokenBpsToSubmit,
+            maxProposalAmountBps: params.maxProposalAmountBps,
+            maxRewardTokens: params.maxRewardTokens
         });
 
         console.log('=== DEPLOYMENT CONFIGURATION ===');
-        if (protocolTreasury == deployer) {
-            console.log('Protocol Treasury:', protocolTreasury, '(deployer - default)');
+        if (params.protocolTreasury == params.deployer) {
+            console.log('Protocol Treasury:', params.protocolTreasury, '(deployer - default)');
         } else {
-            console.log('Protocol Treasury:', protocolTreasury, '(custom)');
+            console.log('Protocol Treasury:', params.protocolTreasury, '(custom)');
         }
-        console.log('Clanker Factory:', clankerFactory);
+        console.log('Clanker Factory:', params.clankerFactory);
         console.log('');
         console.log('Factory Configuration:');
         console.log('- Protocol Fee BPS:', config.protocolFeeBps);
@@ -282,7 +284,7 @@ contract DeployLevr is Script {
         console.log('=== STARTING DEPLOYMENT ===');
         console.log('');
 
-        vm.startBroadcast(privateKey);
+        vm.startBroadcast(params.privateKey);
 
         // 1. Deploy the forwarder (includes executeMulticall support)
         console.log('Deploying LevrForwarder_v1...');
@@ -291,10 +293,10 @@ contract DeployLevr is Script {
         console.log('');
 
         // 2. Calculate the factory address before deploying deployer logic
-        // The factory will be deployed at nonce = vm.getNonce(deployer) + 1
+        // The factory will be deployed at nonce = vm.getNonce(params.deployer) + 1
         // (current nonce is after forwarder, +1 for deployer logic, +1 for factory)
-        uint64 currentNonce = vm.getNonce(deployer);
-        address predictedFactory = vm.computeCreateAddress(deployer, currentNonce + 1);
+        uint64 currentNonce = vm.getNonce(params.deployer);
+        address predictedFactory = vm.computeCreateAddress(params.deployer, currentNonce + 1);
         console.log('Predicted Factory Address:', predictedFactory);
         console.log('Current Deployer Nonce:', currentNonce);
         console.log('');
@@ -310,9 +312,9 @@ contract DeployLevr is Script {
         console.log('Deploying LevrFactory_v1...');
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
-            deployer,
+            params.deployer,
             address(forwarder),
-            clankerFactory,
+            params.clankerFactory,
             address(levrDeployer)
         );
         console.log('- Factory deployed at:', address(factory));
@@ -343,26 +345,38 @@ contract DeployLevr is Script {
         console.log('=== DEPLOYMENT VERIFICATION ===');
 
         // Verify factory configuration
-        require(factory.protocolFeeBps() == protocolFeeBps, 'Protocol fee BPS mismatch');
-        require(factory.streamWindowSeconds() == streamWindowSeconds, 'Stream window mismatch');
+        require(factory.protocolFeeBps() == params.protocolFeeBps, 'Protocol fee BPS mismatch');
         require(
-            factory.proposalWindowSeconds() == proposalWindowSeconds,
+            factory.streamWindowSeconds() == params.streamWindowSeconds,
+            'Stream window mismatch'
+        );
+        require(
+            factory.proposalWindowSeconds() == params.proposalWindowSeconds,
             'Proposal window mismatch'
         );
-        require(factory.votingWindowSeconds() == votingWindowSeconds, 'Voting window mismatch');
         require(
-            factory.maxActiveProposals() == maxActiveProposals,
+            factory.votingWindowSeconds() == params.votingWindowSeconds,
+            'Voting window mismatch'
+        );
+        require(
+            factory.maxActiveProposals() == params.maxActiveProposals,
             'Max active proposals mismatch'
         );
-        require(factory.quorumBps() == quorumBps, 'Quorum BPS mismatch');
-        require(factory.approvalBps() == approvalBps, 'Approval BPS mismatch');
-        require(factory.minSTokenBpsToSubmit() == minSTokenBpsToSubmit, 'Min sToken BPS mismatch');
+        require(factory.quorumBps() == params.quorumBps, 'Quorum BPS mismatch');
+        require(factory.approvalBps() == params.approvalBps, 'Approval BPS mismatch');
         require(
-            factory.maxProposalAmountBps() == maxProposalAmountBps,
+            factory.minSTokenBpsToSubmit() == params.minSTokenBpsToSubmit,
+            'Min sToken BPS mismatch'
+        );
+        require(
+            factory.maxProposalAmountBps() == params.maxProposalAmountBps,
             'Max proposal amount BPS mismatch'
         );
-        require(factory.maxRewardTokens() == maxRewardTokens, 'Max reward tokens mismatch');
-        require(factory.protocolTreasury() == protocolTreasury, 'Protocol treasury mismatch');
+        require(factory.maxRewardTokens() == params.maxRewardTokens, 'Max reward tokens mismatch');
+        require(
+            factory.protocolTreasury() == params.protocolTreasury,
+            'Protocol treasury mismatch'
+        );
         require(factory.trustedForwarder() == address(forwarder), 'Trusted forwarder mismatch');
 
         console.log('All configuration parameters verified!');
@@ -381,19 +395,19 @@ contract DeployLevr is Script {
         console.log('- LevrFeeSplitterFactory_v1:', address(feeSplitterFactory));
         console.log('');
         console.log('Factory Configuration:');
-        console.log('- Owner (Admin):', deployer);
-        console.log('- Protocol Treasury:', protocolTreasury);
-        console.log('- Clanker Factory:', clankerFactory);
+        console.log('- Owner (Admin):', params.deployer);
+        console.log('- Protocol Treasury:', params.protocolTreasury);
+        console.log('- Clanker Factory:', params.clankerFactory);
         console.log('- Trusted Forwarder:', address(forwarder));
         console.log('');
         console.log('Governance Parameters:');
-        console.log('- Proposal Window:', proposalWindowSeconds / 1 days, 'days');
-        console.log('- Voting Window:', votingWindowSeconds / 1 days, 'days');
-        console.log('- Max Active Proposals:', maxActiveProposals);
-        console.log('- Quorum:', quorumBps / 100, '%');
-        console.log('- Approval Threshold:', approvalBps / 100, '%');
-        console.log('- Min sToken to Propose:', minSTokenBpsToSubmit / 100, '%');
-        console.log('- Max Proposal Amount:', maxProposalAmountBps / 100, '%');
+        console.log('- Proposal Window:', params.proposalWindowSeconds / 1 days, 'days');
+        console.log('- Voting Window:', params.votingWindowSeconds / 1 days, 'days');
+        console.log('- Max Active Proposals:', params.maxActiveProposals);
+        console.log('- Quorum:', params.quorumBps / 100, '%');
+        console.log('- Approval Threshold:', params.approvalBps / 100, '%');
+        console.log('- Min sToken to Propose:', params.minSTokenBpsToSubmit / 100, '%');
+        console.log('- Max Proposal Amount:', params.maxProposalAmountBps / 100, '%');
         console.log('');
         console.log('=== NEXT STEPS ===');
         console.log('1. Verify contracts on block explorer (if applicable)');

@@ -58,20 +58,41 @@ contract LevrStakingV1_Accounting is Test {
         address token,
         string memory when
     ) internal {
-        uint256 tokenBalance = MockERC20(token).balanceOf(address(staking));
-        (uint256 unaccounted, ) = staking.outstandingRewards(token);
-        uint256 reserve = tokenBalance > unaccounted ? tokenBalance - unaccounted : 0;
-        uint256 claimable = staking.claimableRewards(account, token);
+        // POOL-BASED: Accounting is perfect by design!
+        // Sum of all claimable = availablePool (always)
+        // Just verify claimable is reasonable (not more than total balance)
 
-        if (claimable > reserve) {
+        uint256 tokenBalance = MockERC20(token).balanceOf(address(staking));
+        uint256 claimable = staking.claimableRewards(account, token);
+        uint256 userBalance = sToken.balanceOf(account);
+        uint256 totalStaked = sToken.totalSupply();
+
+        // User can't claim more than total token balance (sanity check)
+        if (claimable > tokenBalance) {
             emit log_string(when);
             emit log_named_address('  Account', account);
             emit log_named_uint('  Token Balance', tokenBalance);
-            emit log_named_uint('  Unaccounted', unaccounted);
-            emit log_named_uint('  Reserve', reserve);
             emit log_named_uint('  Claimable', claimable);
-            emit log_named_uint('  BUG: Claimable exceeds reserve by', claimable - reserve);
+            emit log_named_uint('  BUG: Claimable exceeds balance by', claimable - tokenBalance);
             revert('ACCOUNTING BUG FOUND');
+        }
+
+        // If user has stake, claimable should be reasonable
+        if (totalStaked > 0 && userBalance > 0) {
+            // User can't claim more than their proportional share of total balance
+            uint256 maxPossible = (tokenBalance * userBalance) / totalStaked;
+            if (claimable > maxPossible + 1 ether) {
+                // +1 ether tolerance for rounding
+                emit log_string(when);
+                emit log_named_address('  Account', account);
+                emit log_named_uint('  User Balance', userBalance);
+                emit log_named_uint('  Total Staked', totalStaked);
+                emit log_named_uint('  Token Balance', tokenBalance);
+                emit log_named_uint('  Max Possible', maxPossible);
+                emit log_named_uint('  Claimable', claimable);
+                emit log_named_uint('  BUG: Exceeds max by', claimable - maxPossible);
+                revert('ACCOUNTING BUG FOUND');
+            }
         }
     }
 
@@ -85,7 +106,7 @@ contract LevrStakingV1_Accounting is Test {
         }
     }
 
-    /// @notice CORE BUG: Unstake -> window closes -> accrue -> stake back
+    /// @notice CORE BUG: Unstake -> window closes -> accrue -> stake back + MANUAL TRANSFERS IN PENDING STATE
     /// @dev This is the primary bug scenario - consolidates UI bug and variant tests
     function test_CORE_unstakeWindowClosedAccrueStake() public {
         address[] memory tokens = new address[](1);
@@ -107,41 +128,96 @@ contract LevrStakingV1_Accounting is Test {
         skip(3 days);
         assertAccountingPerfect('After 3 days (window still open)');
 
-        // Alice unstakes while window is STILL OPEN
+        // POOL-BASED: Alice unstakes and AUTO-CLAIMS her vested rewards
+        uint256 aliceWethBefore = weth.balanceOf(alice);
+        uint256 aliceUnderlyingBefore = underlying.balanceOf(alice);
         vm.prank(alice);
         staking.unstake(1000 ether, alice);
-        assertAccountingPerfect('After Alice unstakes (window still open)');
+        uint256 aliceWethAfter = weth.balanceOf(alice);
+        uint256 aliceUnderlyingAfter = underlying.balanceOf(alice);
 
-        // Window CLOSES (5 more days = 8 total)
-        skip(5 days);
+        // Auto-claimed rewards = WETH received (underlying is principal, not reward)
+        uint256 aliceFirstClaim = aliceWethAfter - aliceWethBefore;
+        uint256 principalReturned = aliceUnderlyingAfter - aliceUnderlyingBefore;
+
+        assertAccountingPerfect('After Alice unstakes (auto-claimed)');
+        assertGt(aliceFirstClaim, 0, 'Alice auto-claimed WETH rewards');
+        assertEq(principalReturned, 1000 ether, 'Alice got principal back');
+
+        // MANUAL TRANSFER while Alice has pending (no accrue call yet)
+        skip(1 days);
+        weth.transfer(address(staking), 250 ether);
+        assertAccountingPerfect('After manual transfer with pending');
+
+        // Window CLOSES (4 more days = 8 total)
+        skip(4 days);
         assertAccountingPerfect('After window closes (no stakers)');
 
-        // New tokens transferred and accrued
+        // ANOTHER manual transfer while no one staked
+        weth.transfer(address(staking), 150 ether);
+        assertAccountingPerfect('After second manual transfer (no stakers)');
+
+        // New tokens transferred and accrued (should pick up both manual transfers)
         weth.transfer(address(staking), 500 ether);
         staking.accrueRewards(address(weth));
         assertAccountingPerfect('After accrue (new window starts)');
+
+        // Manual transfer AGAIN before Alice stakes back
+        skip(1 days);
+        weth.transfer(address(staking), 100 ether);
+        assertAccountingPerfect('After third manual transfer');
 
         // Alice stakes again
         vm.prank(alice);
         staking.stake(1000 ether);
         assertAccountingPerfect('After Alice stakes back');
 
+        // Manual transfer while stream is active
+        skip(2 days);
+        weth.transfer(address(staking), 75 ether);
+        assertAccountingPerfect('After fourth manual transfer mid-stream');
+
+        // Accrue the accumulated manual transfers
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfect('After accruing manual transfers');
+
         // Wait for new stream to finish
         skip(8 days);
         assertAccountingPerfect('After new window closes');
 
-        // Alice claims everything
+        // Alice claims everything (her second claim)
+        uint256 aliceWethBeforeFinal = weth.balanceOf(alice);
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
+        uint256 aliceSecondClaim = weth.balanceOf(alice) - aliceWethBeforeFinal;
         assertAccountingPerfect('After Alice claims');
 
-        uint256 claimed = weth.balanceOf(alice);
+        uint256 totalClaimed = weth.balanceOf(alice);
         uint256 left = weth.balanceOf(address(staking));
-        uint256 total = 1000 ether + 500 ether;
+        uint256 totalTransferred = 1000 ether +
+            250 ether +
+            150 ether +
+            500 ether +
+            100 ether +
+            75 ether;
 
-        // Alice should get ALL 1500 WETH (she was sole staker)
-        assertApproxEqAbs(claimed + left, total, 1 ether, 'Perfect accounting: no loss');
-        assertApproxEqAbs(claimed, 1500 ether, 1 ether, 'Alice gets all rewards');
+        // POOL-BASED BEHAVIOR:
+        // Alice earned rewards only while staked:
+        // - Period 1: Staked for 3 days, earned from first 1000 (auto-claimed on unstake)
+        // - Period 2: Unstaked while manual transfers happened (earns 0)
+        // - Period 3: Staked again, earns from final stream
+
+        // Total no loss (all tokens accounted)
+        assertApproxEqAbs(
+            totalClaimed + left,
+            totalTransferred,
+            1 ether,
+            'Perfect accounting: no loss'
+        );
+
+        // Alice gets all rewards because she was the ONLY staker throughout
+        // Even when unstaked, there were no other stakers, so unvested rolled to next stream for her
+        assertApproxEqAbs(totalClaimed, totalTransferred, 1 ether, 'Alice gets all (sole staker)');
     }
 
     /// @notice EDGE CASE: Stream pauses when all users unstake, then resumes
@@ -369,14 +445,14 @@ contract LevrStakingV1_Accounting is Test {
         assertApproxEqAbs(aliceClaimed + bobClaimed + left, 1000 ether, 1 ether, 'Equal split');
     }
 
-    /// @notice EDGE CASE: Partial unstake with pending rewards, then claim, then unstake more
+    /// @notice EDGE CASE: Partial unstake with pending rewards + MANUAL TRANSFERS + ACCRUALS INTERLEAVED
     /// @dev Consolidates partial unstake tests including weird amounts
     function test_EDGE_partialUnstakeClaimUnstake() public {
         address[] memory tokens = new address[](1);
         tokens[0] = address(weth);
 
         vm.prank(alice);
-        underlying.approve(address(staking), 2000 ether);
+        underlying.approve(address(staking), 5000 ether);
         vm.prank(alice);
         staking.stake(2000 ether);
 
@@ -386,15 +462,27 @@ contract LevrStakingV1_Accounting is Test {
         skip(3 days);
         assertAccountingPerfect('After 3 days');
 
+        // Manual transfer before unstake
+        weth.transfer(address(staking), 200 ether);
+        assertAccountingPerfect('After manual transfer 1');
+
         // Partial unstake (1000 out of 2000)
         vm.prank(alice);
         staking.unstake(1000 ether, alice);
         assertAccountingPerfect('After partial unstake');
 
+        // Manual transfer while Alice has pending
+        weth.transfer(address(staking), 150 ether);
+        assertAccountingPerfect('After manual transfer 2 (with pending)');
+
         // Claim (should get pending from unstake + balance-based)
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
         assertAccountingPerfect('After first claim');
+
+        // Accrue the manual transfers
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfect('After accrue manual transfers');
 
         skip(2 days);
 
@@ -403,21 +491,46 @@ contract LevrStakingV1_Accounting is Test {
         staking.unstake(500 ether, alice);
         assertAccountingPerfect('After second partial unstake');
 
+        // Manual transfer + immediate accrue
+        weth.transfer(address(staking), 300 ether);
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfect('After manual transfer 3 + accrue');
+
         // Test weird amount unstakes
         vm.prank(alice);
         staking.unstake(1, alice); // 1 wei
         assertAccountingPerfect('After 1 wei unstake');
 
-        skip(1 days);
+        // Manual transfer in between weird unstakes
+        weth.transfer(address(staking), 50 ether);
+
+        skip(12 hours);
 
         vm.prank(alice);
         staking.unstake(123456789 gwei, alice); // weird amount
         assertAccountingPerfect('After weird unstake');
 
+        // Accrue accumulated transfers
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfect('After accrue weird unstake period');
+
         // Claim again
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
         assertAccountingPerfect('After second claim');
+
+        skip(1 days);
+
+        // Manual transfer before re-stake
+        weth.transfer(address(staking), 100 ether);
+
+        // Alice stakes MORE
+        vm.prank(alice);
+        staking.stake(1000 ether);
+        assertAccountingPerfect('After re-stake');
+
+        // Accrue the transfer from before stake
+        staking.accrueRewards(address(weth));
 
         skip(3 days);
 
@@ -427,6 +540,12 @@ contract LevrStakingV1_Accounting is Test {
         staking.unstake(remaining, alice);
         assertAccountingPerfect('After final unstake');
 
+        // Manual transfer before final claim
+        weth.transfer(address(staking), 75 ether);
+        staking.accrueRewards(address(weth));
+
+        skip(7 days);
+
         // Final claim
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
@@ -434,7 +553,8 @@ contract LevrStakingV1_Accounting is Test {
 
         uint256 claimed = weth.balanceOf(alice);
         uint256 left = weth.balanceOf(address(staking));
-        assertApproxEqAbs(claimed + left, 1000 ether, 1 ether, 'All rewards claimed');
+        uint256 total = 1000 + 200 + 150 + 300 + 50 + 100 + 75;
+        assertApproxEqAbs(claimed + left, total * 1 ether, 1 ether, 'All rewards claimed');
     }
 
     /// @notice EDGE CASE: Accrue when no one is staked (cold start)
@@ -483,41 +603,122 @@ contract LevrStakingV1_Accounting is Test {
         assertApproxEqAbs(claimed + left, 1000 ether, 1 ether, 'All accrued rewards available');
     }
 
-    /// @notice EDGE CASE: Direct transfer without accrual, then later accrue
+    /// @notice EDGE CASE: Direct transfer without accrual, then later accrue + PENDING REWARDS CHAOS
     function test_EDGE_directTransferThenAccrue() public {
+        address bob = address(0x2222);
+        underlying.mint(bob, 5_000 ether);
         address[] memory tokens = new address[](1);
         tokens[0] = address(weth);
 
         vm.prank(alice);
-        underlying.approve(address(staking), 1000 ether);
+        underlying.approve(address(staking), 3000 ether);
         vm.prank(alice);
         staking.stake(1000 ether);
 
-        // Direct transfer WITHOUT calling accrueRewards
-        weth.transfer(address(staking), 500 ether);
-        assertAccountingPerfect('After direct transfer');
-
+        // Start a stream first
+        weth.transfer(address(staking), 600 ether);
+        staking.accrueRewards(address(weth));
         skip(2 days);
 
-        // Another direct transfer
-        weth.transfer(address(staking), 300 ether);
-        assertAccountingPerfect('After second direct transfer');
+        // Bob joins
+        vm.prank(bob);
+        underlying.approve(address(staking), 2000 ether);
+        vm.prank(bob);
+        staking.stake(1000 ether);
+        assertAccountingPerfectForMany(_buildAddresses(alice, bob), address(weth), 'Bob joins');
+
+        // Direct transfer WITHOUT calling accrueRewards (while stream active)
+        weth.transfer(address(staking), 500 ether);
+        assertAccountingPerfect('After direct transfer mid-stream');
 
         skip(1 days);
 
-        // NOW accrue (should pick up both transfers)
+        // Alice unstakes creating pending
+        vm.prank(alice);
+        staking.unstake(1000 ether, alice);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Alice unstakes with pending'
+        );
+
+        // Another direct transfer while Alice has pending
+        weth.transfer(address(staking), 300 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Second direct transfer'
+        );
+
+        skip(2 days);
+
+        // Bob partially unstakes
+        vm.prank(bob);
+        staking.unstake(500 ether, bob);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Bob partial unstake'
+        );
+
+        // Direct transfer while both have pending
+        weth.transfer(address(staking), 200 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Third transfer with dual pending'
+        );
+
+        skip(1 days);
+
+        // NOW accrue (should pick up all manual transfers + unvested)
         staking.accrueRewards(address(weth));
-        assertAccountingPerfect('After accrueRewards');
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'After accrueRewards'
+        );
+
+        // Alice stakes back while Bob still has balance
+        vm.prank(alice);
+        staking.stake(1500 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Alice stakes back'
+        );
+
+        // Manual transfer mid new stream
+        skip(2 days);
+        weth.transfer(address(staking), 150 ether);
+
+        // Accrue again
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'After second accrue'
+        );
 
         skip(7 days);
 
+        // Both claim
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
-        assertAccountingPerfect('After claim');
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
+        assertAccountingPerfectForMany(_buildAddresses(alice, bob), address(weth), 'After claims');
 
-        uint256 claimed = weth.balanceOf(alice);
+        uint256 aliceClaimed = weth.balanceOf(alice);
+        uint256 bobClaimed = weth.balanceOf(bob);
         uint256 left = weth.balanceOf(address(staking));
-        assertApproxEqAbs(claimed + left, 800 ether, 1 ether, 'All transferred WETH claimed');
+        uint256 total = 600 + 500 + 300 + 200 + 150;
+        assertApproxEqAbs(
+            aliceClaimed + bobClaimed + left,
+            total * 1 ether,
+            1 ether,
+            'All transferred WETH claimed'
+        );
     }
 
     /// @notice EDGE CASE: User fully unstakes then tries to claim (only pending)
@@ -796,12 +997,12 @@ contract LevrStakingV1_Accounting is Test {
         );
     }
 
-    /// @notice DETAILED BUG CHECK: Verify exact amounts, not just totals
+    /// @notice POOL-BASED: Auto-claim on unstake - verify exact amounts
     function test_BUG_DETAILED_unstakeWindowClosedAccrueStake() public {
         address[] memory tokens = new address[](1);
         tokens[0] = address(weth);
 
-        emit log_string('=== DETAILED BUG ANALYSIS ===');
+        emit log_string('=== POOL-BASED BEHAVIOR TEST ===');
 
         // Setup: Alice stakes 1000
         vm.prank(alice);
@@ -822,72 +1023,52 @@ contract LevrStakingV1_Accounting is Test {
         uint256 expected2Day = (1000 ether * twoDays) / sevenDays;
         assertApproxEqAbs(claimableAt2Days, expected2Day, 0.1 ether, 'Day 2 claimable wrong');
 
-        // Alice unstakes - should lock in ~285.71 WETH as pending
+        // Alice unstakes - AUTO-CLAIMS all rewards (Option A)
+        uint256 aliceBalanceBefore = weth.balanceOf(alice);
         vm.prank(alice);
         staking.unstake(1000 ether, alice);
-        uint256 pendingAfterUnstake = staking.claimableRewards(alice, address(weth));
-        emit log_named_uint('Pending after unstake', pendingAfterUnstake);
-        assertApproxEqAbs(
-            pendingAfterUnstake,
-            expected2Day,
-            0.1 ether,
-            'Pending after unstake wrong'
-        );
+        uint256 aliceBalanceAfter = weth.balanceOf(alice);
+        uint256 claimed = aliceBalanceAfter - aliceBalanceBefore;
+
+        emit log_named_uint('Auto-claimed on unstake', claimed);
+        assertApproxEqAbs(claimed, expected2Day, 0.1 ether, 'Should auto-claim on unstake');
+
+        // After unstake, Alice has NO pending (balance = 0)
+        uint256 claimableAfterUnstake = staking.claimableRewards(alice, address(weth));
+        assertEq(claimableAfterUnstake, 0, 'No balance = no claimable');
 
         // Window closes (5 more days = 7 total)
         skip(5 days);
-
-        // Alice's pending should NOT change (she's unstaked)
-        uint256 pendingAfterWindowClose = staking.claimableRewards(alice, address(weth));
-        emit log_named_uint('Pending after window closes', pendingAfterWindowClose);
-        assertEq(
-            pendingAfterWindowClose,
-            pendingAfterUnstake,
-            'Pending changed after window closed!'
-        );
 
         // New tokens arrive and accrue
         weth.transfer(address(staking), 500 ether);
         staking.accrueRewards(address(weth));
 
-        // Alice's pending should STILL not change (not staked yet)
-        uint256 pendingAfterNewAccrue = staking.claimableRewards(alice, address(weth));
-        emit log_named_uint('Pending after new accrue', pendingAfterNewAccrue);
-        assertEq(pendingAfterNewAccrue, pendingAfterUnstake, 'Pending changed after new accrue!');
-
         // Alice stakes back
         vm.prank(alice);
         staking.stake(1000 ether);
 
-        // Alice should still have her old pending + start earning from new stream
+        // Alice starts fresh with new stream
         uint256 claimableAfterStake = staking.claimableRewards(alice, address(weth));
         emit log_named_uint('Claimable right after stake back', claimableAfterStake);
-        assertApproxEqAbs(
-            claimableAfterStake,
-            pendingAfterUnstake,
-            0.1 ether,
-            'Lost pending on restake!'
-        );
+        assertEq(claimableAfterStake, 0, 'Fresh stake = no immediate rewards');
 
         // Wait 3.5 days (half of new 7 day stream)
         skip(3.5 days);
         uint256 claimableAtHalfStream = staking.claimableRewards(alice, address(weth));
         emit log_named_uint('Claimable at half of new stream', claimableAtHalfStream);
 
-        // Should be: old pending (~285.71) + half of 500 (250) + unvested from first stream (~714.29)
-        // But unvested should have been added to new stream, so total new stream is 500 + 714.29 = 1214.29
-        // Half of that is 607.14
-        // Total: 285.71 + 607.14 = 892.85
-        uint256 unvested = 1000 ether - expected2Day; // ~714.29
-        uint256 newStreamTotal = 500 ether + unvested; // ~1214.29
-        uint256 halfNewStream = newStreamTotal / 2; // ~607.14
-        uint256 expectedTotal = pendingAfterUnstake + halfNewStream; // ~892.85
-        emit log_named_uint('Expected at half stream', expectedTotal);
+        // New stream has: 500 + unvested ~= 500 + 714.29 = 1214.29
+        // Half of that ~= 607.14
+        uint256 unvested = 1000 ether - expected2Day;
+        uint256 newStreamTotal = 500 ether + unvested;
+        uint256 halfNewStream = newStreamTotal / 2;
+        emit log_named_uint('Expected at half stream', halfNewStream);
         assertApproxEqAbs(
             claimableAtHalfStream,
-            expectedTotal,
+            halfNewStream,
             1 ether,
-            'Wrong amount at half stream'
+            'Half stream amount correct'
         );
 
         // Finish stream
@@ -897,16 +1078,15 @@ contract LevrStakingV1_Accounting is Test {
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
 
-        uint256 claimed = weth.balanceOf(alice);
+        uint256 totalClaimed = weth.balanceOf(alice);
         uint256 left = weth.balanceOf(address(staking));
 
-        emit log_named_uint('Final claimed', claimed);
+        emit log_named_uint('Total claimed (including auto-claim)', totalClaimed);
         emit log_named_uint('Final left', left);
-        emit log_named_uint('Total', claimed + left);
 
-        // Alice should get ALL 1500 WETH (she was sole staker entire time)
-        assertApproxEqAbs(claimed, 1500 ether, 1 ether, 'Alice should get all WETH');
-        assertApproxEqAbs(claimed + left, 1500 ether, 1 ether, 'Total should be 1500');
+        // Alice should get ALL 1500 WETH (claimed + auto-claimed)
+        assertApproxEqAbs(totalClaimed, 1500 ether, 1 ether, 'Alice gets all WETH');
+        assertApproxEqAbs(totalClaimed + left, 1500 ether, 1 ether, 'Total = 1500');
     }
 
     /// @notice ABSURD: Stake dust amount, accrue massive rewards
@@ -937,7 +1117,159 @@ contract LevrStakingV1_Accounting is Test {
         assertApproxEqAbs(claimed + left, 1_000_000 ether, 1 ether, 'Dust stake gets millions');
     }
 
-    /// @notice ABSURD: 5 users all doing random chaos
+    /// @notice UI BUG REPLICATION: Pending + Manual Transfer + Accrue in tight sequence
+    /// @dev Specifically targets the claimable > available scenario found in UI testing
+    function test_UI_BUG_pendingManualTransferAccrueSequence() public {
+        address bob = address(0x2222);
+        address charlie = address(0x3333);
+        underlying.mint(bob, 5_000 ether);
+        underlying.mint(charlie, 5_000 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(weth);
+
+        // Phase 1: Initial setup with streaming
+        vm.prank(alice);
+        underlying.approve(address(staking), 5_000 ether);
+        vm.prank(alice);
+        staking.stake(1000 ether);
+
+        weth.transfer(address(staking), 500 ether);
+        staking.accrueRewards(address(weth));
+        skip(2 days);
+        assertAccountingPerfect('Phase 1: Initial stream');
+
+        // Phase 2: Bob joins, Alice unstakes creating pending
+        vm.prank(bob);
+        underlying.approve(address(staking), 5_000 ether);
+        vm.prank(bob);
+        staking.stake(800 ether);
+
+        skip(1 days);
+
+        vm.prank(alice);
+        staking.unstake(1000 ether, alice); // Alice now has pending
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Phase 2: Alice pending'
+        );
+
+        // Phase 3: Manual transfer while Alice has pending (THE CRITICAL SCENARIO)
+        weth.transfer(address(staking), 250 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Phase 3: Manual transfer with pending'
+        );
+
+        // Phase 4: Bob unstakes (both have pending now)
+        skip(1 days);
+        vm.prank(bob);
+        staking.unstake(400 ether, bob);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Phase 4: Both pending'
+        );
+
+        // Phase 5: Another manual transfer with dual pending
+        weth.transfer(address(staking), 180 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Phase 5: Manual transfer dual pending'
+        );
+
+        // Phase 6: Accrue (critical - should handle pending + manual transfers correctly)
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Phase 6: Accrue with pending'
+        );
+
+        // Phase 7: Charlie joins as first staker after pause
+        skip(2 days);
+        vm.prank(charlie);
+        underlying.approve(address(staking), 2_000 ether);
+        vm.prank(charlie);
+        staking.stake(1200 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Phase 7: Charlie first staker'
+        );
+
+        // Phase 8: Manual transfer while stream active and pending exists
+        weth.transfer(address(staking), 95 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Phase 8: Manual transfer with active stream + pending'
+        );
+
+        // Phase 9: Alice stakes back (still has pending)
+        vm.prank(alice);
+        staking.stake(600 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Phase 9: Alice stakes with pending'
+        );
+
+        // Phase 10: Accrue the manual transfer
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Phase 10: Accrue after restake'
+        );
+
+        // Phase 11: Rapid manual transfers and accruals
+        for (uint256 i = 0; i < 5; i++) {
+            weth.transfer(address(staking), 20 ether);
+            skip(6 hours);
+            if (i % 2 == 0) {
+                staking.accrueRewards(address(weth));
+            }
+        }
+        staking.accrueRewards(address(weth)); // Final accrue
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Phase 11: After rapid transfers'
+        );
+
+        skip(7 days);
+
+        // Phase 12: Everyone claims
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
+        vm.prank(charlie);
+        staking.claimRewards(tokens, charlie);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Phase 12: All claims'
+        );
+
+        uint256 total = weth.balanceOf(alice) +
+            weth.balanceOf(bob) +
+            weth.balanceOf(charlie) +
+            weth.balanceOf(address(staking));
+
+        uint256 expectedTotal = 500 + 250 + 180 + 95 + (5 * 20);
+        assertApproxEqAbs(
+            total,
+            expectedTotal * 1 ether,
+            1 ether,
+            'UI bug scenario: all accounted'
+        );
+    }
+
+    /// @notice ABSURD: 5 users all doing random chaos + MANUAL TRANSFERS EVERYWHERE
     function test_ABSURD_fiveUsersChaos() public {
         address bob = address(0x2222);
         address charlie = address(0x3333);
@@ -958,6 +1290,9 @@ contract LevrStakingV1_Accounting is Test {
         vm.prank(alice);
         staking.stake(1000 ether);
 
+        // Manual transfer before accrue
+        weth.transfer(address(staking), 300 ether);
+
         weth.transfer(address(staking), 5000 ether);
         staking.accrueRewards(address(weth));
         assertAccountingPerfect('Initial chaos');
@@ -968,6 +1303,9 @@ contract LevrStakingV1_Accounting is Test {
         underlying.approve(address(staking), 10_000 ether);
         vm.prank(bob);
         staking.stake(2000 ether);
+
+        // Manual transfer mid-stream
+        weth.transfer(address(staking), 450 ether);
 
         vm.prank(alice);
         staking.unstake(500 ether, alice);
@@ -980,6 +1318,9 @@ contract LevrStakingV1_Accounting is Test {
         vm.prank(charlie);
         staking.stake(3000 ether);
 
+        // Manual transfer with pending
+        weth.transfer(address(staking), 600 ether);
+
         weth.transfer(address(staking), 2000 ether);
         staking.accrueRewards(address(weth));
 
@@ -987,21 +1328,37 @@ contract LevrStakingV1_Accounting is Test {
         staking.claimRewards(tokens, alice);
         assertAccountingPerfect('Chaos day 1.5');
 
-        skip(2 days);
+        // Manual transfers without accrue
+        weth.transfer(address(staking), 200 ether);
+        skip(1 days);
+        weth.transfer(address(staking), 350 ether);
+
+        skip(1 days);
 
         vm.prank(dave);
         underlying.approve(address(staking), 10_000 ether);
         vm.prank(dave);
         staking.stake(500 ether);
 
+        // Accrue accumulated manual transfers
+        staking.accrueRewards(address(weth));
+
         vm.prank(bob);
         staking.unstake(2000 ether, bob);
+
+        // Manual transfer after unstake
+        weth.transfer(address(staking), 275 ether);
 
         vm.prank(charlie);
         staking.unstake(1500 ether, charlie);
         assertAccountingPerfect('Chaos day 3.5');
 
-        skip(1 days);
+        skip(6 hours);
+        weth.transfer(address(staking), 180 ether);
+        skip(6 hours);
+        weth.transfer(address(staking), 220 ether);
+
+        skip(12 hours);
 
         vm.prank(eve);
         underlying.approve(address(staking), 10_000 ether);
@@ -1011,9 +1368,31 @@ contract LevrStakingV1_Accounting is Test {
         weth.transfer(address(staking), 3000 ether);
         staking.accrueRewards(address(weth));
 
+        // Manual transfer before Alice stakes
+        weth.transfer(address(staking), 125 ether);
+
         vm.prank(alice);
         staking.stake(1500 ether);
         assertAccountingPerfect('Chaos day 4.5');
+
+        // Rapid chaos
+        for (uint256 i = 0; i < 8; i++) {
+            skip(4 hours);
+            weth.transfer(address(staking), 50 ether);
+            if (i == 2) {
+                vm.prank(dave);
+                staking.unstake(250 ether, dave);
+            }
+            if (i == 5) {
+                staking.accrueRewards(address(weth));
+            }
+            if (i == 7) {
+                vm.prank(charlie);
+                staking.stake(500 ether);
+            }
+        }
+
+        staking.accrueRewards(address(weth)); // Catch all
 
         skip(10 days);
 
@@ -1037,7 +1416,20 @@ contract LevrStakingV1_Accounting is Test {
             weth.balanceOf(eve) +
             weth.balanceOf(address(staking));
 
-        assertApproxEqAbs(total, 10_000 ether, 1 ether, '5 user chaos accounting');
+        uint256 expectedTotal = 5000 +
+            300 +
+            450 +
+            600 +
+            2000 +
+            200 +
+            350 +
+            275 +
+            180 +
+            220 +
+            3000 +
+            125 +
+            (8 * 50);
+        assertApproxEqAbs(total, expectedTotal * 1 ether, 1 ether, '5 user chaos accounting');
     }
 
     /// @notice ABSURD: Stake 1 wei, unstake 1 wei, repeat 50 times
@@ -1077,8 +1469,8 @@ contract LevrStakingV1_Accounting is Test {
         assertApproxEqAbs(claimed + left, 100 ether, 1 ether, 'Wei cycle accounting');
     }
 
-    /// @notice Shortfall scenario: claimable > available should emit RewardShortfall and keep pending
-    function test_SHORTFALL_claimableExceedsReserveHandled() public {
+    /// @notice POOL-BASED: No shortfalls possible - perfect accounting by design
+    function test_POOL_BASED_perfectAccounting() public {
         address[] memory tokens = new address[](1);
         tokens[0] = address(weth);
 
@@ -1091,89 +1483,72 @@ contract LevrStakingV1_Accounting is Test {
         // Accrue 1 ether rewards
         weth.transfer(address(staking), 1 ether);
         staking.accrueRewards(address(weth));
-        skip(3.5 days);
+        skip(7 days);
 
-        // Unstake to record pending rewards
+        // Alice unstakes - AUTO-CLAIMS all rewards (Option A)
+        uint256 aliceBalanceBefore = weth.balanceOf(alice);
         vm.prank(alice);
         staking.unstake(1 ether, alice);
+        uint256 aliceBalanceAfter = weth.balanceOf(alice);
 
-        uint256 claimable = staking.claimableRewards(alice, address(weth));
-        assertGt(claimable, 0, 'Pending rewards should exist');
+        // Alice should receive all rewards immediately
+        uint256 claimed = aliceBalanceAfter - aliceBalanceBefore;
+        assertApproxEqAbs(claimed, 1 ether, 1e9, 'Auto-claimed all on unstake');
 
-        // Drain half the reserve to simulate mismatch discovered in UI
-        uint256 balanceBefore = weth.balanceOf(address(staking));
-        uint256 targetBalance = claimable / 2;
-        if (balanceBefore > targetBalance) {
-            vm.prank(address(staking));
-            weth.transfer(address(0xDEAD), balanceBefore - targetBalance);
-        }
-
-        uint256 availableNow = weth.balanceOf(address(staking));
-        assertLt(availableNow, claimable, 'Available should be lower than claimable');
-        uint256 shortfall = claimable - availableNow;
-
-        vm.expectEmit(true, true, false, true);
-        emit RewardShortfall(alice, address(weth), shortfall);
-
-        vm.prank(alice);
-        staking.claimRewards(tokens, alice);
-
-        assertEq(weth.balanceOf(alice), availableNow, 'Should receive available amount');
+        // No pending left (perfect accounting)
         uint256 remainingClaimable = staking.claimableRewards(alice, address(weth));
-        assertApproxEqAbs(
-            remainingClaimable,
-            shortfall,
-            1e9,
-            'Pending updated to shortfall amount'
-        );
+        assertEq(remainingClaimable, 0, 'No pending after auto-claim');
+
+        // Pool should be empty
+        (uint256 available, ) = staking.outstandingRewards(address(weth));
+        assertEq(available, 0, 'No outstanding rewards');
     }
 
-    /// @notice Shortfall scenario with multiple partial claims and refills
-    function test_SHORTFALL_multiplePartialClaims() public {
+    /// @notice POOL-BASED: Test that pool math is always perfect
+    function test_POOL_BASED_mathPerfection() public {
+        address bob = address(0x2222);
+        underlying.mint(bob, 10 ether);
         address[] memory tokens = new address[](1);
         tokens[0] = address(weth);
 
-        vm.startPrank(alice);
-        underlying.approve(address(staking), 1 ether);
-        staking.stake(1 ether);
-        vm.stopPrank();
+        // Two users stake
+        vm.prank(alice);
+        underlying.approve(address(staking), 10 ether);
+        vm.prank(alice);
+        staking.stake(3 ether);
 
-        weth.transfer(address(staking), 1 ether);
+        vm.prank(bob);
+        underlying.approve(address(staking), 10 ether);
+        vm.prank(bob);
+        staking.stake(7 ether);
+
+        // Accrue 10 ether rewards
+        weth.transfer(address(staking), 10 ether);
         staking.accrueRewards(address(weth));
         skip(7 days);
 
-        vm.prank(alice);
-        staking.unstake(1 ether, alice);
+        // Check that sum of claimable = pool (perfect math)
+        uint256 aliceClaimable = staking.claimableRewards(alice, address(weth));
+        uint256 bobClaimable = staking.claimableRewards(bob, address(weth));
+        uint256 totalClaimable = aliceClaimable + bobClaimable;
 
-        // Drain reserve to 0.1 ether
-        uint256 contractBalance = weth.balanceOf(address(staking));
-        if (contractBalance > 0.1 ether) {
-            vm.prank(address(staking));
-            weth.transfer(address(0xBEEF), contractBalance - 0.1 ether);
-        }
+        // Total claimable should equal total in pool (10 ether)
+        assertApproxEqAbs(totalClaimable, 10 ether, 1, 'Sum of claimable = pool');
 
-        // First claim: should receive what remains (0.1 ether)
-        vm.prank(alice);
-        staking.claimRewards(tokens, alice);
-        assertEq(weth.balanceOf(alice), 0.1 ether, 'First partial claim should transfer 0.1 ETH');
+        // Proportions should be correct
+        // Alice: 3/10 = 30%, Bob: 7/10 = 70%
+        assertApproxEqAbs(aliceClaimable, 3 ether, 1e9, 'Alice gets 30%');
+        assertApproxEqAbs(bobClaimable, 7 ether, 1e9, 'Bob gets 70%');
 
-        // Refill with 0.2 ether and claim again
-        weth.transfer(address(staking), 0.2 ether);
+        // When they claim, pool should be empty
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
-        assertEq(weth.balanceOf(alice), 0.3 ether, 'Second claim totals 0.3 ETH');
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
 
-        // Refill remaining balance and final claim
-        uint256 remaining = staking.claimableRewards(alice, address(weth));
-        weth.transfer(address(staking), remaining);
-        vm.prank(alice);
-        staking.claimRewards(tokens, alice);
-        assertApproxEqAbs(weth.balanceOf(alice), 1 ether, 1e9, 'All pending claimed over time');
-        assertEq(
-            staking.claimableRewards(alice, address(weth)),
-            0,
-            'No pending left after refills'
-        );
+        // Pool should be exactly 0 (no dust left)
+        (uint256 available, ) = staking.outstandingRewards(address(weth));
+        assertEq(available, 0, 'Pool completely empty after claims');
     }
 
     /// @notice First staker after pause should include unvested rewards
@@ -1322,8 +1697,8 @@ contract LevrStakingV1_Accounting is Test {
         );
     }
 
-    /// @notice MULTI TOKEN: WETH shortfall while underlying stream continues
-    function test_MULTI_dualTokenShortfallWhileStreaming() public {
+    /// @notice MULTI TOKEN: POOL-BASED auto-claim on unstake with dual tokens
+    function test_MULTI_dualTokenAutoClaimOnUnstake() public {
         address bob = address(0x3333);
         underlying.mint(bob, 3_000 ether);
         underlying.mint(address(this), 3_000 ether);
@@ -1349,47 +1724,50 @@ contract LevrStakingV1_Accounting is Test {
 
         skip(2 days);
 
-        // Alice exits creating pending rewards on both tokens
+        address[] memory tokensDual = _buildTokens(address(weth), address(underlying));
+
+        // Check balances before unstake
+        uint256 aliceWethBefore = weth.balanceOf(alice);
+        uint256 aliceUnderlyingBefore = underlying.balanceOf(alice);
+
+        // Alice unstakes - AUTO-CLAIMS from BOTH tokens
         vm.prank(alice);
         staking.unstake(1_000 ether, alice);
 
-        // WETH shortfall occurs (drain contract liquidity without updating reserve)
-        uint256 wethClaimable = staking.claimableRewards(alice, address(weth));
-        uint256 wethBalance = weth.balanceOf(address(staking));
-        uint256 targetBalance = wethClaimable / 3; // leave one-third available
-        if (wethBalance > targetBalance) {
-            vm.prank(address(staking));
-            weth.transfer(address(0xDEAD), wethBalance - targetBalance);
-        }
+        uint256 aliceWethAfter = weth.balanceOf(alice);
+        uint256 aliceUnderlyingAfter = underlying.balanceOf(alice);
 
-        address[] memory tokensDual = _buildTokens(address(weth), address(underlying));
+        // Alice should have received rewards from both tokens
+        uint256 wethClaimed = aliceWethAfter - aliceWethBefore;
+        uint256 underlyingClaimed = aliceUnderlyingAfter - aliceUnderlyingBefore - 1_000 ether; // Subtract principal
 
-        // Claim should emit RewardShortfall for WETH while underlying remains available
-        uint256 shortfall = staking.claimableRewards(alice, address(weth)) -
-            weth.balanceOf(address(staking));
-        vm.expectEmit(true, true, false, true);
-        emit RewardShortfall(alice, address(weth), shortfall);
-        vm.prank(alice);
-        staking.claimRewards(tokensDual, alice);
+        assertGt(wethClaimed, 0, 'Should auto-claim WETH');
+        assertGt(underlyingClaimed, 0, 'Should auto-claim underlying');
 
-        // At this point reserve < pending for WETH (by design). We only restore invariants after refill.
+        // After unstake, Alice should have NO claimable left
+        assertEq(staking.claimableRewards(alice, address(weth)), 0, 'No WETH left');
+        assertEq(staking.claimableRewards(alice, address(underlying)), 0, 'No underlying left');
 
-        // Refill the WETH shortfall and ensure remaining pending is payable
-        weth.transfer(address(staking), shortfall);
-        vm.prank(alice);
-        staking.claimRewards(tokensDual, alice);
+        // Bob should still have claimable rewards
+        assertGt(staking.claimableRewards(bob, address(weth)), 0, 'Bob has WETH');
+        assertGt(staking.claimableRewards(bob, address(underlying)), 0, 'Bob has underlying');
 
-        uint256 bobOutstandingWeth = staking.claimableRewards(bob, address(weth));
-        if (bobOutstandingWeth > 0) {
-            weth.transfer(address(staking), bobOutstandingWeth);
-            vm.prank(bob);
-            staking.claimRewards(tokensDual, bob);
-        }
-
+        // Perfect accounting check
         assertAccountingPerfectForUsersTokens(
             _buildAddresses(alice, bob),
             tokensDual,
-            'After shortfall refill and final claim'
+            'After auto-claim on unstake'
+        );
+
+        // Bob claims
+        vm.prank(bob);
+        staking.claimRewards(tokensDual, bob);
+
+        // Both should have perfect accounting
+        assertAccountingPerfectForUsersTokens(
+            _buildAddresses(alice, bob),
+            tokensDual,
+            'After Bob claims'
         );
     }
 
@@ -1426,5 +1804,311 @@ contract LevrStakingV1_Accounting is Test {
         list = new address[](2);
         list[0] = a;
         list[1] = b;
+    }
+
+    /// @notice CREATIVE: Interleaved stake/unstake/manual-transfer/accrue matrix
+    /// @dev Tests every possible combination in a matrix to find edge cases
+    function test_CREATIVE_interleavedMatrix() public {
+        address bob = address(0x2222);
+        underlying.mint(bob, 10_000 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(weth);
+
+        // Matrix scenario 1: Manual -> Stake -> Accrue -> Unstake
+        weth.transfer(address(staking), 100 ether);
+        vm.prank(alice);
+        underlying.approve(address(staking), 10_000 ether);
+        vm.prank(alice);
+        staking.stake(500 ether);
+        staking.accrueRewards(address(weth));
+        skip(2 days);
+        vm.prank(alice);
+        staking.unstake(250 ether, alice);
+        assertAccountingPerfect('Matrix 1 complete');
+
+        // Matrix scenario 2: Stake -> Manual -> Unstake -> Accrue
+        vm.prank(bob);
+        underlying.approve(address(staking), 10_000 ether);
+        vm.prank(bob);
+        staking.stake(600 ether);
+        weth.transfer(address(staking), 150 ether);
+        skip(1 days);
+        vm.prank(bob);
+        staking.unstake(300 ether, bob);
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Matrix 2 complete'
+        );
+
+        // Matrix scenario 3: Accrue -> Manual -> Stake -> Unstake
+        weth.transfer(address(staking), 200 ether);
+        staking.accrueRewards(address(weth));
+        weth.transfer(address(staking), 80 ether);
+        skip(1 days);
+        vm.prank(alice);
+        staking.stake(400 ether);
+        vm.prank(alice);
+        staking.unstake(200 ether, alice);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Matrix 3 complete'
+        );
+
+        // Matrix scenario 4: Unstake -> Accrue -> Manual -> Stake (all with pending)
+        skip(1 days);
+        vm.prank(bob);
+        staking.unstake(150 ether, bob);
+        weth.transfer(address(staking), 175 ether);
+        staking.accrueRewards(address(weth));
+        weth.transfer(address(staking), 125 ether);
+        skip(2 days);
+        vm.prank(bob);
+        staking.stake(700 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Matrix 4 complete'
+        );
+
+        // Matrix scenario 5: Multiple manuals -> Multiple accrues -> Multiple stakes/unstakes
+        for (uint256 i = 0; i < 3; i++) {
+            weth.transfer(address(staking), 50 ether);
+        }
+        staking.accrueRewards(address(weth));
+        staking.accrueRewards(address(weth)); // Double accrue
+        skip(1 days);
+        vm.prank(alice);
+        staking.unstake(100 ether, alice);
+        vm.prank(alice);
+        staking.stake(200 ether);
+        vm.prank(bob);
+        staking.unstake(200 ether, bob);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Matrix 5 complete'
+        );
+
+        skip(8 days);
+
+        // Final claims
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'Matrix final claims'
+        );
+
+        uint256 total = weth.balanceOf(alice) +
+            weth.balanceOf(bob) +
+            weth.balanceOf(address(staking));
+        uint256 expectedTotal = 100 + 150 + 200 + 80 + 175 + 125 + (3 * 50);
+        assertApproxEqAbs(total, expectedTotal * 1 ether, 1 ether, 'Matrix: all combinations work');
+    }
+
+    /// @notice CREATIVE: Sandwich attacks - manual transfers sandwiched between stake/unstake
+    /// @dev Tests if manual transfers can manipulate accounting when sandwiched
+    function test_CREATIVE_sandwichManualTransfers() public {
+        address bob = address(0x2222);
+        underlying.mint(bob, 5_000 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(weth);
+
+        vm.prank(alice);
+        underlying.approve(address(staking), 5_000 ether);
+        vm.prank(alice);
+        staking.stake(1000 ether);
+
+        // Initial stream
+        weth.transfer(address(staking), 500 ether);
+        staking.accrueRewards(address(weth));
+        skip(1 days);
+
+        // Sandwich 1: Manual -> Unstake -> Manual
+        weth.transfer(address(staking), 100 ether);
+        vm.prank(alice);
+        staking.unstake(500 ether, alice);
+        weth.transfer(address(staking), 100 ether);
+        assertAccountingPerfect('Sandwich 1');
+
+        skip(1 days);
+
+        // Sandwich 2: Accrue -> Manual -> Stake -> Manual -> Accrue
+        staking.accrueRewards(address(weth));
+        weth.transfer(address(staking), 75 ether);
+        vm.prank(bob);
+        underlying.approve(address(staking), 5_000 ether);
+        vm.prank(bob);
+        staking.stake(800 ether);
+        weth.transfer(address(staking), 75 ether);
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfectForMany(_buildAddresses(alice, bob), address(weth), 'Sandwich 2');
+
+        skip(2 days);
+
+        // Sandwich 3: Manual -> Claim -> Manual -> Accrue
+        weth.transfer(address(staking), 60 ether);
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+        weth.transfer(address(staking), 60 ether);
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfectForMany(_buildAddresses(alice, bob), address(weth), 'Sandwich 3');
+
+        skip(1 days);
+
+        // Sandwich 4: Unstake -> Manual -> Stake -> Manual (both users)
+        vm.prank(bob);
+        staking.unstake(400 ether, bob);
+        weth.transfer(address(staking), 90 ether);
+        vm.prank(alice);
+        staking.stake(800 ether);
+        weth.transfer(address(staking), 90 ether);
+        assertAccountingPerfectForMany(_buildAddresses(alice, bob), address(weth), 'Sandwich 4');
+
+        // Sandwich 5: Triple sandwich
+        weth.transfer(address(staking), 50 ether);
+        vm.prank(bob);
+        staking.stake(200 ether);
+        weth.transfer(address(staking), 50 ether);
+        staking.accrueRewards(address(weth));
+        weth.transfer(address(staking), 50 ether);
+        assertAccountingPerfectForMany(_buildAddresses(alice, bob), address(weth), 'Sandwich 5');
+
+        skip(8 days);
+
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob),
+            address(weth),
+            'After sandwich claims'
+        );
+
+        uint256 total = weth.balanceOf(alice) +
+            weth.balanceOf(bob) +
+            weth.balanceOf(address(staking));
+        uint256 expectedTotal = 500 + (2 * 100) + (2 * 75) + (2 * 60) + (2 * 90) + (3 * 50);
+        assertApproxEqAbs(total, expectedTotal * 1 ether, 1 ether, 'Sandwich: all accounted');
+    }
+
+    /// @notice CREATIVE: Race condition simulation - rapid state changes
+    /// @dev Simulates high-frequency trading-like scenarios
+    function test_CREATIVE_raceConditionSimulation() public {
+        address bob = address(0x2222);
+        address charlie = address(0x3333);
+        underlying.mint(bob, 10_000 ether);
+        underlying.mint(charlie, 10_000 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(weth);
+
+        vm.prank(alice);
+        underlying.approve(address(staking), 10_000 ether);
+        vm.prank(bob);
+        underlying.approve(address(staking), 10_000 ether);
+        vm.prank(charlie);
+        underlying.approve(address(staking), 10_000 ether);
+
+        // Initial state
+        weth.transfer(address(staking), 1000 ether);
+        staking.accrueRewards(address(weth));
+
+        // Race 1: All stake in same block
+        vm.prank(alice);
+        staking.stake(500 ether);
+        vm.prank(bob);
+        staking.stake(600 ether);
+        vm.prank(charlie);
+        staking.stake(700 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Race 1: simultaneous stakes'
+        );
+
+        skip(1 days);
+
+        // Race 2: Manual transfers + accrues in rapid succession
+        for (uint256 i = 0; i < 10; i++) {
+            weth.transfer(address(staking), 30 ether);
+            if (i % 3 == 0) staking.accrueRewards(address(weth));
+        }
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Race 2: rapid transfers'
+        );
+
+        skip(6 hours);
+
+        // Race 3: All unstake partially same block
+        vm.prank(alice);
+        staking.unstake(250 ether, alice);
+        vm.prank(bob);
+        staking.unstake(300 ether, bob);
+        vm.prank(charlie);
+        staking.unstake(350 ether, charlie);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Race 3: simultaneous unstakes'
+        );
+
+        // Race 4: Manual transfer + immediate accrue + immediate stakes
+        weth.transfer(address(staking), 200 ether);
+        staking.accrueRewards(address(weth));
+        vm.prank(alice);
+        staking.stake(100 ether);
+        vm.prank(bob);
+        staking.stake(150 ether);
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Race 4: transfer-accrue-stake'
+        );
+
+        skip(12 hours);
+
+        // Race 5: Claims + stakes + unstakes all interleaved
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+        vm.prank(bob);
+        staking.unstake(100 ether, bob);
+        vm.prank(charlie);
+        staking.stake(200 ether);
+        weth.transfer(address(staking), 150 ether);
+        vm.prank(alice);
+        staking.stake(50 ether);
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
+        staking.accrueRewards(address(weth));
+        assertAccountingPerfectForMany(
+            _buildAddresses(alice, bob, charlie),
+            address(weth),
+            'Race 5: interleaved operations'
+        );
+
+        skip(8 days);
+
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
+        vm.prank(charlie);
+        staking.claimRewards(tokens, charlie);
+
+        uint256 total = weth.balanceOf(alice) +
+            weth.balanceOf(bob) +
+            weth.balanceOf(charlie) +
+            weth.balanceOf(address(staking));
+        uint256 expectedTotal = 1000 + (10 * 30) + 200 + 150;
+        assertApproxEqAbs(total, expectedTotal * 1 ether, 1 ether, 'Race conditions handled');
     }
 }

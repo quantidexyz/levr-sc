@@ -3,10 +3,17 @@ src = "src"
 out = "out"
 libs = ["lib"]
 solc = "0.8.30"
-via_ir = true
+via_ir = true  # Works for all tests/scripts/e2e/production
 optimizer = true
 optimizer_runs = 200
 fs_permissions = [{ access = "read", path = "./" }]
+
+# Dev profile - FAST compilation for unit test iteration (20x faster)
+# Usage: FOUNDRY_PROFILE=dev forge test --match-path "test/unit/*.t.sol" -vvv
+[profile.dev]
+via_ir = false
+optimizer = true
+optimizer_runs = 200
 
 [rpc_endpoints]
 anvil = "http://localhost:8545"

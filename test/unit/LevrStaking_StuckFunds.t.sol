@@ -333,9 +333,23 @@ contract LevrStaking_StuckFundsTest is Test {
         // Wait 1 day (1/3 of stream vests to Alice)
         vm.warp(block.timestamp + 1 days);
 
-        // Alice unstakes (her vested rewards should be preserved in pending)
+        // POOL-BASED: Alice unstakes and AUTO-CLAIMS her vested rewards
+        uint256 aliceBalanceBefore = underlying.balanceOf(alice);
         vm.prank(alice);
         staking.unstake(1000 ether, alice);
+        uint256 aliceBalanceAfter = underlying.balanceOf(alice);
+        uint256 aliceAutoClaimedRewards = aliceBalanceAfter - aliceBalanceBefore - 1000 ether; // Subtract principal
+
+        console2.log('Alice auto-claimed on unstake:', aliceAutoClaimedRewards);
+        uint256 oneDayInSeconds = 1 days;
+        uint256 streamWindow = 3 days; // This test uses 3-day window
+        uint256 expectedAliceRewards = (1000 ether * oneDayInSeconds) / streamWindow; // ~333.33 ether (1/3)
+        assertApproxEqAbs(
+            aliceAutoClaimedRewards,
+            expectedAliceRewards,
+            1 ether,
+            'Alice auto-claims vested'
+        );
 
         // Wait some time (stream ends with no stakers, remaining unvested is frozen)
         vm.warp(block.timestamp + 5 days);
@@ -347,13 +361,11 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.stake(500 ether);
         vm.stopPrank();
 
-        console2.log('Bob staked');
+        console2.log('Bob staked as first staker');
 
-        // Wait for stream window (but stream already ended)
-        vm.warp(block.timestamp + 3 days + 1);
+        // Wait for new stream (Bob should get the frozen unvested rewards)
+        vm.warp(block.timestamp + 7 days + 1);
 
-        // FIX: Bob should NOT be able to claim unvested rewards from previous stream
-        // Those rewards are preserved and will be included in NEXT accrual
         address[] memory tokens = new address[](1);
         tokens[0] = address(underlying);
 
@@ -362,27 +374,20 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.claimRewards(tokens, bob);
         uint256 bobBalanceAfter = underlying.balanceOf(bob);
 
-        uint256 claimed = bobBalanceAfter - bobBalanceBefore;
-        console2.log('Bob claimed:', claimed);
+        uint256 bobClaimed = bobBalanceAfter - bobBalanceBefore;
+        console2.log('Bob claimed:', bobClaimed);
 
-        // UPDATED BEHAVIOR: Bob CAN claim frozen unvested rewards
-        // But Alice's pending rewards (from her vested portion) should still be separate
-        // Wait - let's check what Alice can claim
-        uint256 aliceClaimable = staking.claimableRewards(alice, address(underlying));
-        console2.log('Alice claimable (should have her vested portion):', aliceClaimable);
+        // Bob should get the unvested portion (since Alice left after 1 day)
+        uint256 unvestedAmount = 1000 ether - expectedAliceRewards; // ~857.143 ether
+        assertApproxEqRel(bobClaimed, unvestedAmount, 0.02e18, 'Bob gets frozen unvested rewards');
 
-        uint256 totalExpectedBobAndAlice = 1000 ether; // Total accrued
-        assertGt(claimed, 0, 'Bob receives frozen rewards when he becomes first staker');
-        console2.log('Bob claimed:', claimed);
-        console2.log('Alice can still claim:', aliceClaimable);
-        console2.log('Total (Bob + Alice):', (claimed + aliceClaimable) / 1e18, 'ether');
-
-        // Bob + Alice should add up to approximately 1000 ether
+        // Total distributed should equal total accrued
+        uint256 totalDistributed = aliceAutoClaimedRewards + bobClaimed;
         assertApproxEqRel(
-            claimed + aliceClaimable,
-            totalExpectedBobAndAlice,
+            totalDistributed,
+            1000 ether,
             0.02e18,
-            'Bob + Alice should be able to claim all rewards'
+            'All rewards distributed correctly'
         );
         console2.log('SUCCESS: Frozen rewards vested to new staker, Alice retains her pending');
 

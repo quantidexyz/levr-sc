@@ -4,27 +4,38 @@ pragma solidity 0.8.30;
 /// @title Levr Staking v1 Interface
 /// @notice Stakes underlying directly; mints staked ERC20; accrues multi-token rewards.
 interface ILevrStaking_v1 {
+    // ============ Constants ============
+
+    /// @notice Precision scale for token decimals in voting power calculations
+    function PRECISION() external view returns (uint256);
+
+    /// @notice Seconds per day (86400 seconds)
+    function SECONDS_PER_DAY() external view returns (uint256);
+
+    /// @notice Basis points for APR calculations (10000 = 100%)
+    function BASIS_POINTS() external view returns (uint256);
+
+    /// @notice Minimum reward amount to prevent DoS attack
+    function MIN_REWARD_AMOUNT() external view returns (uint256);
+
     // ============ Structs ============
 
-    /// @notice Consolidated token state - combines reward info, reserve, streaming, and whitelist status
-    /// @param accPerShare Accumulated rewards per staked token, scaled by 1e18
-    /// @param reserve Accounted rewards not yet claimed
+    /// @notice Pool-based token state - simple and efficient
+    /// @param availablePool Current claimable pool (grows as rewards vest)
     /// @param streamTotal Total amount to vest in current stream
     /// @param lastUpdate Last streaming settlement timestamp
     /// @param exists Whether token is registered
     /// @param whitelisted Whether token is whitelisted (exempt from MAX_REWARD_TOKENS)
     struct RewardTokenState {
-        uint256 accPerShare;
-        uint256 reserve;
+        uint256 availablePool;
         uint256 streamTotal;
         uint64 lastUpdate;
         bool exists;
         bool whitelisted;
     }
 
-    /// @notice Consolidated user reward state - combines debt and pending rewards
-    /// @param debt User's reward debt (prevents double-claiming)
-    /// @param pending Pending rewards from unstaking (claimable with zero balance)
+    /// @notice DEPRECATED: User reward state (no longer needed with pool-based system)
+    /// @dev Kept for interface compatibility
     struct UserRewardState {
         int256 debt;
         uint256 pending;
@@ -57,7 +68,7 @@ interface ILevrStaking_v1 {
     event Unstaked(address indexed staker, address indexed to, uint256 amount);
 
     /// @notice Emitted when rewards accrue for a token.
-    event RewardsAccrued(address indexed token, uint256 amount, uint256 newAccPerShare);
+    event RewardsAccrued(address indexed token, uint256 amount, uint256 newPoolTotal);
 
     /// @notice Emitted when streaming window resets due to new accruals.
     event StreamReset(uint32 windowSeconds, uint64 streamStart, uint64 streamEnd);
@@ -75,6 +86,32 @@ interface ILevrStaking_v1 {
 
     /// @notice Emitted when a token is added to the whitelist
     event TokenWhitelisted(address indexed token);
+
+    /// @notice Emitted when external claims fail (e.g., ClankerFeeLocker)
+    event ClaimFailed(address indexed locker, address indexed token, string reason);
+
+    /// @notice DEPRECATED: Emitted when user debt increases (pool-based system doesn't use debt)
+    event DebtIncreased(address indexed user, address indexed token, int256 amount);
+
+    /// @notice DEPRECATED: Emitted when user debt is updated (pool-based system doesn't use debt)
+    event DebtUpdated(address indexed user, address indexed token, int256 newDebt);
+
+    /// @notice DEPRECATED: Emitted when reward shortfall occurs (pool-based system has perfect accounting)
+    event RewardShortfall(address indexed user, address indexed token, uint256 amount);
+
+    // ============ State Variables ============
+
+    /// @notice The underlying token being staked
+    function underlying() external view returns (address);
+
+    /// @notice The staked token (receipt token)
+    function stakedToken() external view returns (address);
+
+    /// @notice The treasury address
+    function treasury() external view returns (address);
+
+    /// @notice The Levr factory instance
+    function factory() external view returns (address);
 
     // ============ Functions ============
 
