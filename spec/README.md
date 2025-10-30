@@ -1,8 +1,8 @@
 # Levr V1 Documentation
 
-**Last Updated:** October 29, 2025  
+**Last Updated:** Current consolidation (dev branch state)  
 **Status:** Production Ready ✅  
-**Test Coverage:** 421/421 tests passing (100%) ✅
+**Test Coverage:** 418/418 tests passing (100%) ✅
 
 ---
 
@@ -26,9 +26,9 @@
 | **[FUTURE_ENHANCEMENTS.md](./FUTURE_ENHANCEMENTS.md)** | Emergency rescue system & upgradeability designs      |
 | **[CHANGELOG.md](./CHANGELOG.md)**                     | Major feature additions and migrations                |
 | **[TESTING.md](./TESTING.md)**                         | Test utilities and testing guidance                   |
-| **[COVERAGE_ANALYSIS.md](./COVERAGE_ANALYSIS.md)**     | Comprehensive test coverage analysis (421 tests)      |
+| **[COVERAGE_ANALYSIS.md](./COVERAGE_ANALYSIS.md)**     | Comprehensive test coverage analysis (418 tests)      |
 | **[ADERYN_ANALYSIS.md](./ADERYN_ANALYSIS.md)**         | Static analysis findings and fixes (21 findings)      |
-| **[SPEC_UPDATE_SUMMARY.md](./SPEC_UPDATE_SUMMARY.md)** | October 29, 2025 spec update completion summary       |
+| **[COMPLETE_SPEC_UPDATE_OCT29.md](./COMPLETE_SPEC_UPDATE_OCT29.md)** | October 29, 2025 spec update completion summary       |
 
 ---
 
@@ -67,7 +67,7 @@
 
 **Test Coverage:**
 
-- ✅ 421/421 tests passing (100%)
+- ✅ 418/418 tests passing (100%)
 - ✅ 76 governance tests (snapshot + stuck process + config validation)
 - ✅ 80 fee splitter tests (stuck funds scenarios)
 - ✅ 91 staking tests (stuck funds + zero-staker scenarios + comparative)

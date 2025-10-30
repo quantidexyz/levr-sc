@@ -171,6 +171,88 @@ All notable changes to the Levr V1 protocol are documented here.
 
 ---
 
+## [1.2.0] - 2025-10-29 - Critical Bug Fixes & Design Improvements
+
+### 🎯 CRITICAL Fixes
+
+#### Unvested Rewards Exploit - RESOLVED ✅
+
+**Status:** Fixed and Thoroughly Tested
+
+**What Changed:**
+
+- Fixed order of operations in `stake()` to update `_totalStaked` before calculating debt
+- Added settlement calls in `_increaseDebtForAll()` and `_updateDebtAll()`
+- Fixed `claimableRewards()` view to only calculate pending for active streams
+- **Design Change:** Removed auto-claim from `unstake()` (breaking change)
+
+**Implementation Details:**
+
+- Modified `LevrStaking_v1.stake()` to re-order operations
+- Modified `LevrStaking_v1.unstake()` to remove auto-claim behavior
+- Updated debt calculation functions to settle streaming before setting debt
+- Updated view function to prevent phantom rewards from ended streams
+
+**Impact:**
+
+- **Before:** Users could claim unvested rewards by unstaking during active stream, waiting for stream to end, then staking again
+- **After:** Users can only claim rewards they actually earned while staked
+
+**Tests:** All tests updated for new design ✅
+
+**Breaking Change:** `unstake()` no longer auto-claims rewards. Users must call `claimRewards()` separately.
+
+**Files Modified:**
+
+- `src/LevrStaking_v1.sol` (multiple functions)
+
+---
+
+### 🔧 Design Improvements
+
+#### RewardMath Library Addition ✅
+
+**What Changed:**
+
+- Created `src/libraries/RewardMath.sol` for reward calculation utilities
+- Consolidates reward management logic for better maintainability
+
+**Benefits:**
+
+- Cleaner code organization
+- Reusable reward calculation functions
+- Easier to audit and test
+
+**Files Created:**
+
+- `src/libraries/RewardMath.sol`
+
+---
+
+#### Stream Reset Logic for First Staker ✅
+
+**What Changed:**
+
+- Enhanced stream reset logic when first staker joins
+- Improved handling of zero-staker periods
+
+**Benefits:**
+
+- Prevents accounting inconsistencies
+- Better handling of edge cases
+
+---
+
+### 📊 Test Coverage
+
+**Test Results:** 418/418 passing (100%) ✅
+
+- All Oct 29 bug fix tests added
+- All existing tests updated for new design
+- No regressions
+
+---
+
 ## Previous Versions
 
 [See git history for versions prior to 1.1.0]

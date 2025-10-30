@@ -150,10 +150,10 @@ archive/
 
 ## Test Suite Status
 
-**Total Tests:** 421 (100% passing) ✅
+**Total Tests:** 418 (100% passing) ✅
 
 **Breakdown:**
-- 421 comprehensive tests covering all contracts
+- 418 comprehensive tests covering all contracts
 - 39 stuck-funds tests (all validated)
 - 253 edge case tests
 - 11 industry comparison tests
@@ -262,26 +262,44 @@ archive/
 
 ---
 
-**Consolidation Complete:** October 29, 2025  
+**Consolidation Complete:** Current (dev branch state)  
 **Status:** ✅ **PRODUCTION-READY DOCUMENTATION**  
-**Last Updated:** October 29, 2025 (test counts updated to 404)
+**Last Updated:** Current consolidation (test counts updated to 418/418)
 **Next Review:** After mainnet deployment or major feature additions
 
 ---
 
-## Pending Consolidation (October 29, 2025)
+## Current Consolidation Status (Complete)
 
-### Files Recommended for Archive
+### Files Archived ✅
 
-7 obsolete design documents from January 2025 exploring transferable staked tokens (current implementation is non-transferable):
+**7 obsolete design documents** from January 2025 exploring transferable staked tokens (moved to `archive/obsolete-designs/`):
 
-1. CONTRACT_TRANSFER_REWARDS_FINAL.md
-2. REWARDS_BELONG_TO_ADDRESS_DESIGN.md  
-3. TRANSFER_REWARDS_DESIGN_ANALYSIS.md
-4. FINAL_IMPLEMENTATION_REPORT.md
-5. FUND_STUCK_ANALYSIS_COMPLETE.md
-6. STREAMING_SIMPLIFICATION_PROPOSAL.md
-7. NON_TRANSFERABLE_EDGE_CASES.md
+1. ✅ CONTRACT_TRANSFER_REWARDS_FINAL.md → archive/obsolete-designs/
+2. ✅ REWARDS_BELONG_TO_ADDRESS_DESIGN.md → archive/obsolete-designs/
+3. ✅ TRANSFER_REWARDS_DESIGN_ANALYSIS.md → archive/obsolete-designs/
+4. ✅ FINAL_IMPLEMENTATION_REPORT.md → archive/obsolete-designs/
+5. ✅ FUND_STUCK_ANALYSIS_COMPLETE.md → archive/obsolete-designs/
+6. ✅ STREAMING_SIMPLIFICATION_PROPOSAL.md → archive/obsolete-designs/
+7. ✅ NON_TRANSFERABLE_EDGE_CASES.md → archive/obsolete-designs/
 
-These preserve valuable design exploration but should be in archive/obsolete-designs/ rather than main spec/.
+**8 Oct 29 bug fix documents** consolidated into `HISTORICAL_FIXES.md` § Unvested Rewards Bug:
+
+1. ✅ FINAL_FIX_SUMMARY_OCT29.md → merged
+2. ✅ IMPLEMENTATION_STATUS.md → merged
+3. ✅ TEST_UPDATE_SUMMARY_OCT29.md → merged
+4. ✅ STAKING_DESIGN_CHANGE_OCT29.md → merged
+5. ✅ UNVESTED_REWARDS_FIX_OCT29.md → merged
+6. ✅ CRITICAL_BUG_ANALYSIS.md → merged
+7. ✅ REWARD_ACCOUNTING_ANALYSIS.md → merged
+8. ✅ STAKING_COMPLEX_SCENARIO_ANALYSIS.md → merged
+
+**3 Aderyn documents** consolidated into `ADERYN_ANALYSIS.md`:
+
+1. ✅ ADERYN_FIXES_SUMMARY.md → merged
+2. ✅ ADERYN_REANALYSIS.md → merged (then archived)
+
+**1 redundant summary** archived:
+
+1. ✅ SPEC_UPDATE_SUMMARY.md → archive/ (superseded by COMPLETE_SPEC_UPDATE_OCT29.md)
 

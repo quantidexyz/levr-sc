@@ -268,7 +268,7 @@ All improvements made:
 ---
 
 **Created:** October 27, 2025  
-**Updated:** October 29, 2025 (test counts updated, obsolete files identified)  
+**Updated:** Current consolidation (dev branch state)  
 **Purpose:** Documentation consolidation tracking  
 **Result:** 81% reduction in main spec, 0% information loss, 100% improved navigation
 
@@ -276,24 +276,41 @@ All improvements made:
 
 ## Latest Updates
 
-### October 29, 2025 - Test Count Updates & Obsolete File Identification
+### Current Consolidation (Dev Branch State) - Complete Consolidation
 
 | Update | Status |
 | ------ | ------ |
-| Test counts updated | 404/404 (from 364) |
-| Obsolete design docs identified | 7 files for archive |
-| Coverage analysis created | COVERAGE_ANALYSIS.md |
+| Test counts updated | 418/418 (accurate count) |
+| Obsolete design docs archived | 7 files moved to archive/obsolete-designs/ ✅ |
+| Oct 29 bug fix docs consolidated | 8 files merged into HISTORICAL_FIXES.md ✅ |
+| Aderyn docs consolidated | 3 files merged into ADERYN_ANALYSIS.md ✅ |
+| Redundant summaries archived | SPEC_UPDATE_SUMMARY.md moved to archive ✅ |
 
-**Obsolete Files (Transferable Token Design - Superseded):**
-- CONTRACT_TRANSFER_REWARDS_FINAL.md
-- REWARDS_BELONG_TO_ADDRESS_DESIGN.md
-- TRANSFER_REWARDS_DESIGN_ANALYSIS.md
-- FINAL_IMPLEMENTATION_REPORT.md
-- FUND_STUCK_ANALYSIS_COMPLETE.md
-- STREAMING_SIMPLIFICATION_PROPOSAL.md
-- NON_TRANSFERABLE_EDGE_CASES.md
+**Archived Obsolete Files (Transferable Token Design):**
+- CONTRACT_TRANSFER_REWARDS_FINAL.md → archive/obsolete-designs/
+- REWARDS_BELONG_TO_ADDRESS_DESIGN.md → archive/obsolete-designs/
+- TRANSFER_REWARDS_DESIGN_ANALYSIS.md → archive/obsolete-designs/
+- FINAL_IMPLEMENTATION_REPORT.md → archive/obsolete-designs/
+- FUND_STUCK_ANALYSIS_COMPLETE.md → archive/obsolete-designs/
+- STREAMING_SIMPLIFICATION_PROPOSAL.md → archive/obsolete-designs/
+- NON_TRANSFERABLE_EDGE_CASES.md → archive/obsolete-designs/
 
-These are from an earlier design iteration exploring transferable staked tokens. Current implementation uses non-transferable tokens (99 tests covering this). Files preserved for historical reference but recommended for archive/obsolete-designs/.
+**Consolidated Oct 29 Bug Fix Docs (merged into HISTORICAL_FIXES.md):**
+- FINAL_FIX_SUMMARY_OCT29.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+- IMPLEMENTATION_STATUS.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+- TEST_UPDATE_SUMMARY_OCT29.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+- STAKING_DESIGN_CHANGE_OCT29.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+- UNVESTED_REWARDS_FIX_OCT29.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+- CRITICAL_BUG_ANALYSIS.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+- REWARD_ACCOUNTING_ANALYSIS.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+- STAKING_COMPLEX_SCENARIO_ANALYSIS.md → HISTORICAL_FIXES.md § Unvested Rewards Bug
+
+**Consolidated Aderyn Docs:**
+- ADERYN_FIXES_SUMMARY.md → Merged into ADERYN_ANALYSIS.md
+- ADERYN_REANALYSIS.md → Merged info into ADERYN_ANALYSIS.md, then archived
+
+**Archived Redundant Summaries:**
+- SPEC_UPDATE_SUMMARY.md → archive/ (superseded by COMPLETE_SPEC_UPDATE_OCT29.md)
 
 ### October 27, 2025 - Config Gridlock Analysis
 

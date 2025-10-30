@@ -1,7 +1,7 @@
 # Levr V1 - Comprehensive Coverage Analysis
 
 **Date:** October 29, 2025  
-**Test Count:** 421/421 passing (100%)  
+**Test Count:** 418/418 passing (100%)  
 **Analysis Type:** Function Coverage + Edge Case Coverage + Static Analysis  
 **Status:** ✅ Production Ready
 
@@ -41,7 +41,7 @@ This document provides a comprehensive analysis of test coverage across all Levr
 
 ## Test Suite Breakdown
 
-### By Contract (421 total tests)
+### By Contract (418 total tests)
 
 | Contract           | Unit | E2E | Edge Cases | Stuck Funds | Comparative | Total |
 | ------------------ | ---- | --- | ---------- | ----------- | ----------- | ----- |

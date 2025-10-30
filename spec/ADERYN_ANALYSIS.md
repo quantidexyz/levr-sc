@@ -29,7 +29,7 @@
 - Documentation: Complete analysis and remediation tracking ✅
 - **Verification:** Latest Aderyn run confirms all fixes remain in place ✅
 
-**For latest re-analysis comparison, see:** `ADERYN_REANALYSIS.md`
+**Re-analysis status:** Latest Aderyn run confirms all fixes remain in place. Findings reduced from 21 to 17 (4 eliminated by fixes).
 
 ---
 
@@ -734,7 +734,7 @@ See sections above - all documented as acceptable design choices or minor gas op
 
 **Tests for Design Decisions (7 tests):** 11. `test_aderyn_L1_centralization_byDesign()` - Documents intended factory ownership 12. `test_aderyn_L3_pragma_acceptable()` - Documents flexible pragma choice 13. `test_aderyn_L8_push0_baseCompatible()` - Documents Base Chain compatibility 14. `test_aderyn_L11_unusedErrors_externalInterfaces()` - Documents external interface patterns 15. `test_aderyn_gasOptimizations_documented()` - Documents gas optimization decisions 16. `test_aderyn_summary_allFindingsAddressed()` - Overall summary test
 
-**Total Test Count:** 421/421 passing (404 original + 17 Aderyn tests)
+**Total Test Count:** 418/418 passing (401 original + 17 Aderyn tests)
 
 ---
 

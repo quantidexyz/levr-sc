@@ -2,7 +2,7 @@
 
 **Purpose:** Archive of critical bugs discovered and fixed during development  
 **Status:** All bugs documented here are FIXED ✅  
-**Last Updated:** October 27, 2025
+**Last Updated:** Current consolidation (dev branch state)
 
 ---
 
@@ -11,7 +11,8 @@
 1. [Midstream Accrual Bug (Fixed Oct 2025)](#midstream-accrual-bug)
 2. [Governance Snapshot Bugs (Fixed Oct 2025)](#governance-snapshot-bugs)
 3. [ProposalState Enum Bug (Fixed Oct 2025)](#proposalstate-enum-bug)
-4. [Lessons Learned](#lessons-learned)
+4. [Unvested Rewards Bug (Fixed Oct 29, 2025)](#unvested-rewards-bug-oct-29-2025)
+5. [Lessons Learned](#lessons-learned)
 
 ---
 
@@ -353,6 +354,223 @@ enum ProposalState {
 - `src/LevrGovernor_v1.sol` - Updated to use enum constant
 
 **Test:** `test_SingleProposalStateConsistency_MeetsQuorumAndApproval()` ✅
+
+---
+
+## Unvested Rewards Bug (Oct 29, 2025)
+
+**Discovery Date:** October 29, 2025  
+**Severity:** CRITICAL  
+**Impact:** Users could claim unvested rewards they didn't earn  
+**Status:** ✅ FIXED
+
+### Summary
+
+Users who were fully unstaked during the unvested period could claim ALL unvested rewards when they staked again. This exploit allowed users to steal rewards they never earned.
+
+### The Problem
+
+**Exploit Scenario:**
+
+```
+1. User stakes 1M tokens
+2. Rewards accrue (150 WETH, 3-day stream starts)
+3. User claims 33 WETH after 1 day (1/3 vested)
+4. User unstakes ALL tokens
+   → totalStaked = 0, streaming pauses
+   → 116 WETH remains unvested in contract
+5. Stream window expires while user unstaked
+   → Rewards don't vest (correct: totalStaked = 0)
+6. User stakes again (AFTER stream ends)
+7. BUG: User can claim all 116 WETH they shouldn't have! ❌
+```
+
+**Root Cause:**
+
+The issue was in the order of operations in `stake()` and how `claimableRewards()` calculated pending rewards:
+
+```solidity
+// BEFORE FIX - BUGGY CODE
+function stake(uint256 amount) external {
+    _settleStreamingAll();          // Settles with totalStaked = 0 (no-op)
+    // ... transfer tokens ...
+    _increaseDebtForAll(staker, amount);  // Sets debt based on stale accPerShare
+    _totalStaked += amount;          // Updates AFTER debt calculation ❌
+}
+
+function claimableRewards(...) external view returns (uint256) {
+    // Calculates pending streaming even for ENDED streams
+    if (end > 0 && start > 0 && block.timestamp > start) {
+        // Shows phantom rewards from ended inactive streams ❌
+    }
+}
+```
+
+**Problem:**
+- Settlement happened while `totalStaked = 0`, so no updates to `accPerShare`
+- Debt was calculated using stale `accPerShare` before `_totalStaked` updated
+- `claimableRewards()` view calculated pending from ended streams
+- User got credit for unvested rewards they never earned
+
+### The Fix
+
+**File:** `src/LevrStaking_v1.sol`  
+**Lines Changed:** ~15 lines
+
+**Fix 1: Re-order operations in `stake()`**
+
+```solidity
+// AFTER FIX
+function stake(uint256 amount) external {
+    uint256 oldBalance = balanceOf(staker);
+    
+    _settleStreamingAll();          // Settles but totalStaked still 0
+    // ... transfer tokens ...
+    
+    _totalStaked += amount;          // Update totalStaked FIRST ✅
+    
+    // Now set debt with proper settlement
+    if (oldBalance == 0) {
+        _updateDebtAll(staker, amount);     // Settles again with totalStaked > 0
+    } else {
+        _increaseDebtForAll(staker, amount); // Settles again with totalStaked > 0
+    }
+}
+```
+
+**Fix 2: Settlement in debt functions**
+
+```solidity
+function _updateDebtAll(address account, uint256 newBal) internal {
+    for (...) {
+        _settleStreamingForToken(rt);  // NEW: Settle before calculating debt ✅
+        uint256 acc = _rewardInfo[rt].accPerShare;
+        _rewardDebt[account][rt] = int256((newBal * acc) / ACC_SCALE);
+    }
+}
+
+function _increaseDebtForAll(address account, uint256 amount) internal {
+    for (...) {
+        _settleStreamingForToken(rt);  // NEW: Settle before calculating debt ✅
+        uint256 acc = _rewardInfo[rt].accPerShare;
+        _rewardDebt[account][rt] += int256((amount * acc) / ACC_SCALE);
+    }
+}
+```
+
+**Fix 3: Prevent phantom rewards in view function**
+
+```solidity
+function claimableRewards(...) external view returns (uint256) {
+    // Only calculate pending for ACTIVE streams ✅
+    if (end > 0 && start > 0 && block.timestamp > start && block.timestamp < end) {
+        // calculate pending...
+    }
+}
+```
+
+**Fix 4: Design Change - Remove Auto-Claim from Unstake**
+
+Changed unstake behavior from auto-claim to manual-claim:
+
+```solidity
+// BEFORE: Auto-claim on unstake
+function unstake(...) {
+    _settleAll(staker, to, bal);  // Auto-claims ❌
+    // ...
+}
+
+// AFTER: Manual claim required
+function unstake(...) {
+    // NO auto-claim - just withdraw tokens ✅
+    // Users must call claimRewards() separately
+}
+```
+
+**Benefits:**
+- Simpler logic
+- Prevents unvested reward exploits
+- Lower gas for unstake
+- User control over when to claim
+
+### Verification
+
+**Test Results:**
+
+| Scenario | Before Fix | After Fix |
+|----------|------------|-----------|
+| User stakes after stream ends | Claims 226 mWETH (unvested) ❌ | Claims 0 mWETH ✅ |
+| Exact bug reproduction | Exploit works | Exploit blocked ✅ |
+| All existing tests | 392 pass | 418 pass ✅ |
+
+**Test Files:**
+
+- `test/unit/LevrStakingV1.StakingWorkflowBug.t.sol` - Bug reproduction
+- `test/unit/LevrStakingV1.RewardsPersistence.t.sol` - Rewards persistence after unstake
+- All staking tests updated for new design
+
+**Before Fix:**
+```
+✅ test_ExactVideoRecordingScenario
+   BEFORE: User claimed 226 mWETH (unvested - WRONG!)
+```
+
+**After Fix:**
+```
+✅ test_ExactVideoRecordingScenario
+   AFTER: User claims 0 mWETH (correct!)
+```
+
+### Impact
+
+**Severity:** CRITICAL
+
+**Before Fix:** Users could steal unvested rewards by:
+1. Unstaking during active stream
+2. Waiting for stream to end (while unstaked)
+3. Staking again to claim rewards they didn't earn
+
+**After Fix:** 
+- Debt properly calculated with correct `accPerShare`
+- Users only get rewards they actually earned while staked
+- Unvested rewards preserved for next `accrueRewards()` call
+- No phantom rewards shown in view functions
+
+### Design Impact
+
+**Breaking Change:** `unstake()` no longer auto-claims rewards
+
+**Migration:**
+- Frontend must update to show "Claim" button separately from "Unstake"
+- Users must manually claim after unstaking
+- No automatic reward claims during unstake
+
+**User Flow Change:**
+
+```
+OLD: Stake → Earn → Unstake → AUTO-CLAIMS rewards
+NEW: Stake → Earn → Unstake → Manual claim required
+```
+
+### Related Fixes
+
+This fix also resolved:
+- "Claimable > Available" UI confusion
+- Phantom rewards showing in view functions
+- Accounting inconsistencies after restaking
+
+### Files Changed
+
+1. `src/LevrStaking_v1.sol`:
+   - `stake()`: Re-ordered `_totalStaked` update before debt calculation
+   - `unstake()`: Removed auto-claim
+   - `_increaseDebtForAll()`: Added `_settleStreamingForToken()` call
+   - `_updateDebtAll()`: Added `_settleStreamingForToken()` call
+   - `claimableRewards()`: Only calculate pending for active streams
+
+2. Test files:
+   - Updated 30+ tests for new design (mechanical changes)
+   - New bug reproduction tests added
 
 ---
 
