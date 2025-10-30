@@ -82,8 +82,25 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (amount == 0) revert InvalidAmount();
         address staker = _msgSender();
 
+        // Check if this is the first staker (totalStaked is currently 0)
+        bool isFirstStaker = _totalStaked == 0;
+
         // Settle streaming for all reward tokens before balance changes
         _settleStreamingAll();
+
+        // FIX: If becoming first staker, reset stream for all tokens with available rewards
+        // This prevents giving rewards for the period when no one was staked
+        if (isFirstStaker) {
+            uint256 len = _rewardTokens.length;
+            for (uint256 i = 0; i < len; i++) {
+                address rt = _rewardTokens[i];
+                uint256 available = _availableUnaccountedRewards(rt);
+                if (available > 0) {
+                    // Reset stream with available rewards, starting from NOW
+                    _creditRewards(rt, available);
+                }
+            }
+        }
 
         // Governance: Calculate weighted average timestamp for voting power preservation
         stakeStartTime[staker] = _onStakeNewTimestamp(amount);

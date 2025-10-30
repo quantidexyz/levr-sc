@@ -604,10 +604,7 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Wait for stream window to end
-        vm.warp(block.timestamp + 3 days + 1);
-
-        // Alice tries to claim
+        // Alice tries to claim immediately (should get 0 - stream just started)
         address[] memory tokens = new address[](1);
         tokens[0] = address(underlying);
 
@@ -617,45 +614,36 @@ contract LevrStaking_StuckFundsTest is Test {
         uint256 aliceBalanceAfter = underlying.balanceOf(alice);
 
         uint256 claimed = aliceBalanceAfter - aliceBalanceBefore;
-        console2.log('Alice claimed (frozen rewards vested when she staked):', claimed);
+        console2.log('Alice claimed immediately after staking:', claimed);
 
-        // UPDATED BEHAVIOR: Alice CAN claim frozen rewards
-        // Trade-off: Prevents unclaimable reward bugs vs allowing new stakers to claim frozen rewards
-        // Design decision: Preventing stuck funds > preventing new stakers from getting frozen rewards
-        assertGt(claimed, 0, 'Alice receives frozen rewards when she becomes first staker');
-        assertApproxEqRel(
-            claimed,
-            1000 ether,
-            0.01e18,
-            'Should receive approximately all frozen rewards'
-        );
+        // CORRECTED BEHAVIOR: Alice should NOT claim frozen rewards immediately
+        // Stream resets when first staker arrives, starting distribution from NOW
+        assertEq(claimed, 0, 'Alice should NOT receive rewards for period when no one was staked');
+        console2.log('SUCCESS: Stream reset on first staker - no rewards for unstaked period');
 
-        // Re-accrue to create new stream with only NEW rewards
-        // (unvested from previous stream was already claimed by Alice)
-        underlying.mint(address(staking), 100 ether);
-        staking.accrueRewards(address(underlying));
-        console2.log('Re-accrued - new stream with only new rewards');
+        // Wait for stream to vest
+        vm.warp(block.timestamp + 3 days + 1);
 
-        // Wait for new stream - claim AT end
+        // Wait for new stream to vest
         uint64 newStreamEnd = staking.streamEnd();
         vm.warp(newStreamEnd);
 
-        // Alice claims from new stream
+        // NOW Alice can claim vested rewards from the NEW stream
         aliceBalanceBefore = underlying.balanceOf(alice);
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
         aliceBalanceAfter = underlying.balanceOf(alice);
 
         uint256 claimedNew = aliceBalanceAfter - aliceBalanceBefore;
-        console2.log('Alice claimed from new stream:', claimedNew);
+        console2.log('Alice claimed after stream vests:', claimedNew);
 
-        // Alice gets ~100 (only new rewards, frozen rewards were already claimed)
+        // Alice gets ~1000 (all rewards from new stream that started when she staked)
         assertApproxEqRel(
             claimedNew,
-            100 ether,
+            1000 ether,
             0.01e18,
-            'Alice receives only new rewards from re-accrual'
+            'Alice receives all rewards from stream started when she staked'
         );
-        console2.log('SUCCESS: New stream distributes only new rewards');
+        console2.log('SUCCESS: Stream distributes from first stake time, not before');
     }
 }
