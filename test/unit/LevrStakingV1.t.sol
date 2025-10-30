@@ -116,10 +116,10 @@ contract LevrStakingV1_UnitTest is Test {
         staking.claimRewards(toks, address(this));
         afterBal = underlying.balanceOf(address(this));
         claimed = afterBal - beforeBal;
-        
+
         // POOL-BASED: Verify we got remaining rewards
         assertGt(claimed, 0, 'Should claim remaining rewards');
-        
+
         // Total rewards claimed should be from the 2000 accrued
         // (Pool empties as we claim, perfect accounting)
         uint256 finalBalance = underlying.balanceOf(address(this));
@@ -186,7 +186,7 @@ contract LevrStakingV1_UnitTest is Test {
         // Verify proportions: Alice should get ~25%, Bob ~75%
         uint256 alicePercent = (aClaim * 100) / totalClaimed;
         uint256 bobPercent = (bClaim * 100) / totalClaimed;
-        
+
         // POOL-BASED: Proportions based on stake ratios (2000 vs 6000 = 1:3)
         assertApproxEqAbs(alicePercent, 25, 6, 'Alice gets ~25%');
         assertApproxEqAbs(bobPercent, 75, 6, 'Bob gets ~75%');
@@ -686,7 +686,7 @@ contract LevrStakingV1_UnitTest is Test {
         rewardToken.transfer(address(staking), 5_000 ether);
 
         // At this point, rewards are NOT claimable yet
-        (uint256 available, ) = staking.outstandingRewards(address(rewardToken));
+        uint256 available = staking.outstandingRewards(address(rewardToken));
         assertEq(available, 5_000 ether, 'Should show as available but not accounted');
 
         // Step 2: Call accrueRewards to credit them
@@ -894,7 +894,7 @@ contract LevrStakingV1_UnitTest is Test {
         assertEq(balAfter - balBefore, 0, 'Should not be able to claim unaccrued rewards');
 
         // But they should show up as "available"
-        (uint256 available, ) = staking.outstandingRewards(address(rewardToken));
+        uint256 available = staking.outstandingRewards(address(rewardToken));
         assertEq(available, 5_000 ether, 'Should show as available for accrual');
     }
 

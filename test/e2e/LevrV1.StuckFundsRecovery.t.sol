@@ -263,11 +263,11 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         // 9. Re-accrue NEW rewards
         console2.log('=== Before re-accrual ===');
         console2.log('Current time:', block.timestamp);
-        (uint256 outstandingBefore, ) = staking.outstandingRewards(address(underlying));
+        uint256 outstandingBefore = staking.outstandingRewards(address(underlying));
         console2.log('Outstanding before mint:', outstandingBefore);
 
         underlying.mint(address(staking), 50 ether);
-        (uint256 outstandingAfter, ) = staking.outstandingRewards(address(underlying));
+        uint256 outstandingAfter = staking.outstandingRewards(address(underlying));
         console2.log('Outstanding after mint:', outstandingAfter);
 
         staking.accrueRewards(address(underlying));

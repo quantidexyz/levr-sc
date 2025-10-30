@@ -4,6 +4,83 @@ All notable changes to the Levr V1 protocol are documented here.
 
 ---
 
+## [1.2.0] - 2025-10-30 - External Call Security Hardening
+
+### 🔒 CRITICAL Security Fix
+
+#### [CRITICAL-0] Arbitrary Code Execution Prevention - RESOLVED ✅
+
+**Status:** Fixed and Tested
+
+**What Changed:**
+
+- Removed all external contract calls from `LevrStaking_v1` and `LevrFeeSplitter_v1`
+- Moved fee collection logic to SDK using `executeMulticall` pattern
+- Updated `outstandingRewards()` interface to return single value
+
+**Security Issue:**
+
+External calls to Clanker LP/Fee lockers in contracts could allow arbitrary code execution if those contracts were malicious or compromised.
+
+**Implementation Details:**
+
+**Contract Changes:**
+- Removed `_claimFromClankerFeeLocker()` from `LevrStaking_v1.sol` (69 lines)
+- Removed `_getPendingFromClankerFeeLocker()` from `LevrStaking_v1.sol`
+- Removed external LP/Fee locker calls from `LevrFeeSplitter_v1.sol`
+- Updated `ILevrStaking_v1.outstandingRewards()`: returns `uint256 available` (was `(uint256, uint256)`)
+- Removed `IClankerFeeLocker` and `IClankerLpLocker` imports from contract implementations
+
+**SDK Changes:**
+- Added `IClankerFeeLocker` and `IClankerLpLocker` ABIs
+- Updated `accrueRewards()` to call `accrueAllRewards()` internally (handles fee collection)
+- Updated `accrueAllRewards()` to wrap external calls in `forwarder.executeTransaction()`
+- Updated `project.ts` to query pending fees from ClankerFeeLocker via multicall
+- Added `getPendingFeesContracts()` helper for multicall integration
+- Added `GET_FEE_LOCKER_ADDRESS()` constant
+
+**Fee Collection Flow (Now in SDK):**
+1. `forwarder.executeTransaction(lpLocker.collectRewards())` - V4 pool → fee locker
+2. `forwarder.executeTransaction(feeLocker.claim())` - fee locker → staking/splitter
+3. `feeSplitter.distribute()` (if configured) - splitter → receivers
+4. `staking.accrueRewards()` - detects balance increase
+
+**Benefits:**
+- ✅ No arbitrary code execution risk in contracts
+- ✅ External calls isolated and wrapped in secure context
+- ✅ SDK maintains 100% API compatibility
+- ✅ Data structure unchanged for consumers
+- ✅ Single multicall transaction for gas efficiency
+
+**Tests:**
+- SDK tests: 4/4 passing ✅
+- Contract tests: Updated 7 files, all passing ✅
+- Integration verified with real fee collection on Anvil fork ✅
+
+**Files Modified:**
+- `src/LevrStaking_v1.sol`
+- `src/LevrFeeSplitter_v1.sol`
+- `src/interfaces/ILevrStaking_v1.sol`
+- `test/mocks/MockStaking.sol`
+- `test/e2e/LevrV1.Staking.t.sol`
+- `test/e2e/LevrV1.StuckFundsRecovery.t.sol`
+- `test/unit/LevrStakingV1.Accounting.t.sol`
+- `test/unit/LevrStakingV1.AprSpike.t.sol`
+- `test/unit/LevrStakingV1.t.sol`
+- `test/unit/LevrStaking_StuckFunds.t.sol`
+
+**SDK Files Modified:**
+- `src/stake.ts`
+- `src/project.ts`
+- `src/constants.ts`
+- `src/abis/index.ts`
+- `src/abis/IClankerFeeLocker.ts` (new)
+- `src/abis/IClankerLpLocker.ts` (new)
+- `script/update-abis.ts`
+- `test/stake.test.ts`
+
+---
+
 ## [1.1.0] - 2025-01-10 - Balance-Based Design + Global Streaming
 
 ### 🎯 CRITICAL Fixes

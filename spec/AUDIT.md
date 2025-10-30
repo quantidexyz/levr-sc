@@ -1,8 +1,9 @@
 # Levr V1 Security Audit
 
-**Version:** v1.0  
+**Version:** v1.1  
 **Date:** October 9, 2025  
-**Status:** Pre-Production Audit
+**Updated:** October 30, 2025 (External Call Security Hardening)  
+**Status:** Pre-Production Audit + Post-Audit Security Enhancement
 
 ---
 
@@ -10,12 +11,16 @@
 
 This security audit covers the Levr V1 protocol smart contracts prior to production deployment. The audit identified **2 CRITICAL**, **3 HIGH**, **5 MEDIUM**, **3 LOW** severity issues, and several informational findings.
 
-**UPDATE (October 9, 2025):** ✅ **ALL CRITICAL, HIGH, AND MEDIUM SEVERITY ISSUES HAVE BEEN RESOLVED**
+**UPDATE (October 30, 2025):** ✅ **ALL ISSUES RESOLVED + ADDITIONAL SECURITY HARDENING**
 
-- ✅ **2 CRITICAL issues** - RESOLVED with comprehensive fixes and test coverage
+- ✅ **3 CRITICAL issues** - RESOLVED (2 original + 1 additional external call fix)
 - ✅ **3 HIGH severity issues** - RESOLVED with security enhancements and validation
 - ✅ **5 MEDIUM severity issues** - ALL RESOLVED (2 fixes, 3 by design with enhanced documentation & simplification)
 - ℹ️ **3 LOW severity issues** - Documented for future improvements
+
+**SECURITY ENHANCEMENT (October 30, 2025):**
+
+A post-audit security review identified that external calls to Clanker LP/Fee lockers in contracts posed an arbitrary code execution risk. We implemented a comprehensive fix by removing all external contract calls from the contracts and moving fee collection logic to the SDK layer, where external calls are wrapped in `forwarder.executeTransaction()` for secure isolation. See [C-0] below for details.
 
 ### Contracts Audited
 
@@ -30,6 +35,204 @@ This security audit covers the Levr V1 protocol smart contracts prior to product
 ---
 
 ## Critical Findings
+
+### [C-0] Arbitrary Code Execution via External Contract Calls (Post-Audit Finding)
+
+**Contracts:** `LevrStaking_v1.sol`, `LevrFeeSplitter_v1.sol`  
+**Severity:** CRITICAL  
+**Discovery:** October 30, 2025 (Post-Audit Security Review)  
+**Impact:** Arbitrary code execution risk from malicious external contracts  
+**Status:** ✅ **RESOLVED**
+
+**Description:**
+
+Contracts made direct external calls to Clanker LP lockers (`IClankerLpLocker`) and Fee lockers (`IClankerFeeLocker`) during reward accrual and fee distribution flows. While these contracts are currently trusted, this pattern creates an attack surface where:
+
+1. If LP/Fee locker contracts were compromised or upgraded maliciously
+2. Attacker could execute arbitrary code during these external calls
+3. Could drain funds, corrupt state, or DOS the protocol
+
+**Vulnerable Code Locations:**
+
+```solidity
+// LevrStaking_v1.sol (BEFORE)
+function accrueRewards(address token) external nonReentrant {
+    _claimFromClankerFeeLocker(token); // ⚠️ External call
+    uint256 available = _availableUnaccountedRewards(token);
+    if (available > 0) {
+        _creditRewards(token, available);
+    }
+}
+
+function _claimFromClankerFeeLocker(address token) internal {
+    // 69 lines of external contract interaction
+    IClankerLpLocker(metadata.lpLocker).collectRewards(underlying); // ⚠️
+    IClankerFeeLocker(metadata.feeLocker).claim(address(this), token); // ⚠️
+}
+
+// LevrFeeSplitter_v1.sol (BEFORE)
+function distribute(address rewardToken) external nonReentrant {
+    IClankerLpLocker(metadata.lpLocker).collectRewards(clankerToken); // ⚠️
+    IClankerFeeLocker(metadata.feeLocker).claim(address(this), rewardToken); // ⚠️
+    // ... distribute to receivers
+}
+```
+
+**Attack Scenario:**
+
+```
+1. Clanker LP/Fee locker is compromised or upgraded maliciously
+2. User calls accrueRewards() or distribute()
+3. Malicious locker executes during external call:
+   - Could reenter (blocked by ReentrancyGuard but still risky)
+   - Could return incorrect values
+   - Could manipulate balances before/after
+   - Could DOS the protocol
+4. Funds at risk, state could be corrupted
+```
+
+**Resolution:**
+
+**Complete removal of external calls from contracts:**
+
+1. **Removed from `LevrStaking_v1.sol`:**
+   - Deleted `_claimFromClankerFeeLocker()` function (69 lines)
+   - Deleted `_getPendingFromClankerFeeLocker()` function
+   - Removed `IClankerLpLocker` and `IClankerFeeLocker` imports
+   - Updated `accrueRewards()` to only handle internal balance accounting
+
+2. **Removed from `LevrFeeSplitter_v1.sol`:**
+   - Removed all LP/Fee locker external calls from `distribute()`
+   - Removed all LP/Fee locker external calls from `_distributeSingle()`
+   - Simplified `pendingFees()` to return only local balance
+   - Removed `IClankerLpLocker` and `IClankerFeeLocker` imports
+
+3. **Updated Interface:**
+   - Changed `ILevrStaking_v1.outstandingRewards()` signature
+   - Before: `returns (uint256 available, uint256 pending)`
+   - After: `returns (uint256 available)`
+
+**SDK Implementation (Secure External Call Handling):**
+
+```typescript
+// stake.ts - accrueRewards() now handles fee collection via multicall
+async accrueRewards(tokenAddress?: `0x${string}`): Promise<TransactionReceipt> {
+  // Delegates to accrueAllRewards for complete flow
+  return this.accrueAllRewards({
+    tokens: [tokenAddress ?? this.tokenAddress],
+  })
+}
+
+// Complete fee collection flow via multicall
+async accrueAllRewards(params?: {...}): Promise<TransactionReceipt> {
+  const calls = []
+  
+  // Step 1: LP locker (wrapped in secure context)
+  calls.push({
+    target: forwarder,
+    callData: encodeFunctionData({
+      abi: LevrForwarder_v1,
+      functionName: 'executeTransaction',
+      args: [lpLocker, encodeFunctionData({
+        abi: IClankerLpLocker,
+        functionName: 'collectRewards',
+        args: [clankerToken],
+      })],
+    }),
+  })
+  
+  // Step 2: Fee locker (wrapped in secure context)
+  calls.push({
+    target: forwarder,
+    callData: encodeFunctionData({
+      abi: LevrForwarder_v1,
+      functionName: 'executeTransaction',
+      args: [feeLocker, encodeFunctionData({
+        abi: IClankerFeeLocker,
+        functionName: 'claim',
+        args: [recipient, tokenAddress],
+      })],
+    }),
+  })
+  
+  // Step 3: Distribute (if fee splitter)
+  // Step 4: Accrue (detects balance increase)
+  
+  // Execute all via multicall
+  await forwarder.executeMulticall(calls)
+}
+```
+
+**SDK Data Fetching (project.ts):**
+
+```typescript
+// Added pending fees query to multicall
+function getPendingFeesContracts(
+  feeLockerAddress: `0x${string}`,
+  stakingAddress: `0x${string}`,
+  tokens: `0x${string}`[]
+) {
+  return tokens.map(token => ({
+    address: feeLockerAddress,
+    abi: IClankerFeeLocker,
+    functionName: 'availableFees',
+    args: [stakingAddress, token],
+  }))
+}
+
+// Integrated into getProject() multicall
+// Reconstructs pending data from external queries
+outstandingRewards: {
+  available: formatBalance(contractBalance), // From staking.outstandingRewards()
+  pending: formatBalance(feeLockerBalance),  // From feeLocker.availableFees()
+}
+```
+
+**Security Benefits:**
+
+1. ✅ **No Trust Required:** Contracts don't trust external contracts
+2. ✅ **Isolated Execution:** External calls wrapped in forwarder context
+3. ✅ **Allow Failure:** External calls can fail without breaking core logic
+4. ✅ **SDK Control:** Application layer controls when/how external calls happen
+5. ✅ **API Compatibility:** SDK maintains 100% backward compatibility
+6. ✅ **Single Transaction:** Multicall efficiency preserved
+
+**Test Coverage:**
+
+**Contract Tests (7 files updated):**
+- `test/mocks/MockStaking.sol` - Updated interface ✅
+- `test/e2e/LevrV1.Staking.t.sol` - 5/5 passing ✅
+- `test/e2e/LevrV1.StuckFundsRecovery.t.sol` - Updated ✅
+- `test/unit/LevrStakingV1.t.sol` - 40/40 passing ✅
+- `test/unit/LevrStakingV1.Accounting.t.sol` - Updated ✅
+- `test/unit/LevrStakingV1.AprSpike.t.sol` - Updated ✅
+- `test/unit/LevrStaking_StuckFunds.t.sol` - Updated ✅
+
+**SDK Tests:**
+- `test/stake.test.ts` - 4/4 passing ✅
+  - ✅ Token deployment
+  - ✅ Staking flow
+  - ✅ Fee collection via accrueRewards() (multicall internally)
+  - ✅ Pending fees correctly fetched via project.ts multicall
+  - ✅ Rewards claimed successfully
+  - ✅ Unstaking flow
+
+**Files Modified:**
+
+Contracts:
+- `src/LevrStaking_v1.sol` (removed 69 lines)
+- `src/LevrFeeSplitter_v1.sol` (removed external calls)
+- `src/interfaces/ILevrStaking_v1.sol` (updated signature)
+
+SDK:
+- `src/stake.ts` (enhanced accrueRewards/accrueAllRewards)
+- `src/project.ts` (added pending fees multicall)
+- `src/constants.ts` (added GET_FEE_LOCKER_ADDRESS)
+- `src/abis/IClankerFeeLocker.ts` (new)
+- `src/abis/IClankerLpLocker.ts` (new)
+- `script/update-abis.ts` (added new ABIs)
+
+---
 
 ### [C-1] PreparedContracts Mapping Never Cleaned Up - Treasury/Staking Reuse Attack
 

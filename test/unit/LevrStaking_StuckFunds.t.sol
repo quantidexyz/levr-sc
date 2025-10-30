@@ -168,7 +168,7 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.accrueRewards(address(underlying));
 
         // Check reserves
-        (uint256 available, ) = staking.outstandingRewards(address(underlying));
+        uint256 available = staking.outstandingRewards(address(underlying));
 
         console2.log('Available rewards:', available);
         console2.log('Contract balance:', underlying.balanceOf(address(staking)));
@@ -265,7 +265,7 @@ contract LevrStaking_StuckFundsTest is Test {
         vm.warp(block.timestamp + 1 days);
 
         // Check outstanding before unstake
-        (uint256 beforeUnstakeAvailable, ) = staking.outstandingRewards(address(underlying));
+        uint256 beforeUnstakeAvailable = staking.outstandingRewards(address(underlying));
         console2.log('Available before last unstake:', beforeUnstakeAvailable);
 
         // Alice unstakes everything (becomes last staker)
@@ -279,7 +279,7 @@ contract LevrStaking_StuckFundsTest is Test {
         vm.warp(block.timestamp + 2 days);
 
         // Check that available rewards haven't increased (stream paused)
-        (uint256 afterUnstakeAvailable, ) = staking.outstandingRewards(address(underlying));
+        uint256 afterUnstakeAvailable = staking.outstandingRewards(address(underlying));
         console2.log('Available after time advance:', afterUnstakeAvailable);
 
         // Rewards should remain the same (stream paused)

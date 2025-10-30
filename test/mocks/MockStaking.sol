@@ -67,8 +67,8 @@ contract MockStaking is ILevrStaking_v1 {
 
     function accrueFromTreasury(address, uint256, bool) external override {}
 
-    function outstandingRewards(address) external pure override returns (uint256, uint256) {
-        return (0, 0);
+    function outstandingRewards(address) external pure override returns (uint256) {
+        return 0;
     }
 
     function claimableRewards(address, address) external pure override returns (uint256) {

@@ -10,8 +10,6 @@ import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
-import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
-import {IClankerLpLocker} from './interfaces/external/IClankerLpLocker.sol';
 import {RewardMath} from './libraries/RewardMath.sol';
 
 contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase {
@@ -216,9 +214,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function accrueRewards(address token) external nonReentrant {
-        // Optionally collect from LP/Fee lockers first (convenience)
-        // But accounting works the same whether we do this or not
-        _claimFromClankerFeeLocker(token);
+        // SECURITY FIX (External Audit 2): Removed automatic Clanker LP/Fee locker collection
+        // Fee collection now handled externally via SDK using executeMulticall pattern
+        // This prevents arbitrary code execution risk from external contract calls
 
         // Core accounting: count what's in the contract and update reserve
         // Works regardless of how tokens arrived (LP claim, direct transfer, etc.)
@@ -297,11 +295,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function outstandingRewards(
-        address token
-    ) external view returns (uint256 available, uint256 pending) {
+    function outstandingRewards(address token) external view returns (uint256 available) {
+        // SECURITY FIX (External Audit 2): Removed external locker queries
+        // Fee collection now handled via SDK - SDK queries lockers separately
         available = _availableUnaccountedRewards(token);
-        pending = _getPendingFromClankerFeeLocker(token);
     }
 
     /// @notice Get claimable rewards for a specific user and token
@@ -333,16 +330,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         // Calculate proportional claim (simple pool-based)
         claimable = RewardMath.calculateProportionalClaim(userBalance, totalStaked, currentPool);
-    }
-
-    /// @notice Get the ClankerFeeLocker address for the underlying token
-    function getClankerFeeLocker() external view returns (address) {
-        if (factory == address(0)) return address(0);
-
-        // Get clanker metadata from our factory
-        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-            .getClankerMetadata(underlying);
-        return metadata.feeLocker;
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -473,79 +460,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         tokenState.streamTotal = amount;
         tokenState.lastUpdate = uint64(block.timestamp);
-    }
-
-    /// @notice Internal function to get pending rewards from ClankerFeeLocker
-    function _getPendingFromClankerFeeLocker(address token) internal view returns (uint256) {
-        if (factory == address(0)) return 0;
-
-        // Get clanker metadata from our factory
-        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-            .getClankerMetadata(underlying);
-        if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
-
-        try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
-            uint256 fees
-        ) {
-            return fees;
-        } catch {
-            return 0;
-        }
-    }
-
-    /// @notice Internal function to claim pending rewards from ClankerFeeLocker
-    /// @dev This is a convenience function - accounting works the same with or without it
-    ///      Tokens can arrive via direct transfer, and accrueRewards will handle them
-    function _claimFromClankerFeeLocker(address token) internal {
-        if (factory == address(0)) return;
-
-        // Get clanker metadata from our factory
-        // Wrapped in try/catch to handle cases where Clanker factory doesn't exist (e.g., unit tests)
-        ILevrFactory_v1.ClankerMetadata memory metadata;
-        try ILevrFactory_v1(factory).getClankerMetadata(underlying) returns (
-            ILevrFactory_v1.ClankerMetadata memory _metadata
-        ) {
-            metadata = _metadata;
-        } catch {
-            // Clanker factory not available or errored - skip claiming
-            return;
-        }
-        if (!metadata.exists) return;
-
-        // CRITICAL-2: Store balance before external calls for verification
-        uint256 balanceBefore = IERC20(token).balanceOf(address(this));
-
-        // First, collect rewards from LP locker to ensure ClankerFeeLocker has latest fees
-        if (metadata.lpLocker != address(0)) {
-            try IClankerLpLocker(metadata.lpLocker).collectRewards(underlying) {
-                // Successfully collected from LP locker
-            } catch (bytes memory reason) {
-                // HIGH-2: Emit event on failure instead of silently failing
-                emit ClaimFailed(metadata.lpLocker, token, string(reason));
-            }
-        }
-
-        // Claim from ClankerFeeLocker if available
-        if (metadata.feeLocker != address(0)) {
-            try IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), token) returns (
-                uint256 availableFees
-            ) {
-                if (availableFees > 0) {
-                    try IClankerFeeLocker(metadata.feeLocker).claim(address(this), token) {
-                        // Successfully claimed
-                    } catch (bytes memory reason) {
-                        // HIGH-2: Emit event on failure
-                        emit ClaimFailed(metadata.feeLocker, token, string(reason));
-                    }
-                }
-            } catch {
-                // Fee locker might not have this token or staking not set as fee owner
-            }
-        }
-
-        // CRITICAL-2: Verify balance didn't decrease unexpectedly
-        uint256 balanceAfter = IERC20(token).balanceOf(address(this));
-        require(balanceAfter >= balanceBefore, 'BALANCE_MISMATCH');
     }
 
     function _creditRewards(address token, uint256 amount) internal {

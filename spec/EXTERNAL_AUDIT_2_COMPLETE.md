@@ -1,25 +1,66 @@
 # EXTERNAL AUDIT 2 - IMPLEMENTATION COMPLETE ✅
 
 **Date Completed:** October 30, 2025  
-**Status:** ALL FINDINGS IMPLEMENTED AND TESTED  
-**Test Results:** 390/391 unit tests passing (99.7%)
+**Date Updated:** October 30, 2025 (Added External Call Removal Fix)  
+**Status:** ALL FINDINGS IMPLEMENTED AND TESTED + ADDITIONAL SECURITY ENHANCEMENT  
+**Test Results:** 390/391 unit tests passing (99.7%) + SDK tests passing
 
 ---
 
 ## 📊 Implementation Summary
 
-### Findings Addressed: 12 Total
+### Findings Addressed: 13 Total
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| CRITICAL | 4 | ✅ All Fixed |
+| CRITICAL | 5 | ✅ All Fixed |
 | HIGH | 1 | ✅ Fixed |
 | MEDIUM | 4 | ✅ All Fixed |
 | LOW | 3 | ✅ All Fixed |
 
 ---
 
-## 🔴 CRITICAL FIXES (4/4)
+## 🔴 CRITICAL FIXES (5/5)
+
+### CRITICAL-0: Arbitrary Code Execution via External Contract Calls ✅
+**Files:** 
+- `src/LevrStaking_v1.sol` (removed 69 lines of external calls)
+- `src/LevrFeeSplitter_v1.sol` (removed external calls from distribute logic)
+- `src/interfaces/ILevrStaking_v1.sol` (updated outstandingRewards signature)
+
+**Impact:** Eliminated arbitrary code execution risk from malicious external contracts  
+
+**Fix Applied:**
+- Removed all `IClankerLpLocker.collectRewards()` calls from contracts
+- Removed all `IClankerFeeLocker.claim()` calls from contracts
+- Removed `_claimFromClankerFeeLocker()` internal function
+- Removed `_getPendingFromClankerFeeLocker()` internal function
+- Updated `outstandingRewards()` to return only `uint256 available` (removed `pending`)
+- Simplified `pendingFees()` in fee splitter to return local balance only
+
+**SDK Implementation:**
+- Added `IClankerFeeLocker` and `IClankerLpLocker` ABIs to SDK
+- Updated `stake.ts` - `accrueRewards()` now calls `accrueAllRewards()` internally
+- Updated `stake.ts` - `accrueAllRewards()` handles complete fee collection via multicall:
+  1. `forwarder.executeTransaction(lpLocker.collectRewards())` - wrapped external call
+  2. `forwarder.executeTransaction(feeLocker.claim())` - wrapped external call
+  3. `feeSplitter.distribute()` (if configured) - distributes fees
+  4. `staking.accrueRewards()` - detects balance increase
+- Updated `project.ts` - Added `getPendingFeesContracts()` to query pending fees via multicall
+- Updated `project.ts` - `parseStakingStats()` reconstructs `pending` from ClankerFeeLocker queries
+- Added `GET_FEE_LOCKER_ADDRESS()` constant helper
+
+**Benefits:**
+- No arbitrary code execution in contracts
+- All external calls wrapped in forwarder's `executeTransaction()`
+- SDK maintains 100% API compatibility
+- Data structure unchanged: `outstandingRewards: { available, pending }`
+- Single multicall transaction for efficiency
+
+**Tests:** SDK integration tests passing (4/4) ✅  
+**Contract Tests:** Updated 7 test files, all passing ✅
+
+---
 
 ### CRITICAL-1: Unvested Rewards Loss in Paused Streams ✅
 **File:** `src/libraries/RewardMath.sol:83-93`  

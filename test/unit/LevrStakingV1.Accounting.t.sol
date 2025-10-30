@@ -1500,7 +1500,7 @@ contract LevrStakingV1_Accounting is Test {
         assertEq(remainingClaimable, 0, 'No pending after auto-claim');
 
         // Pool should be empty
-        (uint256 available, ) = staking.outstandingRewards(address(weth));
+        uint256 available = staking.outstandingRewards(address(weth));
         assertEq(available, 0, 'No outstanding rewards');
     }
 
@@ -1547,7 +1547,7 @@ contract LevrStakingV1_Accounting is Test {
         staking.claimRewards(tokens, bob);
 
         // Pool should be exactly 0 (no dust left)
-        (uint256 available, ) = staking.outstandingRewards(address(weth));
+        uint256 available = staking.outstandingRewards(address(weth));
         assertEq(available, 0, 'Pool completely empty after claims');
     }
 

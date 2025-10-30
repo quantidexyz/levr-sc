@@ -9,8 +9,6 @@ import {ILevrFeeSplitter_v1} from './interfaces/ILevrFeeSplitter_v1.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
-import {IClankerLpLocker} from './interfaces/external/IClankerLPLocker.sol';
-import {IClankerFeeLocker} from './interfaces/external/IClankerFeeLocker.sol';
 
 /**
  * @title LevrFeeSplitter_v1
@@ -106,27 +104,9 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     /// @inheritdoc ILevrFeeSplitter_v1
     function distribute(address rewardToken) external nonReentrant {
-        // Get LP locker from factory
-        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-            .getClankerMetadata(clankerToken);
-        if (!metadata.exists) revert ClankerMetadataNotFound();
-        if (metadata.lpLocker == address(0)) revert LpLockerNotConfigured();
-
-        // Step 1: Collect rewards from LP locker (moves fees from V4 pool to ClankerFeeLocker)
-        try IClankerLpLocker(metadata.lpLocker).collectRewards(clankerToken) {
-            // Successfully collected from pool to locker
-        } catch {
-            // Ignore errors - might not have fees to collect
-        }
-
-        // Step 2: Claim fees from ClankerFeeLocker to this contract (fee splitter)
-        if (metadata.feeLocker != address(0)) {
-            try IClankerFeeLocker(metadata.feeLocker).claim(address(this), rewardToken) {
-                // Successfully claimed from fee locker to splitter
-            } catch {
-                // Fee locker might not have this token or fees
-            }
-        }
+        // SECURITY FIX (External Audit 2): Removed automatic Clanker LP/Fee locker collection
+        // Fee collection now handled externally via SDK using executeMulticall pattern
+        // This prevents arbitrary code execution risk from external contract calls
 
         // Check balance available for distribution
         uint256 balance = IERC20(rewardToken).balanceOf(address(this));
@@ -197,40 +177,16 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     /// @inheritdoc ILevrFeeSplitter_v1
     function pendingFees(address rewardToken) external view returns (uint256 pending) {
-        // Query pending fees from ClankerFeeLocker
-        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-            .getClankerMetadata(clankerToken);
-
-        if (!metadata.exists || metadata.feeLocker == address(0)) return 0;
-
-        try
-            IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), rewardToken)
-        returns (uint256 fees) {
-            return fees;
-        } catch {
-            return 0;
-        }
+        // SECURITY FIX (External Audit 2): Removed external contract queries
+        // Fee collection now handled via SDK - this just returns local balance
+        return IERC20(rewardToken).balanceOf(address(this));
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
     function pendingFeesInclBalance(address rewardToken) external view returns (uint256 pending) {
-        // Get pending in fee locker
-        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-            .getClankerMetadata(clankerToken);
-
-        uint256 locker_pending = 0;
-        if (metadata.exists && metadata.feeLocker != address(0)) {
-            try
-                IClankerFeeLocker(metadata.feeLocker).availableFees(address(this), rewardToken)
-            returns (uint256 fees) {
-                locker_pending = fees;
-            } catch {}
-        }
-
-        // Add any tokens already in this contract's balance
-        uint256 balance = IERC20(rewardToken).balanceOf(address(this));
-
-        return locker_pending + balance;
+        // SECURITY FIX (External Audit 2): Removed external contract queries
+        // Fee collection now handled via SDK - this just returns local balance
+        return IERC20(rewardToken).balanceOf(address(this));
     }
 
     /// @inheritdoc ILevrFeeSplitter_v1
@@ -323,27 +279,8 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
      * @param rewardToken The reward token to distribute
      */
     function _distributeSingle(address rewardToken) internal {
-        // Get LP locker from factory
-        ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-            .getClankerMetadata(clankerToken);
-        if (!metadata.exists) revert ClankerMetadataNotFound();
-        if (metadata.lpLocker == address(0)) revert LpLockerNotConfigured();
-
-        // Step 1: Collect rewards from LP locker (moves fees from V4 pool to ClankerFeeLocker)
-        try IClankerLpLocker(metadata.lpLocker).collectRewards(clankerToken) {
-            // Successfully collected from pool to locker
-        } catch {
-            // Ignore errors
-        }
-
-        // Step 2: Claim fees from ClankerFeeLocker to this contract (fee splitter)
-        if (metadata.feeLocker != address(0)) {
-            try IClankerFeeLocker(metadata.feeLocker).claim(address(this), rewardToken) {
-                // Successfully claimed from fee locker to splitter
-            } catch {
-                // Fee locker might not have this token or fees
-            }
-        }
+        // SECURITY FIX (External Audit 2): Removed automatic Clanker LP/Fee locker collection
+        // Fee collection now handled externally via SDK using executeMulticall pattern
 
         // Check balance available for distribution
         uint256 balance = IERC20(rewardToken).balanceOf(address(this));

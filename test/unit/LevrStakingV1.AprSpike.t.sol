@@ -116,8 +116,8 @@ contract LevrStakingV1AprSpikeTest is Test {
 
         // Now simulate outstanding rewards and accrue them
         console2.log('\n=== OUTSTANDING REWARDS ===');
-        (uint256 availableUnderlying, ) = staking.outstandingRewards(address(underlying));
-        (uint256 availableWeth, ) = staking.outstandingRewards(address(weth));
+        uint256 availableUnderlying = staking.outstandingRewards(address(underlying));
+        uint256 availableWeth = staking.outstandingRewards(address(weth));
         console2.log('Available Underlying:', availableUnderlying / 1e18, 'tokens');
         console2.log('Available WETH:', availableWeth / 1e18, 'WETH');
 
@@ -126,8 +126,8 @@ contract LevrStakingV1AprSpikeTest is Test {
         weth.mint(address(staking), OUTSTANDING_WETH_REWARDS);
 
         console2.log('\n=== BEFORE ACCRUE ===');
-        (availableUnderlying, ) = staking.outstandingRewards(address(underlying));
-        (availableWeth, ) = staking.outstandingRewards(address(weth));
+        availableUnderlying = staking.outstandingRewards(address(underlying));
+        availableWeth = staking.outstandingRewards(address(weth));
         console2.log('Available Underlying:', availableUnderlying / 1e18, 'tokens');
         console2.log('Available WETH:', availableWeth / 1e18, 'WETH');
 
@@ -265,7 +265,7 @@ contract LevrStakingV1AprSpikeTest is Test {
             uint256 claimable = staking.claimableRewards(alice, address(underlying));
             console2.log('  Claimable (tokens):', claimable / 1e18);
             console2.log('  Expected at least:', rewardAmounts[i] / 1e18);
-            
+
             // Claim rewards
             uint256 balBefore = underlying.balanceOf(alice);
             vm.prank(alice);

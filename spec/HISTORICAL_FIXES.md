@@ -2,17 +2,176 @@
 
 **Purpose:** Archive of critical bugs discovered and fixed during development  
 **Status:** All bugs documented here are FIXED ✅  
-**Last Updated:** Current consolidation (dev branch state)
+**Last Updated:** October 30, 2025 (Added External Call Removal)
 
 ---
 
 ## Table of Contents
 
-1. [Midstream Accrual Bug (Fixed Oct 2025)](#midstream-accrual-bug)
-2. [Governance Snapshot Bugs (Fixed Oct 2025)](#governance-snapshot-bugs)
-3. [ProposalState Enum Bug (Fixed Oct 2025)](#proposalstate-enum-bug)
-4. [Unvested Rewards Bug (Fixed Oct 29, 2025)](#unvested-rewards-bug-oct-29-2025)
-5. [Lessons Learned](#lessons-learned)
+1. [Arbitrary Code Execution via External Calls (Fixed Oct 30, 2025)](#arbitrary-code-execution-oct-30-2025)
+2. [Midstream Accrual Bug (Fixed Oct 2025)](#midstream-accrual-bug)
+3. [Governance Snapshot Bugs (Fixed Oct 2025)](#governance-snapshot-bugs)
+4. [ProposalState Enum Bug (Fixed Oct 2025)](#proposalstate-enum-bug)
+5. [Unvested Rewards Bug (Fixed Oct 29, 2025)](#unvested-rewards-bug-oct-29-2025)
+6. [Lessons Learned](#lessons-learned)
+
+---
+
+## Arbitrary Code Execution (Oct 30, 2025)
+
+**Discovery Date:** October 30, 2025  
+**Severity:** CRITICAL  
+**Source:** External Audit 2 Follow-up Review  
+**Impact:** Arbitrary code execution risk via malicious external contracts  
+**Status:** ✅ FIXED
+
+### Summary
+
+Contracts made external calls to Clanker LP/Fee lockers during reward accrual and fee distribution. If these external contracts were compromised or malicious, they could execute arbitrary code in the context of our contracts, potentially draining funds or corrupting state.
+
+### The Problem
+
+**Vulnerable Code Patterns:**
+
+```solidity
+// BEFORE (LevrStaking_v1.sol)
+function accrueRewards(address token) external nonReentrant {
+    _claimFromClankerFeeLocker(token); // ⚠️ External call
+    // ... rest of logic
+}
+
+function _claimFromClankerFeeLocker(address token) internal {
+    // External calls without proper isolation
+    IClankerLpLocker(lpLocker).collectRewards(underlying); // ⚠️
+    IClankerFeeLocker(feeLocker).claim(address(this), token); // ⚠️
+}
+
+// BEFORE (LevrFeeSplitter_v1.sol)
+function distribute(address rewardToken) external nonReentrant {
+    IClankerLpLocker(lpLocker).collectRewards(clankerToken); // ⚠️
+    IClankerFeeLocker(feeLocker).claim(address(this), rewardToken); // ⚠️
+    // ... distribute logic
+}
+```
+
+**Attack Vector:**
+
+If Clanker LP locker or fee locker were compromised:
+1. Attacker deploys malicious contract at locker address
+2. User calls `accrueRewards()` or `distribute()`
+3. Malicious contract executes during external call
+4. Could drain funds, corrupt state, or DOS the protocol
+
+### The Fix
+
+**Strategy:** Move all external calls to SDK, wrap in secure context
+
+**Contract Changes:**
+
+```solidity
+// AFTER (LevrStaking_v1.sol)
+function accrueRewards(address token) external nonReentrant {
+    // SECURITY FIX: No external calls
+    // Fee collection now handled via SDK
+    uint256 available = _availableUnaccountedRewards(token);
+    if (available > 0) {
+        _creditRewards(token, available);
+    }
+}
+
+// Removed: _claimFromClankerFeeLocker() - 69 lines deleted
+// Removed: _getPendingFromClankerFeeLocker()
+
+// Updated interface
+function outstandingRewards(address token) 
+    external view returns (uint256 available); // Was: (uint256, uint256)
+```
+
+**SDK Implementation:**
+
+```typescript
+// SDK handles fee collection via secure multicall
+async accrueRewards(tokenAddress?: `0x${string}`): Promise<TransactionReceipt> {
+  return this.accrueAllRewards({
+    tokens: [tokenAddress ?? this.tokenAddress],
+  })
+}
+
+async accrueAllRewards(params?: {...}): Promise<TransactionReceipt> {
+  // Step 1: Collect from LP locker (wrapped)
+  forwarder.executeTransaction(lpLocker.collectRewards())
+  
+  // Step 2: Claim from fee locker (wrapped)
+  forwarder.executeTransaction(feeLocker.claim())
+  
+  // Step 3: Distribute (if fee splitter configured)
+  feeSplitter.distribute()
+  
+  // Step 4: Accrue (detects balance increase)
+  staking.accrueRewards()
+}
+```
+
+**Key Security Principles:**
+
+1. **Isolation:** External calls wrapped in `forwarder.executeTransaction()`
+2. **Allow Failure:** External calls use `allowFailure: true`
+3. **No Trust:** Contracts don't trust external code
+4. **SDK Control:** Application layer controls external interactions
+
+### Impact Analysis
+
+**Lines Removed:** 69 lines of external call logic  
+**Files Changed:** 2 contracts + 7 test files  
+**SDK Enhanced:** 4 files modified, 2 ABIs added  
+**API Compatibility:** 100% maintained
+
+**Before:**
+- Contracts make external calls directly
+- Trust external contracts to behave correctly
+- Vulnerable to malicious implementations
+
+**After:**
+- Contracts only handle internal accounting
+- SDK orchestrates external interactions
+- External calls wrapped in secure context
+- Same API for consumers
+
+### Test Coverage
+
+**Contract Tests:**
+- `test/e2e/LevrV1.Staking.t.sol` - 5/5 passing ✅
+- `test/unit/LevrStakingV1.t.sol` - 40/40 passing ✅
+- `test/unit/LevrStakingV1.Accounting.t.sol` - Updated ✅
+- 7 test files updated for new signature
+
+**SDK Tests:**
+- `test/stake.test.ts` - 4/4 passing ✅
+- Verified fee collection from ClankerFeeLocker ✅
+- Verified pending fees query via multicall ✅
+- Verified API compatibility ✅
+
+### Files Modified
+
+**Contracts:**
+- `src/LevrStaking_v1.sol` (removed 69 lines)
+- `src/LevrFeeSplitter_v1.sol` (removed external calls)
+- `src/interfaces/ILevrStaking_v1.sol` (updated signature)
+
+**SDK:**
+- `src/stake.ts` (enhanced accrueRewards/accrueAllRewards)
+- `src/project.ts` (added pending fees multicall queries)
+- `src/constants.ts` (added GET_FEE_LOCKER_ADDRESS)
+- `src/abis/IClankerFeeLocker.ts` (new)
+- `src/abis/IClankerLpLocker.ts` (new)
+
+### Key Takeaways
+
+1. **Never trust external contracts** - always isolate external calls
+2. **Application layer is the right place** for external orchestration
+3. **Contracts should be pure logic** - no external dependencies
+4. **Multicall is powerful** - single transaction for complex flows
+5. **API compatibility matters** - maintain backward compatibility
 
 ---
 
@@ -595,6 +754,12 @@ This fix also resolved:
 - "Shouldn't the count reset when the cycle changes?" → Found NEW-C-4
 - User bug reports led to deeper investigation
 
+**4. Post-Audit Security Reviews**
+
+- Continued security analysis after initial audit → Found external call risk
+- Questioned assumptions about "trusted" external contracts
+- Proactive removal of attack surfaces even when not exploited
+
 ### What We Should Have Done
 
 **Before Deployment:**
@@ -603,6 +768,8 @@ This fix also resolved:
 - ✅ Test state manipulation attacks (supply/config changes)
 - ✅ Test frequency patterns (hourly/daily accruals)
 - ✅ Use invariant testing (`sum(claimed) == sum(accrued)`)
+- ✅ **Minimize external calls** - isolate external dependencies to SDK layer
+- ✅ **Defense in depth** - assume external contracts could be malicious
 - ✅ Compare against industry standards
 - ✅ Fuzz test state transitions
 

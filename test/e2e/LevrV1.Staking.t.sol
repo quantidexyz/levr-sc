@@ -315,16 +315,15 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         uint256 stakingWethBalance = IERC20(WETH).balanceOf(staking);
 
         // Check outstanding rewards before attempting accrual
-        (uint256 availableBefore, uint256 pendingBefore) = ILevrStaking_v1(staking)
-            .outstandingRewards(WETH);
+        uint256 availableBefore = ILevrStaking_v1(staking).outstandingRewards(WETH);
 
         // If no rewards detected from swaps, simulate some for testing
-        if (stakingWethBalance == 0 && availableBefore == 0 && pendingBefore == 0) {
+        if (stakingWethBalance == 0 && availableBefore == 0) {
             // console2.log('[INFO] No fees from swaps (expected in fork env) - using simulated rewards');
             // Note: SwapV4Helper is production-ready; fork limitations don't affect mainnet deployment
             uint256 simulatedRewards = 0.5 ether;
             deal(WETH, staking, simulatedRewards);
-            (availableBefore, ) = ILevrStaking_v1(staking).outstandingRewards(WETH);
+            availableBefore = ILevrStaking_v1(staking).outstandingRewards(WETH);
         }
 
         if (availableBefore > 0 || stakingWethBalance > 0) {
@@ -338,11 +337,9 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             // console2.log('  [OK] accrueRewards succeeded - automatically collected from LP locker, claimed from ClankerFeeLocker, and credited all available rewards');
 
             // Check rewards after accrual
-            (uint256 availableAfter, uint256 pendingAfter) = ILevrStaking_v1(staking)
-                .outstandingRewards(WETH);
+            uint256 availableAfter = ILevrStaking_v1(staking).outstandingRewards(WETH);
             // console2.log('[INFO] Outstanding rewards after accrual:');
             // console2.log('  Available:', availableAfter);
-            // console2.log('  Pending:', pendingAfter);
 
             // Warp forward to allow reward streaming
             vm.warp(block.timestamp + 2 hours);
@@ -431,8 +428,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         deal(WETH, staking, rewardAmount);
 
         // Check outstanding rewards before accrual
-        (uint256 availableBefore, uint256 pendingBefore) = ILevrStaking_v1(staking)
-            .outstandingRewards(WETH);
+        uint256 availableBefore = ILevrStaking_v1(staking).outstandingRewards(WETH);
         assertEq(availableBefore, rewardAmount, 'Should show available rewards');
 
         // Check claimable rewards before accrual (should be 0)
@@ -447,7 +443,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         assertTrue(streamEnd > block.timestamp, 'Stream should be active after accrual');
 
         // Check outstanding rewards after accrual (should be 0 available, since they're now streaming)
-        (uint256 availableAfter, ) = ILevrStaking_v1(staking).outstandingRewards(WETH);
+        uint256 availableAfter = ILevrStaking_v1(staking).outstandingRewards(WETH);
         assertEq(availableAfter, 0, 'Should have no available rewards after accrual');
 
         // Warp forward 1 hour to allow some streaming
@@ -699,7 +695,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         uint256 simulatedRewards = 0.5 ether;
         deal(WETH, staking, simulatedRewards);
 
-        (uint256 availableRewards, ) = ILevrStaking_v1(staking).outstandingRewards(WETH);
+        uint256 availableRewards = ILevrStaking_v1(staking).outstandingRewards(WETH);
         if (availableRewards > 0) {
             ILevrStaking_v1(staking).accrueRewards(WETH);
 

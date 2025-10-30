@@ -150,13 +150,10 @@ interface ILevrStaking_v1 {
     /// @param pullFromTreasury If true, transfer `amount` from treasury before accrual
     function accrueFromTreasury(address token, uint256 amount, bool pullFromTreasury) external;
 
-    /// @notice Get outstanding rewards for a token - available rewards in the contract and pending rewards from ClankerFeeLocker
+    /// @notice Get outstanding rewards for a token - available rewards in the contract balance
     /// @param token The reward token to check
     /// @return available Rewards available in the contract balance (unaccounted)
-    /// @return pending Rewards pending from ClankerFeeLocker that can be claimed
-    function outstandingRewards(
-        address token
-    ) external view returns (uint256 available, uint256 pending);
+    function outstandingRewards(address token) external view returns (uint256 available);
 
     /// @notice Get claimable rewards for a specific user and token
     /// @param account The user to check rewards for
