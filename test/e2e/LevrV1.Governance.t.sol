@@ -878,4 +878,311 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
             'Should be able to start new cycle'
         );
     }
+
+    // ============ Test 14: Supply Invariant Testing - Comprehensive Snapshot Behavior ============
+
+    function test_supplyInvariant_tinySupplyAtCreation_singleVoterCanPass() public {
+        // SCENARIO 1: Proposal created with TINY supply (1 token), then supply explodes
+        // EDGE CASE: Single early voter can meet quorum alone (snapshot is tiny)
+        // This demonstrates potential manipulation if early proposer colludes
+
+        // Minimal initial stake
+        _stakeFor(alice, 1 ether);
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 1 ether)
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 1 ether, 'Snapshot: 1 ether');
+
+        // Supply explodes (1000x increase!)
+        for (uint256 i = 0; i < 10; i++) {
+            address newUser = address(uint160(0x1000 + i));
+            _stakeFor(newUser, 100 ether);
+        }
+        // Total: 1 ether (alice) + 1000 ether (10 users × 100) = 1001 ether
+
+        assertEq(IERC20(stakedToken).totalSupply(), 1001 ether, 'Current supply: 1001 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+
+        // ONLY alice votes (0.1% of current supply)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (1) >= snapshot (1) × 70% = 0.7 ether ✅
+        // Alice's 1 ether vote meets quorum, even though it's only 0.1% of current supply!
+        assertTrue(prop.meetsQuorum, 'Quorum met with single voter (100% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met (100% yes)');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+
+        // This shows: Early proposals with tiny snapshots can pass with minimal participation
+        // if the original stakers vote, regardless of how much supply grows later
+    }
+
+    function test_supplyInvariant_supplyIncreaseAfterCreation() public {
+        // SCENARIO 2: Proposal created with 10 ether supply, then supply DOUBLES to 20 ether
+        // EXPECTED: Quorum uses snapshot (10 ether), so 70% quorum = 7 ether minimum
+
+        // Stake initial supply
+        _stakeFor(alice, 5 ether);
+        _stakeFor(bob, 5 ether);
+        // Total: 10 ether
+
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 10 ether)
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 10 ether, 'Snapshot: 10 ether');
+
+        // Now supply DOUBLES (new stakers join after proposal created)
+        _stakeFor(charlie, 10 ether);
+        // Total: 20 ether (100% increase)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 20 ether, 'Current supply: 20 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+
+        // Only alice and bob vote (10 ether total, charlie doesn't vote)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (10) >= snapshot (10) * 70% = 7 ether ✅
+        // Even though only 50% of CURRENT supply voted, 100% of SNAPSHOT voted
+        assertTrue(prop.meetsQuorum, 'Quorum met (10/10 = 100% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+
+        // This demonstrates that new stakers AFTER proposal don't affect quorum calculation
+    }
+
+    function test_supplyInvariant_supplyDecreaseAfterCreation() public {
+        // SCENARIO 3: Proposal created with 20 ether supply, then supply HALVES to 10 ether
+        // EXPECTED: Quorum uses snapshot (20 ether), so 70% quorum = 14 ether minimum
+
+        // Stake initial supply
+        _stakeFor(alice, 5 ether);
+        _stakeFor(bob, 10 ether);
+        _stakeFor(charlie, 5 ether);
+        // Total: 20 ether
+
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 20 ether)
+        vm.prank(bob);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 20 ether, 'Snapshot: 20 ether');
+
+        // Now charlie unstakes (supply decreases by 25%)
+        vm.prank(charlie);
+        ILevrStaking_v1(staking).unstake(5 ether, charlie);
+        // Total: 15 ether (25% decrease)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 15 ether, 'Current supply: 15 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+
+        // Alice and bob vote (15 ether total balance, but charlie can't vote - unstaked)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (15) >= snapshot (20) * 70% = 14 ether ✅
+        // 75% of snapshot supply voted (15/20), which exceeds 70% quorum
+        assertTrue(prop.meetsQuorum, 'Quorum met (15/20 = 75% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+    }
+
+    function test_supplyInvariant_extremeSupplyIncrease() public {
+        // SCENARIO 4: Proposal created with 1 ether supply, then 10x increase to 10 ether
+        // EXPECTED: Quorum uses snapshot (1 ether), so 70% = 0.7 ether minimum
+
+        // Minimal initial stake
+        _stakeFor(alice, 1 ether);
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 1 ether)
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 1 ether, 'Snapshot: 1 ether');
+
+        // Extreme supply increase (10x growth)
+        _stakeFor(bob, 5 ether);
+        _stakeFor(charlie, 4 ether);
+        // Total: 10 ether (1000% increase!)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 10 ether, 'Current supply: 10 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+
+        // Only alice votes (1 ether balance)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (1) >= snapshot (1) * 70% = 0.7 ether ✅
+        // Alice's vote alone (100% of snapshot) exceeds quorum, even though it's only 10% of current supply
+        assertTrue(prop.meetsQuorum, 'Quorum met (1/1 = 100% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+
+        // This shows that early proposals can pass with minimal absolute participation
+        // if most original stakers vote, even if supply explodes later
+    }
+
+    function test_supplyInvariant_extremeSupplyDecrease() public {
+        // SCENARIO 5: Proposal created with 10 ether supply, then 90% decrease to 1 ether
+        // EXPECTED: Quorum uses snapshot (10 ether), so 70% = 7 ether minimum (likely fails)
+
+        // Large initial stake
+        _stakeFor(alice, 2 ether);
+        _stakeFor(bob, 4 ether);
+        _stakeFor(charlie, 4 ether);
+        // Total: 10 ether
+
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 10 ether)
+        vm.prank(bob);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 10 ether, 'Snapshot: 10 ether');
+
+        // Extreme unstaking (90% of supply leaves)
+        vm.prank(bob);
+        ILevrStaking_v1(staking).unstake(4 ether, bob);
+        vm.prank(charlie);
+        ILevrStaking_v1(staking).unstake(3 ether, charlie);
+        // Total: 3 ether (70% decrease)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 3 ether, 'Current supply: 3 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+
+        // Remaining users vote (alice 2 ether, charlie 1 ether)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (3) >= snapshot (10) * 70% = 7 ether ❌
+        // Only 30% of snapshot supply voted (3/10), which is below 70% quorum
+        assertFalse(prop.meetsQuorum, 'Quorum NOT met (3/10 = 30% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met (100% yes)');
+        assertEq(uint256(prop.state), 3, 'Defeated due to quorum');
+
+        // This demonstrates that mass unstaking can make proposals unpassable
+        // even if all remaining stakers vote yes
+    }
+
+    function test_supplyInvariant_multipleProposalsDifferentSnapshots() public {
+        // SCENARIO 6: Multiple proposals created at different times with different snapshots
+        // EXPECTED: Each proposal uses its own snapshot for quorum calculation
+
+        // Initial stake: 5 ether
+        _stakeFor(alice, 5 ether);
+        vm.warp(block.timestamp + 10 days);
+
+        // Proposal 1 created (snapshot: 5 ether)
+        vm.prank(alice);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop1 = ILevrGovernor_v1(governor).getProposal(pid1);
+        assertEq(prop1.totalSupplySnapshot, 5 ether, 'Prop1 snapshot: 5 ether');
+
+        // Supply doubles
+        _stakeFor(bob, 5 ether);
+        // Total: 10 ether
+
+        vm.warp(block.timestamp + 1 hours); // Still in proposal window
+
+        // Proposal 2 created (snapshot: 10 ether)
+        vm.prank(bob);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
+            address(0xBEEF),
+            50 ether,
+            'test'
+        );
+
+        ILevrGovernor_v1.Proposal memory prop2 = ILevrGovernor_v1(governor).getProposal(pid2);
+        assertEq(prop2.totalSupplySnapshot, 10 ether, 'Prop2 snapshot: 10 ether');
+
+        // Supply triples
+        _stakeFor(charlie, 10 ether);
+        // Total: 20 ether
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop1.votingStartsAt + 1);
+
+        // All three vote on both proposals
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        // Check results
+        vm.warp(prop1.votingEndsAt + 1);
+
+        prop1 = ILevrGovernor_v1(governor).getProposal(pid1);
+        prop2 = ILevrGovernor_v1(governor).getProposal(pid2);
+
+        // Prop1: totalBalanceVoted (20) >= snapshot (5) * 70% = 3.5 ether ✅ (400% participation!)
+        assertTrue(prop1.meetsQuorum, 'Prop1 quorum met (20/5 = 400% of snapshot)');
+
+        // Prop2: totalBalanceVoted (20) >= snapshot (10) * 70% = 7 ether ✅ (200% participation)
+        assertTrue(prop2.meetsQuorum, 'Prop2 quorum met (20/10 = 200% of snapshot)');
+
+        // Both proposals use their respective snapshots correctly
+        assertEq(uint256(prop1.state), 2, 'Prop1 Succeeded');
+        assertEq(uint256(prop2.state), 2, 'Prop2 Succeeded');
+    }
 }
