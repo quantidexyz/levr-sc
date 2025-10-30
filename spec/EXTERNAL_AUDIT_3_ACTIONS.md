@@ -12,26 +12,26 @@
 
 ### Final Status After Validation
 
-| Metric                             | Count                              |
-| ---------------------------------- | ---------------------------------- |
-| **Original Findings**              | 31 issues                          |
-| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)  |
-| **Already Fixed (Current)**        | 4 issues (C-3, H-3, M-4, M-5)      |
-| **Design Decisions (Intentional)** | 5 issues (H-8, M-2, M-7, M-8, M-9) |
-| **Optional (Low Priority)**        | 1 issue (M-1)                      |
-| **Duplicates**                     | 1 issue (M-6 = C-4)                |
-| **Audit Errors**                   | 1 issue (C-3)                      |
-| **REMAINING TO FIX**               | **19 issues** 🎉                   |
+| Metric                             | Count                                   |
+| ---------------------------------- | --------------------------------------- |
+| **Original Findings**              | 31 issues                               |
+| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)       |
+| **Already Fixed (Current)**        | 3 issues (C-3, H-3, M-4, M-5)           |
+| **Design Decisions (Intentional)** | 6 issues (C-4, H-8, M-2, M-7, M-8, M-9) |
+| **Optional (Low Priority)**        | 1 issue (M-1)                           |
+| **Duplicates**                     | 1 issue (M-6 = C-4)                     |
+| **Audit Errors**                   | 1 issue (C-3)                           |
+| **REMAINING TO FIX**               | **18 issues** 🎉                        |
 
 ### Severity Breakdown (Remaining)
 
 | Severity    | Count  | Must Fix          |
 | ----------- | ------ | ----------------- |
-| 🔴 CRITICAL | 3      | Before mainnet    |
+| 🔴 CRITICAL | 2      | Before mainnet    |
 | 🟠 HIGH     | 5      | Before mainnet    |
 | 🟡 MEDIUM   | 3      | Post-launch OK    |
 | 🟢 LOW      | 8      | Optimization      |
-| **TOTAL**   | **19** | **8 pre-mainnet** |
+| **TOTAL**   | **18** | **7 pre-mainnet** |
 
 ---
 
@@ -48,26 +48,27 @@
 
 ### 📝 Design Decisions (Won't Fix)
 
-7. **H-8** - Fee split manipulation → Token admin = community, should have control
-8. **M-2** - Proposal front-running → Time-weighted VP prevents manipulation
-9. **M-7** - Treasury velocity limits → `maxProposalAmountBps` sufficient
-10. **M-8** - Keeper incentives → Permissionless, SDK handles, no MEV
-11. **M-9** - Minimum stake duration → Capital efficiency preferred
-12. **M-1** - Initialize reentrancy → Factory-only, acceptable risk (optional)
+7. **C-4** - VP caps → Time-weighting without cap is intentional design
+8. **H-8** - Fee split manipulation → Token admin = community, should have control
+9. **M-2** - Proposal front-running → Time-weighted VP prevents manipulation
+10. **M-7** - Treasury velocity limits → `maxProposalAmountBps` sufficient
+11. **M-8** - Keeper incentives → Permissionless, SDK handles, no MEV
+12. **M-9** - Minimum stake duration → Capital efficiency preferred
+13. **M-1** - Initialize reentrancy → Factory-only, acceptable risk (optional)
 
 ### ⚠️ Duplicate
 
-13. **M-6** - VP caps → Duplicate of C-4
+14. **M-6** - VP caps → Duplicate of C-4
 
 ---
 
 ## 🔴 PHASE 1: CRITICAL ISSUES (Week 1)
 
-**3 issues - Must fix before mainnet**
+**5 total issues: 2 to implement, 2 already fixed, 1 design decision**
 
 ---
 
-### C-1: Unchecked Clanker Token Trust ⚠️
+### C-1: Unchecked Clanker Token Trust ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrFactory_v1.sol:register()`  
 **Priority:** 1/18  
@@ -107,7 +108,7 @@ function register(address token) external override nonReentrant returns (Project
 
 ---
 
-### C-2: Fee-on-Transfer Token Insolvency ⚠️
+### C-2: Fee-on-Transfer Token Insolvency ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrStaking_v1.sol:stake()`  
 **Priority:** 2/18  
@@ -157,58 +158,38 @@ function stake(uint256 amount) external nonReentrant {
 
 ---
 
-### C-4: Governance Sybil Takeover via Time-Weighting ⚠️
+### C-3: First Staker MEV ✅ ALREADY FIXED (AUDIT ERROR)
 
-**File:** `src/LevrStaking_v1.sol:getVotingPower()`  
-**Priority:** 3/18  
-**Estimated Time:** 3 hours
+**Status:** ✅ Vesting prevents MEV exploitation  
+**Evidence:** Lines 112, 450-463 restart stream (creates NEW stream, not continues old one)  
+**Reason:** Audit misunderstood vesting mechanism - first staker advantage doesn't exist
 
-**Issue:**
-Unlimited time-weighting allows minority token holders to control governance.
+---
 
-**Attack:** 35% tokens × 60 days = 82% voting power
+### C-4: Governance Sybil Takeover via Time-Weighting 📝 DESIGN DECISION (WON'T FIX)
 
-**Fix:**
+**Status:** 📝 Time-weighting without cap is intentional design  
+**Reason:** Rewards long-term holders, aligns with protocol goals  
+**Trade-off:** Long-term holder advantage vs potential minority control  
+**Note:** Other governance mechanisms (quorum, approval thresholds) provide protection
 
-```solidity
-// Add constant
-uint256 public constant MAX_VP_DAYS = 365; // 1 year cap
+---
 
-function getVotingPower(address user) external view returns (uint256 votingPower) {
-    uint256 startTime = stakeStartTime[user];
-    if (startTime == 0) return 0;
+### C-5: Pool Extension Fee Theft ✅ ALREADY FIXED (AUDIT 2)
 
-    uint256 balance = ILevrStakedToken_v1(stakedToken).balanceOf(user);
-    if (balance == 0) return 0;
-
-    uint256 timeStaked = block.timestamp - startTime;
-    uint256 daysStaked = timeStaked / SECONDS_PER_DAY;
-
-    // Cap at MAX_VP_DAYS
-    uint256 cappedDays = daysStaked > MAX_VP_DAYS ? MAX_VP_DAYS : daysStaked;
-
-    return (balance * cappedDays) / PRECISION;
-}
-```
-
-**Test:** `test/unit/LevrStaking.VPCap.t.sol` (4 tests)
-
-- Stake for 1000 days, verify VP = balance × 365
-- Two users at different stake times, verify max advantage = 365x
-- Test cap doesn't affect stakers under 365 days
-- Test cap applies correctly to multiple stakers
-
-**Files Modified:** 1 source, 1 test
+**Status:** ✅ External calls removed in AUDIT 2  
+**Evidence:** EXTERNAL_AUDIT_2_COMPLETE.md:25 - All external calls eliminated  
+**Reason:** Vulnerability no longer possible
 
 ---
 
 ## 🟠 PHASE 2: HIGH SEVERITY (Week 2)
 
-**5 issues - Recommended before mainnet**
+**8 total issues: 5 to implement, 3 already fixed/skipped**
 
 ---
 
-### H-1: Quorum Gaming via Apathy Exploitation ⚠️
+### H-1: Quorum Gaming via Apathy Exploitation ⚠️ TO IMPLEMENT
 
 **File:** Test helper default config  
 **Priority:** 4/18  
@@ -251,7 +232,7 @@ function _meetsQuorum(uint256 proposalId) internal view returns (bool) {
 
 ---
 
-### H-2: Winner Manipulation in Competitive Cycles ⚠️
+### H-2: Winner Manipulation in Competitive Cycles ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrGovernor_v1.sol:_determineWinner()`  
 **Priority:** 5/18  
@@ -298,7 +279,15 @@ function _determineWinner(uint256 cycleId) internal view returns (uint256) {
 
 ---
 
-### H-4: Factory Owner Centralization ⚠️
+### H-3: Treasury Depletion ✅ ALREADY FIXED
+
+**Status:** ✅ `maxProposalAmountBps` limits each proposal to 5%  
+**Evidence:** Line 374 in governance - per-proposal amount capped  
+**Reason:** Cannot drain treasury with multiple proposals
+
+---
+
+### H-4: Factory Owner Centralization ⚠️ TO IMPLEMENT
 
 **File:** Deployment  
 **Priority:** 6/18  
@@ -321,7 +310,7 @@ Factory owner is single address (god-mode control).
 
 ---
 
-### H-5: Unprotected prepareForDeployment() ⚠️
+### H-5: Unprotected prepareForDeployment() ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrFactory_v1.sol:prepareForDeployment()`  
 **Priority:** 7/18  
@@ -353,7 +342,7 @@ function setDeploymentFee(uint256 fee) external onlyOwner {
 
 ---
 
-### H-6: No Emergency Pause Mechanism ⚠️
+### H-6: No Emergency Pause Mechanism ⚠️ TO IMPLEMENT
 
 **Files:** Core contracts  
 **Priority:** 8/18  
@@ -400,13 +389,45 @@ contract LevrStaking_v1 is ..., Pausable {
 
 ---
 
-## 🟡 PHASE 3: MEDIUM SEVERITY (Week 3-4)
+### H-7: Manual Cycle Progression ✅ ALREADY FIXED
 
-**3 issues - Post-launch acceptable**
+**Status:** ✅ Auto-progress at lines 333-338  
+**Evidence:** Cycles auto-start on first proposal submission  
+**Reason:** No admin censorship possible, fully decentralized
 
 ---
 
-### M-3: No Upper Bounds on Configuration ⚠️
+### H-8: Fee Split Manipulation 📝 DESIGN DECISION (WON'T FIX)
+
+**Status:** 📝 Token admin = community, should have control  
+**Reason:** Fee distribution control is intentional governance feature  
+**Trade-off:** Community ownership vs centralization concerns
+
+---
+
+## 🟡 PHASE 3: MEDIUM SEVERITY (Week 3-4)
+
+**11 total issues: 3 to implement, 8 skipped**
+
+---
+
+### M-1: Initialize Reentrancy 📝 DESIGN DECISION (OPTIONAL)
+
+**Status:** 📝 Factory-only, acceptable risk  
+**Reason:** Only factory can call initialize, low-risk scenario  
+**Note:** Could add ReentrancyGuard if desired, but not critical
+
+---
+
+### M-2: Proposal Front-Running 📝 DESIGN DECISION (NOT NEEDED)
+
+**Status:** 📝 Time-weighted VP prevents manipulation  
+**Reason:** Commit-reveal unnecessary - VP accumulation prevents gaming  
+**Trade-off:** Simpler UX vs theoretical front-running protection
+
+---
+
+### M-3: No Upper Bounds on Configuration ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrFactory_v1.sol:_applyConfig()`  
 **Priority:** 9/18  
@@ -436,7 +457,54 @@ function _applyConfig(FactoryConfig memory cfg) internal {
 
 ---
 
-### M-10: Missing Fee Integrity Monitoring ⚠️
+### M-4: Unbounded Reward Tokens ✅ ALREADY FIXED
+
+**Status:** ✅ `maxRewardTokens` exists (default 50)  
+**Evidence:** Line 503 in staking contract  
+**Reason:** DoS prevented by token limit
+
+---
+
+### M-5: Gas Griefing via Token Spam ✅ ALREADY FIXED
+
+**Status:** ✅ User-controlled token selection  
+**Evidence:** `claimRewards()` allows user to select specific tokens  
+**Reason:** Users can avoid expensive tokens
+
+---
+
+### M-6: VP Caps ⚠️ DUPLICATE
+
+**Status:** ⚠️ Duplicate of C-4  
+**Reason:** Same issue as "Governance Sybil Takeover" - will be fixed together
+
+---
+
+### M-7: Treasury Velocity Limits 📝 DESIGN DECISION (NOT NEEDED)
+
+**Status:** 📝 `maxProposalAmountBps` sufficient  
+**Reason:** Per-proposal limits prevent rapid drainage  
+**Trade-off:** Simpler system vs additional rate limiting
+
+---
+
+### M-8: Keeper Incentives 📝 DESIGN DECISION (NOT NEEDED)
+
+**Status:** 📝 Permissionless, SDK handles, no MEV  
+**Reason:** Auto-progression works without incentives  
+**Trade-off:** Simplicity vs explicit keeper rewards
+
+---
+
+### M-9: Minimum Stake Duration 📝 DESIGN DECISION (WON'T FIX)
+
+**Status:** 📝 Capital efficiency preferred  
+**Reason:** Flexible staking is core feature  
+**Trade-off:** Capital efficiency vs potential gaming
+
+---
+
+### M-10: Missing Fee Integrity Monitoring ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrFeeSplitter_v1.sol:distribute()`  
 **Priority:** 10/18  
@@ -466,7 +534,7 @@ function distribute(address token) external nonReentrant {
 
 ---
 
-### M-11: Non-Atomic Registration Flow ⚠️
+### M-11: Non-Atomic Registration Flow ⚠️ TO IMPLEMENT
 
 **File:** `src/LevrFactory_v1.sol:register()`  
 **Priority:** 11/18  
@@ -501,60 +569,60 @@ function register(address token) external override nonReentrant returns (Project
 
 ## 🟢 PHASE 4: LOW SEVERITY (Week 5-6)
 
-**8 issues - Code quality & optimization**
+**8 issues - All to implement (code quality & optimization)**
 
 ---
 
-### L-1: Delegatecall Safety Documentation ⚠️
+### L-1: Delegatecall Safety Documentation ⚠️ TO IMPLEMENT
 
 **Priority:** 12/18 | **Time:** 1 hour  
 **Fix:** Document why delegatecall is safe (immutable deployer)
 
 ---
 
-### L-2: Factory Authorization Check Timing ⚠️
+### L-2: Factory Authorization Check Timing ⚠️ TO IMPLEMENT
 
 **Priority:** 13/18 | **Time:** 1 hour  
 **Fix:** Move factory check to top of `initialize()`
 
 ---
 
-### L-3: Explicit Zero Address Checks ⚠️
+### L-3: Explicit Zero Address Checks ⚠️ TO IMPLEMENT
 
 **Priority:** 14/18 | **Time:** 2 hours  
 **Fix:** Add zero address checks to all critical functions
 
 ---
 
-### L-4: Gas Optimization Opportunities ⚠️
+### L-4: Gas Optimization Opportunities ⚠️ TO IMPLEMENT
 
 **Priority:** 15/18 | **Time:** 8 hours  
 **Fix:** Storage packing, caching, calldata usage
 
 ---
 
-### L-5: Missing Event Emissions ⚠️
+### L-5: Missing Event Emissions ⚠️ TO IMPLEMENT
 
 **Priority:** 16/18 | **Time:** 4 hours  
 **Fix:** Add events to all state-changing functions
 
 ---
 
-### L-6: Timestamp Manipulation Documentation ⚠️
+### L-6: Timestamp Manipulation Documentation ⚠️ TO IMPLEMENT
 
 **Priority:** 17/18 | **Time:** 1 hour  
 **Fix:** Document that 15-second miner manipulation is acceptable
 
 ---
 
-### L-7: Formal Verification ⚠️
+### L-7: Formal Verification ⚠️ TO IMPLEMENT
 
 **Priority:** 18/18 | **Time:** 40 hours (separate project)  
 **Fix:** Certora/Halmos formal verification
 
 ---
 
-### L-8: maxRewardTokens Edge Case Testing ⚠️
+### L-8: maxRewardTokens Edge Case Testing ⚠️ TO IMPLEMENT
 
 **Priority:** 19/18 (Additional) | **Time:** 3 hours  
 **Severity:** 🟢 LOW - Testing/Verification  
@@ -813,6 +881,7 @@ This is **testing-only** to provide explicit coverage for edge cases.
 | Item    | Reason                               | Evidence                                 |
 | ------- | ------------------------------------ | ---------------------------------------- |
 | **C-3** | Audit error - vesting prevents MEV   | Lines 112, 450-463 restart stream        |
+| **C-4** | Design decision                      | Time-weighting without cap intentional   |
 | **C-5** | Fixed in AUDIT 2 - no external calls | EXTERNAL_AUDIT_2_COMPLETE.md:25          |
 | **H-3** | Already addressed                    | `maxProposalAmountBps` at line 374       |
 | **H-7** | Already auto-progresses              | Lines 333-338 auto-start cycles          |
@@ -830,23 +899,33 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ## 🧪 TESTING REQUIREMENTS
 
-### New Test Files (10 total)
+### New Test Files (9 total)
 
 **Phase 1 (Critical):**
 
 1. `test/unit/LevrFactory.ClankerValidation.t.sol` - 4 tests
 2. `test/unit/LevrStaking.FeeOnTransfer.t.sol` - 4 tests
-3. `test/unit/LevrStaking.VPCap.t.sol` - 4 tests
 
-**Phase 2 (High):** 4. `test/unit/LevrGovernor.QuorumGaming.t.sol` - 4 tests (verify 80% works) 5. Update `test/unit/LevrGovernorV1.AttackScenarios.t.sol` - Verify H-2 fix 6. `test/unit/LevrFactory.DeploymentProtection.t.sol` - 3 tests 7. `test/unit/LevrProtocol.EmergencyPause.t.sol` - 8 tests
+**Phase 2 (High):**
 
-**Phase 3 (Medium):** 8. `test/unit/LevrFactory.ConfigBounds.t.sol` - 6 tests 9. `test/unit/LevrFactory.AtomicRegistration.t.sol` - 3 tests
+3. `test/unit/LevrGovernor.QuorumGaming.t.sol` - 4 tests (verify 80% works)
+4. Update `test/unit/LevrGovernorV1.AttackScenarios.t.sol` - Verify H-2 fix
+5. `test/unit/LevrFactory.DeploymentProtection.t.sol` - 3 tests
+6. `test/unit/LevrProtocol.EmergencyPause.t.sol` - 8 tests
 
-**Phase 4 (Low):** 10. `test/unit/LevrStaking.MaxRewardTokensEdgeCases.t.sol` - 4 tests 11. Various documentation and gas optimization tests
+**Phase 3 (Medium):**
 
-**Total New Tests:** ~44 tests  
+7. `test/unit/LevrFactory.ConfigBounds.t.sol` - 6 tests
+8. `test/unit/LevrFactory.AtomicRegistration.t.sol` - 3 tests
+
+**Phase 4 (Low):**
+
+9. `test/unit/LevrStaking.MaxRewardTokensEdgeCases.t.sol` - 4 tests
+10. Various documentation and gas optimization tests
+
+**Total New Tests:** ~40 tests  
 **Current:** 390/391 passing  
-**Target:** 434+ passing
+**Target:** 430+ passing
 
 ---
 
@@ -854,11 +933,11 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 | Phase                  | Items  | Dev Days | Calendar Days | Team       |
 | ---------------------- | ------ | -------- | ------------- | ---------- |
-| **Phase 1 (Critical)** | 3      | 2.5      | 5 (Week 1)    | 2 devs     |
-| **Phase 2 (High)**     | 5      | 3        | 5 (Week 2)    | 2 devs     |
-| **Phase 3 (Medium)**   | 3      | 2        | 5 (Week 3-4)  | 1 dev      |
+| **Phase 1 (Critical)** | 2      | 2.0      | 5 (Week 1)    | 2 devs     |
+| **Phase 2 (High)**     | 5      | 3.0      | 5 (Week 2)    | 2 devs     |
+| **Phase 3 (Medium)**   | 3      | 2.0      | 5 (Week 3-4)  | 1 dev      |
 | **Phase 4 (Low)**      | 8      | 4.5      | 10 (Week 5-6) | 1 dev      |
-| **TOTAL**              | **19** | **12**   | **25 days**   | **2 devs** |
+| **TOTAL**              | **18** | **11.5** | **25 days**   | **2 devs** |
 
 ---
 
@@ -866,14 +945,14 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ### ⭐ **Option 1: Aggressive (2 weeks)** ✅ RECOMMENDED
 
-**Scope:** Critical + High (8 items - excludes L-8)  
-**Effort:** 5.5 dev days  
+**Scope:** Critical + High (7 items - excludes L-8)  
+**Effort:** 5.1 dev days  
 **Timeline:** 2 weeks  
 **Status:** ✅ **READY FOR MAINNET**
 
 **Items:**
 
-- 3 Critical: C-1, C-2, C-4
+- 2 Critical: C-1, C-2
 - 5 High: H-1, H-2, H-4, H-5, H-6
 
 **Why This Works:**
@@ -886,8 +965,8 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ### Option 2: Production Ready (4 weeks)
 
-**Scope:** Critical + High + Medium (11 items)  
-**Effort:** 7.5 dev days  
+**Scope:** Critical + High + Medium (10 items)  
+**Effort:** 7.1 dev days  
 **Timeline:** 4 weeks  
 **Status:** ✅ **IDEAL FOR MAINNET**
 
@@ -895,8 +974,8 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ### Option 3: Complete (6 weeks)
 
-**Scope:** All issues (19 items)  
-**Effort:** 12 dev days  
+**Scope:** All issues (18 items)  
+**Effort:** 11.5 dev days  
 **Timeline:** 6 weeks  
 **Status:** ✅ **MAXIMUM ASSURANCE**
 
@@ -904,12 +983,11 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ## 🚀 IMPLEMENTATION SEQUENCE
 
-### Week 1: Critical Issues (3 items)
+### Week 1: Critical Issues (2 items)
 
 **Mon-Tue:** C-1 (Clanker validation) - 4 hours  
 **Wed-Thu:** C-2 (Fee-on-transfer) - 6 hours  
-**Fri:** C-4 (VP cap) - 3 hours  
-**Total:** 13 hours (2 devs)
+**Total:** 10 hours (2 devs)
 
 ### Week 2: High Severity (5 items)
 
@@ -933,7 +1011,7 @@ This is **testing-only** to provide explicit coverage for edge cases.
 - [ ] Read this entire document
 - [ ] Review EXTERNAL_AUDIT_2_COMPLETE.md for context
 - [ ] Create branch: `audit-3-fixes`
-- [ ] Assign C-1, C-2, C-4 to Dev 1
+- [ ] Assign C-1, C-2 to Dev 1
 - [ ] Assign H-1, H-2, H-4, H-5, H-6 to Dev 2
 
 ### For Each Item
@@ -1000,9 +1078,9 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ### What's Left
 
-**Only 19 items** remain (down from 31!)
+**Only 18 items** remain (down from 31!)
 
-**For mainnet:** Only **8 items** (3 Critical + 5 High)  
+**For mainnet:** Only **7 items** (2 Critical + 5 High)  
 **Testing verification:** L-8 confirms existing protections work
 
 **Timeline:** **2 weeks** to production-ready! 🚀
@@ -1011,17 +1089,16 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 ## ⚠️ QUICK REFERENCE
 
-### Must Fix Before Mainnet (8 items)
+### Must Fix Before Mainnet (7 items)
 
-**Critical (3):**
+**Critical (2):**
 
 1. C-1: Clanker factory validation (4h)
 2. C-2: Fee-on-transfer protection (6h)
-3. C-4: VP cap at 365 days (3h)
 
-**High (5):** 4. H-1: Quorum 70% → 80% (1h) 5. H-2: Winner by approval ratio (3h) 6. H-4: Deploy multisig (2h) 7. H-5: Deployment fee (3h) 8. H-6: Emergency pause (6h)
+**High (5):** 3. H-1: Quorum 70% → 80% (1h) 4. H-2: Winner by approval ratio (3h) 5. H-4: Deploy multisig (2h) 6. H-5: Deployment fee (3h) 7. H-6: Emergency pause (6h)
 
-**Total: 28 hours = 3.5 dev days = 2 calendar weeks**
+**Total: 25 hours = 3.1 dev days = 2 calendar weeks**
 
 ### Can Defer (11 items)
 
@@ -1035,10 +1112,10 @@ This is **testing-only** to provide explicit coverage for edge cases.
 ### Common Questions
 
 **Q: Why only 18 items instead of 31?**  
-A: 13 items were already fixed, design decisions, or audit errors
+A: 14 items were already fixed, design decisions, or audit errors
 
 **Q: Can we skip Medium/Low items?**  
-A: Yes! Only 8 items are deployment blockers
+A: Yes! Only 7 items are deployment blockers
 
 **Q: How long to mainnet-ready?**  
 A: 2 weeks for Critical + High (Option 1)
@@ -1052,21 +1129,21 @@ A: H-1 (change one number), H-4 (deployment task), L-2 (move one line)
 
 ### Phase 1 Complete
 
-- ✅ All 3 Critical issues fixed
-- ✅ 12 new tests passing
+- ✅ All 2 Critical issues fixed
+- ✅ 8 new tests passing
 - ✅ No new vulnerabilities introduced
-- ✅ Full test suite passing (406+ tests)
+- ✅ Full test suite passing (398+ tests)
 
 ### Phase 2 Complete
 
-- ✅ All 8 pre-mainnet issues fixed
-- ✅ 27 new tests passing
+- ✅ All 7 pre-mainnet issues fixed
+- ✅ 23 new tests passing
 - ✅ Gas increase < 10%
 - ✅ Multisig deployed and ownership transferred
 
 ### Final Validation
 
-- ✅ 434+ tests passing
+- ✅ 430+ tests passing
 - ✅ All Critical + High fixed
 - ✅ Gas profiling complete
 - ✅ External audit verification
@@ -1080,7 +1157,6 @@ A: H-1 (change one number), H-4 (deployment task), L-2 (move one line)
 
 - ✅ C-1: Complete implementation (mapping, setter, validation)
 - ✅ C-2: Complete implementation (balance checks, accounting)
-- ✅ C-4: Complete implementation (constant, capped calculation)
 - ✅ H-1: Default config change + optional hybrid quorum
 - ✅ H-2: Complete winner selection refactor
 - ✅ H-5: Complete deployment fee implementation
@@ -1103,14 +1179,14 @@ A: H-1 (change one number), H-4 (deployment task), L-2 (move one line)
 
 ### Week 1 End
 
-- [ ] All 3 Critical items complete
-- [ ] 12 new tests passing
+- [ ] All 2 Critical items complete
+- [ ] 8 new tests passing
 - [ ] Code review complete
 
 ### Week 2 End
 
 - [ ] All 5 High items complete
-- [ ] 27 new tests passing
+- [ ] 23 new tests passing
 - [ ] Multisig deployed
 - [ ] **READY FOR MAINNET** ✨
 
@@ -1143,4 +1219,4 @@ A: H-1 (change one number), H-4 (deployment task), L-2 (move one line)
 
 ---
 
-_This consolidated document replaces EXTERNAL_AUDIT_3_ACTIONS.md, EXTERNAL_AUDIT_3_VALIDATION.md, and EXTERNAL_AUDIT_3_SUMMARY.md. All validation evidence and corrections have been incorporated. Only 19 items remain, with 8 being deployment blockers requiring 2 weeks of work. L-8 (maxRewardTokens testing) added per user security review request - confirms existing protections are secure._
+_This consolidated document replaces EXTERNAL_AUDIT_3_ACTIONS.md, EXTERNAL_AUDIT_3_VALIDATION.md, and EXTERNAL_AUDIT_3_SUMMARY.md. All validation evidence and corrections have been incorporated. Only 18 items remain, with 7 being deployment blockers requiring 2 weeks of work. C-4 (VP caps) is a design decision - time-weighting without cap is intentional. L-8 (maxRewardTokens testing) added per user security review request - confirms existing protections are secure._
