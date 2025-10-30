@@ -495,7 +495,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     function _getWinner(uint256 cycleId) internal view returns (uint256 winnerId) {
         uint256[] memory proposals = _cycleProposals[cycleId];
-        uint256 maxYesVotes = 0;
+        uint256 bestApprovalRatio = 0;
 
         for (uint256 i = 0; i < proposals.length; i++) {
             uint256 pid = proposals[i];
@@ -503,8 +503,17 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
             // Check if proposal meets quorum and approval
             if (_meetsQuorum(pid) && _meetsApproval(pid)) {
-                if (proposal.yesVotes > maxYesVotes) {
-                    maxYesVotes = proposal.yesVotes;
+                // FIX [H-2]: Use approval ratio (YES / TOTAL) instead of absolute YES votes
+                // This prevents strategic NO voting from manipulating the winner
+                uint256 totalVotes = proposal.yesVotes + proposal.noVotes;
+                if (totalVotes == 0) continue; // Skip if no votes (shouldn't happen if quorum met)
+
+                // Calculate approval ratio: (yesVotes * 10000) / totalVotes
+                // Using 10000 multiplier for precision
+                uint256 approvalRatio = (proposal.yesVotes * 10000) / totalVotes;
+
+                if (approvalRatio > bestApprovalRatio) {
+                    bestApprovalRatio = approvalRatio;
                     winnerId = pid;
                 }
             }

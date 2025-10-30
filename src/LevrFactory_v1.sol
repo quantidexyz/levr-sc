@@ -40,6 +40,10 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     // Track prepared contracts by deployer
     mapping(address => ILevrFactory_v1.PreparedContracts) private _preparedContracts; // deployer => PreparedContracts
 
+    // FIX [C-1]: Trusted Clanker factories for validation (supports multiple versions)
+    address[] private _trustedClankerFactories;
+    mapping(address => bool) private _isTrustedClankerFactory;
+
     constructor(
         FactoryConfig memory cfg,
         address owner_,
@@ -82,6 +86,32 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             revert UnauthorizedCaller();
         }
 
+        // FIX [C-1]: Validate token is from a trusted Clanker factory
+        if (_trustedClankerFactories.length > 0) {
+            bool validFactory = false;
+
+            // Check each trusted factory
+            for (uint256 i = 0; i < _trustedClankerFactories.length; i++) {
+                address factory = _trustedClankerFactories[i];
+
+                // Call factory to verify this token was deployed by it
+                try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (
+                    IClanker.DeploymentInfo memory info
+                ) {
+                    // If call succeeds and token matches, this is valid
+                    if (info.token == clankerToken) {
+                        validFactory = true;
+                        break;
+                    }
+                } catch {
+                    // Factory doesn't know this token, try next factory
+                    continue;
+                }
+            }
+
+            require(validFactory, 'TOKEN_NOT_FROM_TRUSTED_FACTORY');
+        }
+
         // Look up prepared contracts for this caller
         ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[caller];
 
@@ -120,6 +150,46 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     function updateConfig(FactoryConfig calldata cfg) external override onlyOwner {
         _applyConfig(cfg);
         emit ConfigUpdated();
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function addTrustedClankerFactory(address factory) external override onlyOwner {
+        require(factory != address(0), 'ZERO_ADDRESS');
+        require(!_isTrustedClankerFactory[factory], 'ALREADY_TRUSTED');
+
+        _trustedClankerFactories.push(factory);
+        _isTrustedClankerFactory[factory] = true;
+
+        emit TrustedClankerFactoryAdded(factory);
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function removeTrustedClankerFactory(address factory) external override onlyOwner {
+        require(_isTrustedClankerFactory[factory], 'NOT_TRUSTED');
+
+        _isTrustedClankerFactory[factory] = false;
+
+        // Remove from array (swap with last element)
+        uint256 length = _trustedClankerFactories.length;
+        for (uint256 i = 0; i < length; i++) {
+            if (_trustedClankerFactories[i] == factory) {
+                _trustedClankerFactories[i] = _trustedClankerFactories[length - 1];
+                _trustedClankerFactories.pop();
+                break;
+            }
+        }
+
+        emit TrustedClankerFactoryRemoved(factory);
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function getTrustedClankerFactories() external view override returns (address[] memory) {
+        return _trustedClankerFactories;
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function isTrustedClankerFactory(address factory) external view override returns (bool) {
+        return _isTrustedClankerFactory[factory];
     }
 
     /// @inheritdoc ILevrFactory_v1

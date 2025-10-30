@@ -19,7 +19,7 @@ contract MockERC20 is ERC20 {
   }
 
   /// @notice Mock admin function to support IClankerToken interface
-  function admin() external view returns (address) {
+  function admin() external view virtual returns (address) {
     return _admin;
   }
 }

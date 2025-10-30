@@ -58,6 +58,14 @@ interface ILevrFactory_v1 {
 
     // ============ Events ============
 
+    /// @notice Emitted when a trusted Clanker factory is added.
+    /// @param factory Address of the Clanker factory added
+    event TrustedClankerFactoryAdded(address indexed factory);
+
+    /// @notice Emitted when a trusted Clanker factory is removed.
+    /// @param factory Address of the Clanker factory removed
+    event TrustedClankerFactoryRemoved(address indexed factory);
+
     /// @notice Emitted when treasury and staking are prepared for deployment.
     /// @param deployer Address that deployed the contracts
     /// @param treasury Deployed treasury address
@@ -104,6 +112,25 @@ interface ILevrFactory_v1 {
     /// @notice Update global protocol configuration.
     /// @param cfg New configuration
     function updateConfig(FactoryConfig calldata cfg) external;
+
+    /// @notice Add a trusted Clanker factory for token validation.
+    /// @dev Only callable by owner. Supports multiple factory versions.
+    /// @param factory Address of the Clanker factory to trust
+    function addTrustedClankerFactory(address factory) external;
+
+    /// @notice Remove a trusted Clanker factory.
+    /// @dev Only callable by owner.
+    /// @param factory Address of the Clanker factory to remove
+    function removeTrustedClankerFactory(address factory) external;
+
+    /// @notice Get all trusted Clanker factories.
+    /// @return Array of trusted Clanker factory addresses
+    function getTrustedClankerFactories() external view returns (address[] memory);
+
+    /// @notice Check if a factory is trusted.
+    /// @param factory Address to check
+    /// @return True if factory is trusted, false otherwise
+    function isTrustedClankerFactory(address factory) external view returns (bool);
 
     /// @notice Get the deployed contracts for a given project.
     /// @param clankerToken Token address used as project key

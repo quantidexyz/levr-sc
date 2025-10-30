@@ -120,18 +120,25 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             }
         }
 
-        // Governance: Calculate weighted average timestamp for voting power preservation
-        stakeStartTime[staker] = _onStakeNewTimestamp(amount);
-
+        // FIX [C-2]: Measure actual received amount for fee-on-transfer tokens
+        uint256 balanceBefore = IERC20(underlying).balanceOf(address(this));
         IERC20(underlying).safeTransferFrom(staker, address(this), amount);
-        _escrowBalance[underlying] += amount;
-        _totalStaked += amount;
-        ILevrStakedToken_v1(stakedToken).mint(staker, amount);
+        uint256 actualReceived = IERC20(underlying).balanceOf(address(this)) - balanceBefore;
+
+        // Governance: Calculate weighted average timestamp for voting power preservation
+        // MUST be called BEFORE minting (reads old balance from stakedToken)
+        // Use actualReceived for voting power calculation
+        stakeStartTime[staker] = _onStakeNewTimestamp(actualReceived);
+
+        // Use actualReceived for all accounting
+        _escrowBalance[underlying] += actualReceived;
+        _totalStaked += actualReceived;
+        ILevrStakedToken_v1(stakedToken).mint(staker, actualReceived);
 
         // POOL-BASED: No debt tracking needed!
         // User's rewards automatically calculated: (balance / totalStaked) × pool
 
-        emit Staked(staker, amount);
+        emit Staked(staker, actualReceived);
     }
 
     /// @inheritdoc ILevrStaking_v1

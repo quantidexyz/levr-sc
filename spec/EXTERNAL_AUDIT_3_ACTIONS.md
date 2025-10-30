@@ -12,16 +12,17 @@
 
 ### Final Status After Validation
 
-| Metric                             | Count                                             |
-| ---------------------------------- | ------------------------------------------------- |
-| **Original Findings**              | 31 issues                                         |
-| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)                 |
-| **Already Fixed (Current)**        | 3 issues (C-3, H-3, M-4, M-5)                     |
-| **Design Decisions (Intentional)** | 8 issues (C-4, H-5, H-6, H-8, M-2, M-7, M-8, M-9) |
-| **Optional (Low Priority)**        | 1 issue (M-1)                                     |
-| **Duplicates**                     | 1 issue (M-6 = C-4)                               |
-| **Audit Errors**                   | 1 issue (C-3)                                     |
-| **REMAINING TO FIX**               | **16 issues** 🎉 ⚡ UPDATED                       |
+| Metric                             | Count                                        |
+| ---------------------------------- | -------------------------------------------- |
+| **Original Findings**              | 31 issues                                    |
+| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)            |
+| **Already Fixed (Current)**        | 3 issues (C-3, H-3, M-4, M-5)                |
+| **Design Decisions (Intentional)** | 7 issues (C-4, H-5, H-8, M-2, M-7, M-8, M-9) |
+| **Deferred (TBD)**                 | 1 issue (H-6 - emergency pause)              |
+| **Optional (Low Priority)**        | 1 issue (M-1)                                |
+| **Duplicates**                     | 1 issue (M-6 = C-4)                          |
+| **Audit Errors**                   | 1 issue (C-3)                                |
+| **REMAINING TO FIX**               | **16 issues** 🎉 ⚡ UPDATED                  |
 
 ### Severity Breakdown (Remaining)
 
@@ -50,13 +51,16 @@
 
 7. **C-4** - VP caps → Time-weighting without cap is intentional design
 8. **H-5** - Deployment fee → DoS risk acceptable, minimal impact
-9. **H-6** - Pausable pattern → Conflicts with existing architecture (user to choose alternative)
-10. **H-8** - Fee split manipulation → Token admin = community, should have control
-11. **M-2** - Proposal front-running → Time-weighted VP prevents manipulation
-12. **M-7** - Treasury velocity limits → `maxProposalAmountBps` sufficient
-13. **M-8** - Keeper incentives → Permissionless, SDK handles, no MEV
-14. **M-9** - Minimum stake duration → Capital efficiency preferred
-15. **M-1** - Initialize reentrancy → Factory-only, acceptable risk (optional)
+9. **H-8** - Fee split manipulation → Token admin = community, should have control
+10. **M-2** - Proposal front-running → Time-weighted VP prevents manipulation
+11. **M-7** - Treasury velocity limits → `maxProposalAmountBps` sufficient
+12. **M-8** - Keeper incentives → Permissionless, SDK handles, no MEV
+13. **M-9** - Minimum stake duration → Capital efficiency preferred
+14. **M-1** - Initialize reentrancy → Factory-only, acceptable risk (optional)
+
+### 🔵 Deferred (TBD)
+
+15. **H-6** - Emergency pause → Architectural complexity, will revisit post-mainnet
 
 ### ⚠️ Duplicate
 
@@ -274,7 +278,7 @@ function stake(uint256 amount) external nonReentrant {
 **⚠️ USER CORRECTIONS APPLIED:**
 
 - H-5: Deployment fee NOT needed (user decision)
-- H-6: Pausable conflicts with architecture (user to choose alternative)
+- H-6: Emergency pause deferred (TBD - not blocking mainnet)
 
 ---
 
@@ -429,25 +433,25 @@ The risk is low because:
 
 ---
 
-### H-6: No Emergency Pause Mechanism 📝 WON'T FIX (ARCHITECTURAL CONFLICT)
+### H-6: No Emergency Pause Mechanism 🔵 TBD (DEFERRED)
 
 **Files:** Core contracts  
-**Status:** 📝 Pausable conflicts with existing extensions  
-**Reason:** User feedback - multiple extensions already exist in contracts
+**Status:** 🔵 **To Be Determined - Deferred for later decision**  
+**Reason:** Needs architectural consideration, not blocking mainnet launch
 
 **Issue:**
 Cannot pause operations if critical bug discovered.
 
-**Why Pausable Won't Work:**
+**Why Standard Pausable Won't Work:**
 
 - Contracts already have multiple inheritance (ReentrancyGuard, ERC2771ContextBase)
-- Adding Pausable would conflict with existing architecture
+- Adding OZ Pausable would conflict with existing architecture
 - Modifier ordering complexity (`whenNotPaused` vs `nonReentrant`)
 - ERC2771 (meta-transactions) adds additional inheritance constraints
 
-**Alternative Emergency Mechanisms:**
+**Alternative Emergency Mechanisms (For Future Consideration):**
 
-**Option 1: Circuit Breaker State Variables (Recommended)**
+**Option 1: Circuit Breaker State Variables**
 
 ```solidity
 // Add to each contract
@@ -462,9 +466,6 @@ function setEmergencyStop(bool stopped) external onlyTokenAdmin {
     emergencyStop = stopped;
     emit EmergencyStopUpdated(stopped);
 }
-
-// Apply to critical functions
-function stake(uint256 amount) external nonReentrant whenNotStopped { ... }
 ```
 
 **Option 2: Factory-Level Kill Switch**
@@ -476,22 +477,16 @@ mapping(address => bool) public projectsPaused;
 function pauseProject(address token, bool paused) external onlyOwner {
     projectsPaused[token] = paused;
 }
-
-// Each contract checks factory
-modifier whenNotPaused() {
-    require(!ILevrFactory_v1(factory).projectsPaused(underlying), "Project paused");
-    _;
-}
 ```
 
-**Option 3: Time-Delayed Admin Actions**
+**Option 3: Time-Delayed Emergency Escape Hatch**
 
 - Allow emergency withdrawal after X hours if bug found
-- No immediate pause, but escape hatch for users
+- No immediate pause, but user safety net
 
-**Decision:** Needs user input on preferred approach
+**Decision:** Deferred - will revisit post-mainnet or in V2
 
-**Files Modified:** TBD based on chosen option
+**Files Modified:** None (deferred)
 
 ---
 
@@ -1063,10 +1058,10 @@ This is **testing-only** to provide explicit coverage for edge cases.
 - 2 Critical: C-1 (corrected fix), C-2
 - 3 High: H-1, H-2, H-4
 
-**Removed per user:**
+**Removed/Deferred per user:**
 
 - H-5: Deployment fee (not needed)
-- H-6: Pausable (architectural conflict - user to decide alternative)
+- H-6: Emergency pause (deferred - TBD post-mainnet)
 
 **Why This Works:**
 
@@ -1110,10 +1105,10 @@ This is **testing-only** to provide explicit coverage for edge cases.
 **Wed:** H-4 (Multisig setup) - 2 hours  
 **Total:** 6 hours (2 devs)
 
-**REMOVED:**
+**REMOVED/DEFERRED:**
 
 - ~~H-5: Deployment fee~~ (user decision: not needed)
-- ~~H-6: Emergency pause~~ (architectural conflict)
+- 🔵 H-6: Emergency pause (TBD - deferred post-mainnet)
 
 ### Weeks 2-3: Medium Issues (3 items)
 
@@ -1204,9 +1199,9 @@ This is **testing-only** to provide explicit coverage for edge cases.
 
 **User Feedback Applied:**
 
-- C-1: Fixed the gameable solution (now uses factory-side verification)
+- C-1: Fixed the gameable solution (now uses factory-side verification with array for multiple factory versions)
 - H-5: Deployment fee NOT needed (acceptable risk)
-- H-6: Pausable conflicts with architecture (3 alternatives provided)
+- H-6: Emergency pause DEFERRED (TBD - will revisit post-mainnet)
 
 ---
 
@@ -1225,24 +1220,18 @@ This is **testing-only** to provide explicit coverage for edge cases.
 4. H-2: Winner by approval ratio (3h)
 5. H-4: Deploy multisig (2h)
 
-**REMOVED:**
+**REMOVED/DEFERRED:**
 
-- ~~H-5: Deployment fee~~ → User decision: not needed
-- ~~H-6: Emergency pause~~ → Architectural conflict (needs alternative)
+- ~~H-5: Deployment fee~~ → Not needed (acceptable risk)
+- 🔵 H-6: Emergency pause → TBD (deferred post-mainnet)
 
 **Total: 18 hours = 2.25 dev days = 1.5 calendar weeks**
 
-### Can Defer (11 items)
+### Can Defer Post-Launch (12 items)
 
+**High (Deferred):** H-6 (emergency pause - TBD)  
 **Medium (3):** M-3, M-10, M-11  
 **Low (8):** L-1 through L-8
-
-### User Needs to Decide (1 item)
-
-**H-6:** Emergency pause mechanism
-
-- **Options:** Circuit breaker, factory kill switch, or time-delayed escape hatch
-- **See:** H-6 section for detailed alternatives
 
 ---
 
@@ -1263,7 +1252,7 @@ A: 1.5 weeks for Critical + High (Option 1) - UPDATED from 2 weeks
 A: H-1 (change one number - 1h), H-4 (deployment task - 2h), L-2 (move one line - 1h)
 
 **Q: What about H-6 (emergency pause)?**  
-A: User needs to choose: Circuit breaker, factory kill switch, or time-delayed escape hatch
+A: Deferred - marked as TBD, will revisit post-mainnet or in V2
 
 ---
 
@@ -1282,16 +1271,16 @@ A: User needs to choose: Circuit breaker, factory kill switch, or time-delayed e
 - ✅ 15 new tests passing
 - ✅ Gas increase < 5%
 - ✅ Multisig deployed and ownership transferred
-- ✅ H-6 alternative implemented (user decision)
+- 🔵 H-6 emergency pause deferred (TBD post-mainnet)
 
 ### Final Validation
 
 - ✅ 405+ tests passing (was 430+ before H-5/H-6 removal)
-- ✅ All Critical + High fixed
+- ✅ All Critical + High fixed (5 items)
 - ✅ Gas profiling complete
 - ✅ External audit verification
 - ✅ L-8 edge case coverage confirms security
-- ✅ H-6 alternative chosen and implemented
+- 🔵 H-6 emergency pause deferred for V2 consideration
 
 ---
 
@@ -1363,4 +1352,4 @@ A: User needs to choose: Circuit breaker, factory kill switch, or time-delayed e
 
 ---
 
-_This consolidated document replaces EXTERNAL_AUDIT_3_ACTIONS.md, EXTERNAL_AUDIT_3_VALIDATION.md, and EXTERNAL_AUDIT_3_SUMMARY.md. All validation evidence and corrections have been incorporated. **UPDATED Oct 30, 2025:** Only 16 items remain (was 18), with 5 being deployment blockers requiring 1.5 weeks of work (was 7 items, 2 weeks). User corrections: C-1 fix corrected to be ungameable, H-5 deployment fee removed (not needed), H-6 pausable mechanism deferred (architectural conflict). C-4 (VP caps) is a design decision - time-weighting without cap is intentional. L-8 (maxRewardTokens testing) added per user security review request - confirms existing protections are secure._
+_This consolidated document replaces EXTERNAL_AUDIT_3_ACTIONS.md, EXTERNAL_AUDIT_3_VALIDATION.md, and EXTERNAL_AUDIT_3_SUMMARY.md. All validation evidence and corrections have been incorporated. **UPDATED Oct 30, 2025:** Only 16 items remain (was 18), with 5 being deployment blockers requiring 1.5 weeks of work (was 7 items, 2 weeks). User corrections: C-1 fix corrected to use factory-side verification with array support for multiple Clanker versions (ungameable), H-5 deployment fee removed (not needed), H-6 emergency pause marked TBD and deferred post-mainnet. C-4 (VP caps) is a design decision - time-weighting without cap is intentional. L-8 (maxRewardTokens testing) added per user security review request - confirms existing protections are secure._
