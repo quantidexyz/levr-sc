@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 /// @title RewardMath Library
 /// @notice Pure calculation functions for reward streaming and accounting
 /// @dev Single source of truth for reward calculations, reduces duplication
 library RewardMath {
-    uint256 internal constant ACC_SCALE = 1e18;
+    // CRITICAL-4: Increased to 1e27 for higher precision (1000x improvement over 1e18)
+    // Reduces rounding errors in reward calculations, especially for small stakes
+    uint256 internal constant ACC_SCALE = 1e27;
 
     /// @notice Calculate vested amount from streaming rewards
     /// @param total Total amount to vest over the duration
@@ -32,7 +34,9 @@ library RewardMath {
         if (to <= from) return (0, last);
 
         uint256 duration = end - start;
-        if (duration == 0 || total == 0) return (0, to);
+        // LOW-1: Add explicit division-by-zero check for defense-in-depth
+        require(duration != 0, 'ZERO_DURATION');
+        if (total == 0) return (0, to);
 
         // Calculate vested amount linearly
         vested = (total * (to - from)) / duration;
@@ -43,7 +47,7 @@ library RewardMath {
     /// @param total Total amount to vest over the duration
     /// @param start Stream start timestamp
     /// @param end Stream end timestamp
-    /// @param last Last update timestamp
+    /// @param last Last update timestamp (marks when stream paused if last < current when totalStaked=0)
     /// @param current Current timestamp
     /// @return unvested Amount that hasn't vested yet
     function calculateUnvested(
@@ -60,13 +64,15 @@ library RewardMath {
         if (current < start) return total;
 
         uint256 duration = end - start;
+        // LOW-1: Add explicit division-by-zero check
+        require(duration != 0, 'ZERO_DURATION');
         if (duration == 0) return 0;
 
         // If stream ended, check if it fully vested
         if (current >= end) {
             // If last update didn't reach end, stream paused (no stakers) - return unvested
             if (last < end) {
-                // FIX: If stream never started vesting (last == start or last < start), 
+                // FIX: If stream never started vesting (last == start or last < start),
                 // don't include unvested in next stream - keeps rewards in reserve for manual re-accrual
                 // This prevents unvested rewards from getting stuck in infinite loop of paused streams
                 if (last <= start) {
@@ -80,8 +86,11 @@ library RewardMath {
             return 0;
         }
 
-        // Stream still active - calculate unvested based on elapsed time
-        uint256 elapsed = current - start;
+        // CRITICAL-1 FIX: Stream still active - use last update if stream paused
+        // If last < current when totalStaked = 0, stream is paused at 'last'
+        // Only vest up to pause point, not current time
+        uint64 effectiveTime = last < current ? last : current;
+        uint256 elapsed = effectiveTime > start ? effectiveTime - start : 0;
         uint256 vested = (total * elapsed) / duration;
 
         // Return unvested portion
@@ -99,6 +108,8 @@ library RewardMath {
         uint256 totalStaked
     ) internal pure returns (uint256 newAcc) {
         if (vestAmount == 0 || totalStaked == 0) return currentAcc;
+        // LOW-1: Add explicit division-by-zero check
+        require(totalStaked != 0, 'DIVISION_BY_ZERO');
         return currentAcc + (vestAmount * ACC_SCALE) / totalStaked;
     }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
@@ -16,6 +16,33 @@ import {RewardMath} from './libraries/RewardMath.sol';
 
 contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase {
     using SafeERC20 for IERC20;
+
+    // ============ Constants - LOW-3: Replace magic numbers ============
+    /// @notice Precision scale for token decimals in voting power calculations
+    uint256 public constant PRECISION = 1e18;
+
+    /// @notice Seconds per day (86400 seconds)
+    uint256 public constant SECONDS_PER_DAY = 86400;
+
+    /// @notice Basis points for APR calculations (10000 = 100%)
+    uint256 public constant BASIS_POINTS = 10_000;
+
+    /// @notice Minimum reward amount to prevent DoS attack - MEDIUM-2 fix
+    /// Prevents attackers from filling reward token slots with dust
+    uint256 public constant MIN_REWARD_AMOUNT = 1e15; // 0.001 tokens (18 decimals)
+
+    // ============ Events - CRITICAL-2, HIGH-2, MEDIUM-4, MEDIUM-6 fixes ============
+    /// @notice Event emitted when external claims fail - HIGH-2 fix
+    event ClaimFailed(address indexed locker, address indexed token, string reason);
+
+    /// @notice Event emitted when user debt increases - MEDIUM-4 fix
+    event DebtIncreased(address indexed user, address indexed token, int256 amount);
+
+    /// @notice Event emitted when user debt is updated - MEDIUM-4 fix
+    event DebtUpdated(address indexed user, address indexed token, int256 newDebt);
+
+    /// @notice Event emitted when reward shortfall occurs - MEDIUM-6 fix
+    event RewardShortfall(address indexed user, address indexed token, uint256 amount);
 
     constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
 
@@ -36,8 +63,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     address[] private _rewardTokens;
     mapping(address => ILevrStaking_v1.RewardTokenState) private _tokenState;
     mapping(address => mapping(address => ILevrStaking_v1.UserRewardState)) private _userRewards;
-
-    uint256 private constant ACC_SCALE = 1e18;
 
     // Track escrowed principal per token to separate it from reward liquidity
     mapping(address => uint256) private _escrowBalance;
@@ -155,7 +180,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 newStartTime = stakeStartTime[staker];
         if (remainingBalance > 0 && newStartTime > 0) {
             uint256 timeStaked = block.timestamp - newStartTime;
-            newVotingPower = (remainingBalance * timeStaked) / (1e18 * 86400);
+            newVotingPower = (remainingBalance * timeStaked) / (PRECISION * SECONDS_PER_DAY);
         } else {
             newVotingPower = 0;
         }
@@ -215,22 +240,55 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             uint256 pending = userState2.pending;
             if (pending > 0) {
                 ILevrStaking_v1.RewardTokenState storage tokenState2 = _tokenState[token];
-                if (tokenState2.reserve < pending) revert InsufficientRewardLiquidity();
-                tokenState2.reserve -= pending;
-                IERC20(token).safeTransfer(to, pending);
-                emit RewardsClaimed(claimer, to, token, pending);
-                // Clear pending rewards after claiming
-                userState2.pending = 0;
+
+                // MEDIUM-6: Handle reserve depletion gracefully for pending rewards too
+                // Check BOTH reserve tracking AND actual token balance
+                uint256 actualBalance = IERC20(token).balanceOf(address(this));
+                uint256 available = tokenState2.reserve < actualBalance
+                    ? tokenState2.reserve
+                    : actualBalance;
+
+                if (available < pending) {
+                    // Transfer what's available, keep rest as pending
+                    uint256 shortfall = pending - available;
+
+                    // Update pending to only the shortfall amount
+                    userState2.pending = shortfall;
+
+                    // Deduct from reserve
+                    if (tokenState2.reserve >= available) {
+                        tokenState2.reserve -= available;
+                    } else {
+                        tokenState2.reserve = 0;
+                    }
+
+                    if (available > 0) {
+                        IERC20(token).safeTransfer(to, available);
+                        emit RewardsClaimed(claimer, to, token, available);
+                    }
+
+                    // Emit event for monitoring shortfalls
+                    emit RewardShortfall(claimer, token, shortfall);
+                } else {
+                    // Normal path - full payment
+                    tokenState2.reserve -= pending;
+                    IERC20(token).safeTransfer(to, pending);
+                    emit RewardsClaimed(claimer, to, token, pending);
+                    // Clear pending rewards after claiming
+                    userState2.pending = 0;
+                }
             }
         }
     }
 
     /// @inheritdoc ILevrStaking_v1
     function accrueRewards(address token) external nonReentrant {
-        // Automatically collect from LP locker and claim any pending rewards from ClankerFeeLocker
+        // Optionally collect from LP/Fee lockers first (convenience)
+        // But accounting works the same whether we do this or not
         _claimFromClankerFeeLocker(token);
 
-        // Credit all available rewards after claiming
+        // Core accounting: count what's in the contract and update reserve
+        // Works regardless of how tokens arrived (LP claim, direct transfer, etc.)
         uint256 available = _availableUnaccountedRewards(token);
         if (available > 0) {
             _creditRewards(token, available);
@@ -511,7 +569,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (total == 0) return 0;
         uint256 rate = total / window;
         uint256 annual = rate * 365 days;
-        return (annual * 10_000) / _totalStaked;
+        return (annual * BASIS_POINTS) / _totalStaked;
     }
 
     function _resetStreamForToken(address token, uint256 amount) internal {
@@ -548,6 +606,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @notice Internal function to claim pending rewards from ClankerFeeLocker
+    /// @dev This is a convenience function - accounting works the same with or without it
+    ///      Tokens can arrive via direct transfer, and accrueRewards will handle them
     function _claimFromClankerFeeLocker(address token) internal {
         if (factory == address(0)) return;
 
@@ -564,12 +624,16 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         }
         if (!metadata.exists) return;
 
+        // CRITICAL-2: Store balance before external calls for verification
+        uint256 balanceBefore = IERC20(token).balanceOf(address(this));
+
         // First, collect rewards from LP locker to ensure ClankerFeeLocker has latest fees
         if (metadata.lpLocker != address(0)) {
             try IClankerLpLocker(metadata.lpLocker).collectRewards(underlying) {
                 // Successfully collected from LP locker
-            } catch {
-                // Ignore errors from LP locker - it might not have fees to collect
+            } catch (bytes memory reason) {
+                // HIGH-2: Emit event on failure instead of silently failing
+                emit ClaimFailed(metadata.lpLocker, token, string(reason));
             }
         }
 
@@ -579,15 +643,27 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
                 uint256 availableFees
             ) {
                 if (availableFees > 0) {
-                    IClankerFeeLocker(metadata.feeLocker).claim(address(this), token);
+                    try IClankerFeeLocker(metadata.feeLocker).claim(address(this), token) {
+                        // Successfully claimed
+                    } catch (bytes memory reason) {
+                        // HIGH-2: Emit event on failure
+                        emit ClaimFailed(metadata.feeLocker, token, string(reason));
+                    }
                 }
             } catch {
                 // Fee locker might not have this token or staking not set as fee owner
             }
         }
+
+        // CRITICAL-2: Verify balance didn't decrease unexpectedly
+        uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+        require(balanceAfter >= balanceBefore, 'BALANCE_MISMATCH');
     }
 
     function _creditRewards(address token, uint256 amount) internal {
+        // MEDIUM-2: Prevent DoS attack by rejecting dust amounts
+        require(amount >= MIN_REWARD_AMOUNT, 'REWARD_TOO_SMALL');
+
         RewardTokenState storage tokenState = _ensureRewardToken(token);
         // Settle current stream up to now before resetting
         _settleStreamingForToken(token);
@@ -601,6 +677,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Increase reserve by newly provided amount only
         // (unvested is already in reserve from previous accrual)
         tokenState.reserve += amount;
+
         emit RewardsAccrued(token, amount, tokenState.accPerShare);
     }
 
@@ -665,7 +742,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
                     amount,
                     tokenState.accPerShare
                 );
-                _userRewards[account][rt].debt += int256(accumulated);
+                int256 debtIncrease = int256(accumulated);
+                _userRewards[account][rt].debt += debtIncrease;
+
+                // MEDIUM-4: Emit event for monitoring debt changes
+                emit DebtIncreased(account, rt, debtIncrease);
             }
         }
     }
@@ -677,7 +758,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[rt];
             // Calculate accumulated for new balance using library
             uint256 accumulated = RewardMath.calculateAccumulated(newBal, tokenState.accPerShare);
-            _userRewards[account][rt].debt = int256(accumulated);
+            int256 newDebt = int256(accumulated);
+            _userRewards[account][rt].debt = newDebt;
+
+            // MEDIUM-4: Emit event for monitoring debt updates
+            emit DebtUpdated(account, rt, newDebt);
         }
     }
 
@@ -698,10 +783,28 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         );
 
         if (balanceBasedClaimable > 0) {
-            if (tokenState.reserve < balanceBasedClaimable) revert InsufficientRewardLiquidity();
-            tokenState.reserve -= balanceBasedClaimable;
-            IERC20(token).safeTransfer(to, balanceBasedClaimable);
-            emit RewardsClaimed(account, to, token, balanceBasedClaimable);
+            // MEDIUM-6: Handle reserve depletion gracefully instead of reverting
+            if (tokenState.reserve < balanceBasedClaimable) {
+                // Transfer what's available, mark rest as pending
+                uint256 available = tokenState.reserve;
+                uint256 shortfall = balanceBasedClaimable - available;
+
+                userState.pending += shortfall;
+                tokenState.reserve = 0;
+
+                if (available > 0) {
+                    IERC20(token).safeTransfer(to, available);
+                    emit RewardsClaimed(account, to, token, available);
+                }
+
+                // Emit event for monitoring shortfalls
+                emit RewardShortfall(account, token, shortfall);
+            } else {
+                // Normal path - full payment
+                tokenState.reserve -= balanceBasedClaimable;
+                IERC20(token).safeTransfer(to, balanceBasedClaimable);
+                emit RewardsClaimed(account, to, token, balanceBasedClaimable);
+            }
         }
     }
 
@@ -803,7 +906,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         // Normalize to token-days: divide by 1e18 (token decimals) and 86400 (seconds per day)
         // This makes VP human-readable: 1000 tokens × 100 days = 100,000 token-days
-        return (balance * timeStaked) / (1e18 * 86400);
+        return (balance * timeStaked) / (PRECISION * SECONDS_PER_DAY);
     }
 
     // ============ Internal Wrappers for Stake/Unstake Operations ============
