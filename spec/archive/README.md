@@ -1,170 +1,149 @@
 # Archive - Historical Documentation
 
-**Purpose:** Preserve detailed historical analysis and design documents  
-**Status:** Archived (information consolidated into main spec docs)  
-**Last Updated:** October 27, 2025
+**Last Updated:** October 30, 2025  
+**Purpose:** Preserve completed work and historical context
 
 ---
 
-## Why These Files Are Archived
+## 📁 STRUCTURE
 
-This archive contains detailed documentation that has been **consolidated** into the main spec folder for better readability and navigation. All important information is preserved in the consolidated docs - these files are kept for historical reference and deep-dive analysis.
+### audits/ - Completed Audit Work
 
----
+**External Audit 0 (Complete):**
 
-## Archive Contents
+- `EXTERNAL_AUDIT_0.md` - Initial audit (78KB, 8/8 findings fixed)
+- `EXTERNAL_AUDIT_0_FIXES.md` - Implementation summary
 
-### Midstream Accrual Bug History (Fixed Oct 2025)
+**External Audit 2 (Complete):**
 
-**Consolidated into:** [../HISTORICAL_FIXES.md](../HISTORICAL_FIXES.md)
+- `EXTERNAL_AUDIT_2_ACTIONS.md` - Original action plan
+- `EXTERNAL_AUDIT_2_IMPLEMENTATION.md` - Implementation log
 
-| File                                    | Content                                                 | Lines |
-| --------------------------------------- | ------------------------------------------------------- | ----- |
-| `APR_SPIKE_ANALYSIS.md`                 | Initial investigation of APR spike, discovered real bug | 189   |
-| `MIDSTREAM_ACCRUAL_BUG_REPORT.md`       | Initial bug report with test results                    | 165   |
-| `MIDSTREAM_ACCRUAL_COMPLETE_SUMMARY.md` | Complete analysis and fix                               | 293   |
-| `MIDSTREAM_ACCRUAL_FIX_SUMMARY.md`      | Fix summary and verification                            | 218   |
-| `FIX_VERIFICATION.md`                   | Detailed verification of fix working                    | 246   |
-
-**Total:** 1,111 lines → 200 lines in HISTORICAL_FIXES.md (80% reduction)
-
-### Governance Bug History (Fixed Oct 2025)
-
-**Consolidated into:** [../HISTORICAL_FIXES.md](../HISTORICAL_FIXES.md)
-
-| File                              | Content                             | Lines |
-| --------------------------------- | ----------------------------------- | ----- |
-| `TEST_RUN_SUMMARY.md`             | Test run demonstrating unfixed bugs | 244   |
-| `UNFIXED_FINDINGS_TEST_STATUS.md` | Test status for unfixed findings    | 390   |
-| `SNAPSHOT_SYSTEM_VALIDATION.md`   | Snapshot system validation          | 347   |
-
-**Total:** 981 lines → 150 lines in HISTORICAL_FIXES.md (85% reduction)
-
-### Emergency Rescue & Upgradeability Designs (Not Implemented)
-
-**Consolidated into:** [../FUTURE_ENHANCEMENTS.md](../FUTURE_ENHANCEMENTS.md)
-
-| File                                      | Content                                     | Lines |
-| ----------------------------------------- | ------------------------------------------- | ----- |
-| `COMPREHENSIVE_EDGE_CASE_ANALYSIS.md`     | Edge case analysis with emergency functions | 828   |
-| `EMERGENCY_RESCUE_IMPLEMENTATION.md`      | Complete emergency rescue implementation    | 747   |
-| `EXECUTIVE_SUMMARY.md`                    | Executive summary of security review        | 257   |
-| `SECURITY_AUDIT_REPORT.md`                | Security audit report format                | 648   |
-| `UPGRADEABILITY_COMPLEXITY_ASSESSMENT.md` | UUPS complexity assessment                  | 676   |
-| `UPGRADEABILITY_GUIDE.md`                 | Complete UUPS implementation guide          | 683   |
-
-**Total:** 3,839 lines → 400 lines in FUTURE_ENHANCEMENTS.md (90% reduction)
-
-### Feature Documentation (Completed)
-
-**Consolidated into:** [../CHANGELOG.md](../CHANGELOG.md)
-
-| File                                  | Content                             | Lines |
-| ------------------------------------- | ----------------------------------- | ----- |
-| `TOKEN_AGNOSTIC_MIGRATION_SUMMARY.md` | Token-agnostic governance migration | 311   |
-| `FEE_SPLITTER_REFACTOR.md`            | Per-project architecture refactor   | 319   |
-| `EDGE_CASE_AUDIT_SUMMARY.md`          | Edge case audit summary             | 617   |
-
-**Total:** 1,247 lines → 150 lines in CHANGELOG.md (88% reduction)
-
-### Test Utilities (Active Development)
-
-**Consolidated into:** [../TESTING.md](../TESTING.md)
-
-| File                    | Content                    | Lines |
-| ----------------------- | -------------------------- | ----- |
-| `README_SWAP_HELPER.md` | SwapV4Helper documentation | 250   |
-
-**Total:** 250 lines → 200 lines in TESTING.md (20% reduction)
+**Note:** See `../EXTERNAL_AUDIT_2_COMPLETE.md` for summary of AUDIT 2 fixes
 
 ---
 
-## Total Consolidation
+### consolidations/ - Historical Consolidation Work
 
-**Before:** 24 markdown files, 7,428 total lines  
-**After:** 10 main files + 18 archived, ~1,500 main spec lines  
-**Reduction:** 80% reduction in main spec folder size  
-**Information Loss:** 0% (all important info preserved)
-
----
-
-## When to Reference Archive
-
-### Use Archived Files When:
-
-**1. Deep Historical Context Needed**
-
-- Understanding exactly how bugs were discovered
-- Reading original investigation thought process
-- Studying detailed test run outputs
-
-**2. Detailed Design Exploration**
-
-- Reading full emergency rescue implementation code
-- Exploring all UUPS upgrade scenarios
-- Understanding every edge case detail
-
-**3. Audit Trail**
-
-- Showing systematic bug discovery process
-- Demonstrating comprehensive analysis
-- Proving due diligence
-
-### Use Main Spec Files For:
-
-**Everything Else!** The main spec folder has all the information you need:
-
-- Current status and readiness
-- Security findings and fixes
-- Implementation guides
-- Testing strategies
-- Feature documentation
+- `CONSOLIDATION_SUMMARY.md` - Previous consolidation (pre-Oct 30)
+- `CONSOLIDATION_MAP.md` - File mapping from old structure
+- `COMPLETE_SPEC_UPDATE_OCT29.md` - October 29 update summary
 
 ---
 
-## Archive Organization
+### findings/ - Specific Historical Findings
 
-```
-archive/
-├── Midstream Accrual Bug (5 files)
-│   ├── APR_SPIKE_ANALYSIS.md
-│   ├── MIDSTREAM_ACCRUAL_BUG_REPORT.md
-│   ├── MIDSTREAM_ACCRUAL_COMPLETE_SUMMARY.md
-│   ├── MIDSTREAM_ACCRUAL_FIX_SUMMARY.md
-│   └── FIX_VERIFICATION.md
-│
-├── Governance Bugs (3 files)
-│   ├── TEST_RUN_SUMMARY.md
-│   ├── UNFIXED_FINDINGS_TEST_STATUS.md
-│   └── SNAPSHOT_SYSTEM_VALIDATION.md
-│
-├── Emergency & Upgradeability (6 files)
-│   ├── COMPREHENSIVE_EDGE_CASE_ANALYSIS.md
-│   ├── EMERGENCY_RESCUE_IMPLEMENTATION.md
-│   ├── EXECUTIVE_SUMMARY.md
-│   ├── SECURITY_AUDIT_REPORT.md
-│   ├── UPGRADEABILITY_COMPLEXITY_ASSESSMENT.md
-│   └── UPGRADEABILITY_GUIDE.md
-│
-├── Feature Documentation (3 files)
-│   ├── TOKEN_AGNOSTIC_MIGRATION_SUMMARY.md
-│   ├── FEE_SPLITTER_REFACTOR.md
-│   └── EDGE_CASE_AUDIT_SUMMARY.md
-│
-└── Test Utilities (1 file)
-    └── README_SWAP_HELPER.md
-```
+- `CONFIG_GRIDLOCK_FINDINGS.md` - Configuration gridlock analysis (fixed)
+- `SECURITY_FIX_OCT_30_2025.md` - Specific security fix log
+- `ADERYN_ANALYSIS.md` - Static analysis findings (21 items, all addressed)
 
 ---
 
-## Recommendation
+### testing/ - Historical Test Analysis
 
-**For Day-to-Day Work:** Use main spec folder  
-**For Deep Dives:** Reference archive as needed  
-**For Auditors:** Main spec + selective archive review
+- `COVERAGE_ANALYSIS.md` - Comprehensive coverage report (418 tests)
+
+**Note:** Current test guidance in `../TESTING.md`
 
 ---
 
-**Archived:** October 27, 2025  
-**Reason:** Documentation consolidation for improved readability  
-**Information Status:** All content preserved, organized, and accessible
+### obsolete-designs/ - Old Design Documents (51 files)
+
+Historical design documents from development phase. These represent past approaches that were refactored or superseded.
+
+**Examples:**
+
+- Upgradeability explorations
+- Alternative staking designs
+- Fee splitter iterations
+- Governance variations
+
+**Purpose:** Historical context, don't use for current implementation
+
+---
+
+## 🎯 WHEN TO USE ARCHIVE
+
+### Good Reasons to Check Archive
+
+✅ **Learning from history** - "Why did we make this decision?"  
+✅ **Understanding evolution** - "How did the design change?"  
+✅ **Audit context** - "What was fixed in AUDIT 0?"  
+✅ **Past bugs** - "Has this issue been seen before?"
+
+### Don't Use Archive For
+
+❌ **Current implementation** → Use `../EXTERNAL_AUDIT_3_ACTIONS.md`  
+❌ **Security status** → Use `../AUDIT_STATUS.md`  
+❌ **Protocol reference** → Use `../GOV.md` or `../FEE_SPLITTER.md`  
+❌ **Testing** → Use `../TESTING.md`
+
+---
+
+## 📊 ARCHIVE STATISTICS
+
+**Total Files:** 66 files
+
+- `audits/`: 4 files
+- `consolidations/`: 3 files
+- `findings/`: 3 files
+- `testing/`: 1 file
+- `obsolete-designs/`: 51 files
+- Root: 4 files (various)
+
+**Date Range:** Development start → October 30, 2025  
+**Total Size:** ~500KB of historical documentation
+
+---
+
+## 🔍 FINDING THINGS IN ARCHIVE
+
+### "I need to know..."
+
+| Question                          | Document                    | Location            |
+| --------------------------------- | --------------------------- | ------------------- |
+| What was in AUDIT 0?              | EXTERNAL_AUDIT_0.md         | `audits/`           |
+| How was AUDIT 2 implemented?      | EXTERNAL_AUDIT_2_ACTIONS.md | `audits/`           |
+| Why was spec consolidated before? | CONSOLIDATION_SUMMARY.md    | `consolidations/`   |
+| What static analysis found        | ADERYN_ANALYSIS.md          | `findings/`         |
+| What was test coverage?           | COVERAGE_ANALYSIS.md        | `testing/`          |
+| Old design approaches?            | Various                     | `obsolete-designs/` |
+
+---
+
+## 🎓 HISTORICAL CONTEXT
+
+### Major Consolidations
+
+1. **Pre-October 2025** - Initial spec organization
+2. **October 29, 2025** - Spec update (COMPLETE_SPEC_UPDATE_OCT29)
+3. **October 30, 2025** - Current consolidation (this one!)
+
+### Evolution of Documentation
+
+**Phase 1:** Scattered design docs (50+ files)  
+**Phase 2:** First consolidation (organized by topic)  
+**Phase 3:** Second consolidation (active vs archive)  
+**Phase 4:** Current state (13 active, 66 archived)
+
+---
+
+## 🚀 RELATED DOCUMENTS
+
+### Active Spec Documents
+
+See `../README.md` for current documentation structure
+
+### Current Audit Work
+
+See `../EXTERNAL_AUDIT_3_ACTIONS.md` for what needs to be done
+
+### Security Status
+
+See `../AUDIT_STATUS.md` for dashboard
+
+---
+
+**Maintained By:** Levr Protocol Team  
+**Purpose:** Historical preservation  
+**Update Frequency:** As needed (when archiving completed work)
