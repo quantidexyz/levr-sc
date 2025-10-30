@@ -9,6 +9,7 @@ alwaysApply: true
 - **Never** pass fork url in test command.
 - **Always** run relevent test cases/files/folders.
 - **Intelligently** determine if a test is written just to make the test pass, even when the source code is actually incorrect.
+- **Always** run tests from their dir i.e if you are testing unit tests, run them with --match-path "test/unit/\*.t.sol"
 
 ## Code Organization Rules
 

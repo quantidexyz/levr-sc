@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 /// @title Levr Fee Splitter Factory v1 Interface
 /// @notice Factory for deploying per-project fee splitters for Clanker tokens

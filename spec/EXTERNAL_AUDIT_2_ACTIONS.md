@@ -414,65 +414,6 @@ function test_multipleAccruals_noSignificantDust() public {
 
 ## 🟠 HIGH SEVERITY FINDINGS
 
-### HIGH-1: Unbounded Loop in \_settleStreamingAll()
-
-**Severity:** HIGH
-**Impact:** DOS attack via gas exhaustion
-**Source:** `spec/external-2/security-vulnerability-analysis.md` Lines 277-340
-
-#### Location to Fix
-
-- **File:** `src/LevrStaking_v1.sol`
-- **Function:** `_settleStreamingAll()`
-- **Lines:** 798-803
-
-#### Current Code
-
-```solidity
-function _settleStreamingAll() internal {
-    uint256 len = _rewardTokens.length;
-    for (uint256 i = 0; i < len; i++) {
-        _settleStreamingForToken(_rewardTokens[i]);
-    }
-}
-```
-
-#### Problem
-
-With 50+ reward tokens, gas cost can exceed block limits.
-
-#### Fix to Implement
-
-**Option 1: Add max tokens limit (RECOMMENDED)**
-
-```solidity
-// File: src/LevrStaking_v1.sol
-// Add constant:
-
-uint256 public constant MAX_TOKENS_PER_SETTLE = 20;
-
-function _settleStreamingAll() internal {
-    uint256 len = _rewardTokens.length;
-    require(len <= MAX_TOKENS_PER_SETTLE, "TOO_MANY_TOKENS");
-
-    for (uint256 i = 0; i < len; i++) {
-        _settleStreamingForToken(_rewardTokens[i]);
-    }
-}
-```
-
-**Option 2: Lazy settlement (more complex)**
-Only settle tokens that are being claimed, not all tokens.
-
-#### Test to Create
-
-- **File:** `test/unit/LevrStakingV1.TokenDoS.t.sol` (NEW FILE)
-- Test with max number of tokens
-- Test gas consumption
-- Test DOS scenario
-
----
-
 ### HIGH-2: Unchecked Return Values from External Calls
 
 **Severity:** HIGH
@@ -518,207 +459,6 @@ function _claimFromClankerFeeLocker(address token) internal {
 #### Test to Create
 
 - Update existing tests to verify events are emitted on failure
-
----
-
-### HIGH-3: Access Control Bypass via Meta-Transactions
-
-**Severity:** HIGH
-**Impact:** Complete authorization bypass if forwarder is malicious
-**Source:** `spec/external-2/security-vulnerability-analysis.md` Lines 403-461
-
-#### Location to Fix
-
-- **File:** Multiple files (all contracts with ERC2771ContextBase)
-- **Files to modify:**
-  - `src/LevrStaking_v1.sol`
-  - `src/LevrGovernor_v1.sol`
-  - `src/LevrTreasury_v1.sol`
-  - `src/LevrFactory_v1.sol`
-  - `src/LevrStakedToken_v1.sol`
-
-#### Fix to Implement
-
-**Step 1: Add forwarder validation in constructors**
-
-```solidity
-// File: src/LevrStaking_v1.sol (and all other contracts)
-// In constructor:
-
-constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {
-    require(trustedForwarder != address(0), "ZERO_FORWARDER");
-
-    // Verify forwarder is a contract
-    require(trustedForwarder.code.length > 0, "FORWARDER_NOT_CONTRACT");
-}
-```
-
-**Step 2: Document which forwarder to use**
-Use OpenZeppelin's MinimalForwarder (already audited).
-
-**Step 3: Add to deployment scripts**
-Verify forwarder address before deployment.
-
-#### Test to Create
-
-- **File:** `test/unit/LevrForwarderV1.Security.t.sol` (ALREADY EXISTS - update it)
-- Test zero address rejection
-- Test non-contract rejection
-- Test with valid forwarder
-
----
-
-### HIGH-4: Reward Theft via Token Whitelisting
-
-**Severity:** HIGH
-**Impact:** Compromised admin can whitelist malicious tokens
-**Source:** `spec/external-2/security-vulnerability-analysis.md` Lines 464-541
-
-#### Location to Fix
-
-- **File:** `src/LevrStaking_v1.sol`
-- **Function:** `whitelistToken()`
-- **Lines:** 269-294
-
-#### Fix to Implement
-
-**Option 1: Add timelock (RECOMMENDED)**
-
-```solidity
-// File: src/LevrStaking_v1.sol
-// Add state variables:
-
-mapping(address => uint256) public whitelistRequestTime;
-uint256 public constant WHITELIST_TIMELOCK = 7 days;
-mapping(address => bool) public whitelistPending;
-
-// Add event:
-event WhitelistRequested(address indexed token, uint256 executeAfter);
-event WhitelistExecuted(address indexed token);
-
-// Replace whitelistToken with two-step process:
-
-function requestWhitelistToken(address token) external {
-    if (token == address(0)) revert ZeroAddress();
-
-    address tokenAdmin = IClankerToken(underlying).admin();
-    require(_msgSender() == tokenAdmin, "ONLY_TOKEN_ADMIN");
-
-    whitelistRequestTime[token] = block.timestamp;
-    whitelistPending[token] = true;
-
-    emit WhitelistRequested(token, block.timestamp + WHITELIST_TIMELOCK);
-}
-
-function executeWhitelistToken(address token) external nonReentrant {
-    require(whitelistPending[token], "NO_PENDING_REQUEST");
-    require(
-        block.timestamp >= whitelistRequestTime[token] + WHITELIST_TIMELOCK,
-        "TIMELOCK_NOT_EXPIRED"
-    );
-
-    // Validate token is ERC20
-    require(_isValidToken(token), "INVALID_TOKEN");
-
-    RewardTokenState storage tokenState = _tokenState[token];
-    if (tokenState.exists) revert TokenAlreadyExists();
-
-    tokenState.whitelisted = true;
-    tokenState.exists = true;
-
-    whitelistPending[token] = false;
-
-    emit WhitelistExecuted(token);
-}
-
-function _isValidToken(address token) internal view returns (bool) {
-    try IERC20(token).totalSupply() returns (uint256 supply) {
-        return supply > 0;
-    } catch {
-        return false;
-    }
-}
-```
-
-#### Test to Create
-
-- **File:** `test/unit/LevrStakingV1.WhitelistSecurity.t.sol` (NEW FILE)
-- Test timelock enforcement
-- Test token validation
-- Test malicious token rejection
-
----
-
-### HIGH-5: Voting Power Manipulation via Flash Loans
-
-**Severity:** HIGH
-**Impact:** Flash loans can game governance voting
-**Source:** `spec/external-2/security-vulnerability-analysis.md` Lines 544-653
-
-#### Location to Fix
-
-- **File:** `src/LevrGovernor_v1.sol`
-- **Function:** `getVotingPower()`
-- **Lines:** 884-898
-
-#### Fix to Implement
-
-**Implement checkpoint-based voting:**
-
-```solidity
-// File: src/LevrGovernor_v1.sol
-// Add structs and state:
-
-struct Checkpoint {
-    uint64 fromBlock;
-    uint192 votes;
-}
-
-mapping(address => Checkpoint[]) public checkpoints;
-uint256 public constant MIN_VOTING_DELAY = 1 days;
-
-// Add function to write checkpoints (called when stake changes):
-function _writeCheckpoint(address user, uint192 newVotes) internal {
-    uint256 nCheckpoints = checkpoints[user].length;
-
-    if (nCheckpoints > 0 && checkpoints[user][nCheckpoints - 1].fromBlock == block.number) {
-        // Update current block checkpoint
-        checkpoints[user][nCheckpoints - 1].votes = newVotes;
-    } else {
-        // Create new checkpoint
-        checkpoints[user].push(Checkpoint({
-            fromBlock: uint64(block.number),
-            votes: newVotes
-        }));
-    }
-}
-
-// Replace getVotingPower with getPriorVotes:
-function getPriorVotes(address account, uint256 blockNumber) external view returns (uint192) {
-    require(blockNumber < block.number, "NOT_YET_DETERMINED");
-    require(block.number - blockNumber >= MIN_VOTING_DELAY, "TOO_RECENT");
-
-    uint256 nCheckpoints = checkpoints[account].length;
-    if (nCheckpoints == 0) return 0;
-
-    // Most recent checkpoint
-    if (checkpoints[account][nCheckpoints - 1].fromBlock <= blockNumber) {
-        return checkpoints[account][nCheckpoints - 1].votes;
-    }
-
-    // Binary search for checkpoint
-    // ... (implement binary search) ...
-}
-```
-
-**IMPORTANT:** This also requires updating `LevrStaking_v1.sol` to call `_writeCheckpoint()` in the governor whenever balance changes.
-
-#### Test to Create
-
-- **File:** `test/unit/LevrGovernorV1.FlashLoanAttack.t.sol` (NEW FILE)
-- Test flash loan voting attempt
-- Test checkpoint system
-- Test minimum delay enforcement
 
 ---
 
@@ -810,22 +550,6 @@ function _creditRewards(address token, uint256 amount) internal {
 
 ---
 
-### MEDIUM-3: Trusted Forwarder Configuration Risk
-
-**Severity:** MEDIUM
-**Impact:** Deployment configuration error
-**Source:** `spec/external-2/NEW_SECURITY_FINDINGS_OCT_2025.md` Lines 306-455
-
-#### Already Covered
-
-This is similar to HIGH-3. Ensure:
-
-1. Constructor validation (covered above)
-2. Use OpenZeppelin MinimalForwarder
-3. Document in deployment scripts
-
----
-
 ### MEDIUM-4: Missing Event Emission in Critical State Changes
 
 **Severity:** MEDIUM
@@ -866,69 +590,6 @@ emit DebtUpdated(account, rt, int256(accumulated));
 #### Test Updates
 
 - Update existing tests to check for event emissions
-
----
-
-### MEDIUM-5: Lack of Pause Mechanism
-
-**Severity:** MEDIUM
-**Impact:** Cannot stop operations during emergency
-**Source:** `spec/external-2/security-vulnerability-analysis.md` Lines 715-743
-
-#### Location to Fix
-
-- **File:** `src/LevrStaking_v1.sol`
-
-#### Fix to Implement
-
-```solidity
-// File: src/LevrStaking_v1.sol
-// Add import:
-import "@openzeppelin/contracts/security/Pausable.sol";
-
-// Update contract declaration:
-contract LevrStaking_v1 is ERC2771ContextBase, ReentrancyGuard, Pausable {
-
-    // ... existing code ...
-
-    // Add whenNotPaused to critical functions:
-
-    function stake(uint256 amount) external nonReentrant whenNotPaused {
-        // ... existing code
-    }
-
-    function unstake(uint256 amount, address to) external nonReentrant whenNotPaused {
-        // ... existing code
-    }
-
-    function claimRewards(
-        address[] memory tokens,
-        address to
-    ) external nonReentrant whenNotPaused {
-        // ... existing code
-    }
-
-    // Add pause/unpause functions:
-    function emergencyPause() external {
-        address governor = ILevrFactory_v1(factory).governor();
-        require(_msgSender() == governor, "ONLY_GOVERNANCE");
-        _pause();
-    }
-
-    function emergencyUnpause() external {
-        address governor = ILevrFactory_v1(factory).governor();
-        require(_msgSender() == governor, "ONLY_GOVERNANCE");
-        _unpause();
-    }
-}
-```
-
-#### Test to Create
-
-- **File:** `test/unit/LevrStakingV1.EmergencyPause.t.sol` (NEW FILE)
-- Test pause/unpause functionality
-- Test operations blocked when paused
-- Test governance-only access
 
 ---
 
@@ -1143,44 +804,24 @@ This is a code style improvement.
    - Tests rounding error accumulation
    - Tests with different ACC_SCALE values
 
-5. **test/unit/LevrStakingV1.TokenDoS.t.sol**
-   - Purpose: Test HIGH-1 fix
-   - Tests gas limits with many tokens
-   - Tests max token enforcement
-
-6. **test/unit/LevrStakingV1.WhitelistSecurity.t.sol**
-   - Purpose: Test HIGH-4 fix
-   - Tests timelock enforcement
-   - Tests token validation
-
-7. **test/unit/LevrGovernorV1.FlashLoanAttack.t.sol**
-   - Purpose: Test HIGH-5 fix
-   - Tests checkpoint voting system
-   - Tests flash loan prevention
-
-8. **test/unit/LevrStakingV1.RewardTokenDoS.t.sol**
+5. **test/unit/LevrStakingV1.RewardTokenDoS.t.sol**
    - Purpose: Test MEDIUM-2 fix
    - Tests dust rejection
    - Tests minimum reward amount
 
-9. **test/unit/LevrStakingV1.EmergencyPause.t.sol**
-   - Purpose: Test MEDIUM-5 fix
-   - Tests pause/unpause mechanism
-   - Tests governance-only access
+6. **test/unit/LevrStakingV1.RewardReserveDepletion.t.sol**
+   - Purpose: Test MEDIUM-6 fix
+   - Tests graceful handling of insufficient reserves
+   - Tests pending rewards mechanism
 
-10. **test/unit/LevrStakingV1.RewardReserveDepletion.t.sol**
-    - Purpose: Test MEDIUM-6 fix
-    - Tests graceful handling of insufficient reserves
-    - Tests pending rewards mechanism
-
-11. **test/unit/RewardMath.DivisionSafety.t.sol**
-    - Purpose: Test LOW-1 fix
-    - Tests division by zero protection
+7. **test/unit/RewardMath.DivisionSafety.t.sol**
+   - Purpose: Test LOW-1 fix
+   - Tests division by zero protection
 
 ### Existing Test Files to Update
 
 1. **test/unit/LevrForwarderV1.t.sol**
-   - Add tests for constructor validation (HIGH-3)
+   - May need updates for any forwarder-related changes
 
 2. **test/unit/LevrStakingV1.t.sol**
    - Add tests for event emissions (MEDIUM-4)
@@ -1208,32 +849,24 @@ Implement fixes in this order to minimize conflicts:
 
 6. ✅ **CRITICAL-2**: Add reentrancy protection & balance verification
 7. ✅ **CRITICAL-3**: Verify first staker logic works correctly (depends on CRITICAL-1)
-8. ✅ **HIGH-1**: Add max tokens limit
-9. ✅ **HIGH-2**: Add external call verification & events
-10. ✅ **MEDIUM-2**: Add minimum reward amount
-11. ✅ **MEDIUM-4**: Add comprehensive events
-12. ✅ **MEDIUM-5**: Add pause mechanism
-13. ✅ **MEDIUM-6**: Fix reserve depletion handling
+8. ✅ **HIGH-2**: Add external call verification & events
+9. ✅ **MEDIUM-2**: Add minimum reward amount
+10. ✅ **MEDIUM-4**: Add comprehensive events
+11. ✅ **MEDIUM-6**: Fix reserve depletion handling
 
-### Phase 3: Access Control & Governance (Week 2)
+### Phase 3: Testing (Week 2-3)
 
-14. ✅ **HIGH-3**: Add forwarder validation
-15. ✅ **HIGH-4**: Add whitelist timelock
-16. ✅ **HIGH-5**: Implement checkpoint voting
+12. ✅ Create all new test files
+13. ✅ Update existing test files
+14. ✅ Run full test suite: `forge test -vvv`
+15. ✅ Verify test coverage: `forge coverage`
 
-### Phase 4: Testing (Week 2-3)
+### Phase 4: Documentation (Week 3)
 
-17. ✅ Create all new test files
-18. ✅ Update existing test files
-19. ✅ Run full test suite: `forge test -vvv`
-20. ✅ Verify test coverage: `forge coverage`
-
-### Phase 5: Documentation (Week 3)
-
-21. ✅ Update `spec/AUDIT.md` with fixes
-22. ✅ Update `spec/CHANGELOG.md`
-23. ✅ Update `spec/HISTORICAL_FIXES.md`
-24. ✅ Update README.md if needed
+16. ✅ Update `spec/AUDIT.md` with fixes
+17. ✅ Update `spec/CHANGELOG.md`
+18. ✅ Update `spec/HISTORICAL_FIXES.md`
+19. ✅ Update README.md if needed
 
 ---
 
@@ -1254,16 +887,12 @@ After implementing all fixes, verify:
 - [ ] ACC_SCALE is 1e27 (CRITICAL-4)
 - [ ] First staker logic includes all pending rewards in stream (CRITICAL-3 - verify, no code change)
 - [ ] MIN_REWARD_AMOUNT is 1e15 (MEDIUM-2)
-- [ ] MAX_TOKENS_PER_SETTLE is 20
-- [ ] Pausable is implemented
-- [ ] Checkpoint voting is implemented
-- [ ] Whitelist has 7-day timelock
 - [ ] All external calls verify balances
 - [ ] All state changes emit events
 
 ### Testing
 
-- [ ] All 11 new test files created
+- [ ] All 7 new test files created
 - [ ] All existing tests still pass
 - [ ] Run: `forge test -vvv` - all tests pass
 - [ ] Run: `forge coverage` - coverage > 95%
@@ -1274,15 +903,12 @@ After implementing all fixes, verify:
 
 ### Gas Optimization
 
-- [ ] Check gas usage with many tokens: should revert if > MAX_TOKENS_PER_SETTLE
-- [ ] Verify stake() gas cost with 20 tokens < 2M gas
-- [ ] Verify unstake() gas cost with 20 tokens < 2M gas
+- [ ] Verify stake() gas cost remains reasonable
+- [ ] Verify unstake() gas cost remains reasonable
 
 ### Integration
 
-- [ ] LevrStaking_v1 calls governor's \_writeCheckpoint() on stake/unstake
-- [ ] Governor's getPriorVotes() works correctly
-- [ ] Factory deploys contracts with validated forwarder
+- [ ] Factory deploys contracts correctly
 - [ ] All contracts properly initialized via factory
 
 ### Documentation
@@ -1362,23 +988,6 @@ unvested = 1000 - 333 = 667 tokens ✓ CORRECT
 
 **Result of bug:** 167 tokens permanently lost!
 
-### Understanding Checkpoint Voting
-
-**Problem:** Flash loans allow instant voting power manipulation.
-
-**Solution:** Checkpoints record voting power at each block.
-
-- Voting uses power from PAST block (e.g., proposal start block)
-- Flash loan in current block doesn't affect past voting power
-- Minimum delay (1 day) ensures checkpoints are stable
-
-**Implementation:**
-
-1. When stake/unstake happens, write checkpoint for that user
-2. Checkpoint records: block number + voting power at that block
-3. When voting, look up checkpoint from proposal start block
-4. Flash loan can't manipulate historical checkpoints
-
 ---
 
 ## 🚨 IMPORTANT REMINDERS
@@ -1422,9 +1031,7 @@ forge test --gas-report
 3. **Don't change storage layout** - order matters for upgrades
 4. **Don't add storage variables** in middle of existing ones
 5. **Don't break existing tests** - fix them or understand why they fail
-6. **Don't skip the warmup period** - it's critical for security
-7. **Don't use low MIN_STAKE_AMOUNT** - keep it at 1000 tokens minimum
-8. **Don't forget to update interfaces** when adding new functions
+6. **Don't forget to update interfaces** when adding new functions
 
 ---
 
@@ -1445,7 +1052,7 @@ If you encounter issues while implementing:
 This document contains all information needed to fix every issue found in External Audit 2.
 Follow the implementation order, verify each fix with tests, and update documentation.
 
-**Expected Timeline:** 3-4 weeks for complete implementation and testing.
+**Expected Timeline:** 2-3 weeks for complete implementation and testing.
 
 **Success Criteria:**
 

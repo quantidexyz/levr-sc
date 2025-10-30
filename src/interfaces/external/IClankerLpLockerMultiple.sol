@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 import {IClankerLpLocker} from './IClankerLPLocker.sol';
 import {PoolKey} from '@uniswapV4-core/types/PoolKey.sol';

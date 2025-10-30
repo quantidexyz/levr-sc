@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 /// @title Levr Fee Splitter v1 Interface
 /// @notice Per-project fee splitter for flexible fee distribution

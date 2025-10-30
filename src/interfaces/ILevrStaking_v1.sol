@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 /// @title Levr Staking v1 Interface
 /// @notice Stakes underlying directly; mints staked ERC20; accrues multi-token rewards.

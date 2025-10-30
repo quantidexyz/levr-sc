@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 /// @title Levr Factory v1 Interface
 /// @notice Global configuration and per-project contract deployment/registry.
