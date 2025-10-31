@@ -70,7 +70,7 @@ contract DeployLevr is Script {
     uint16 constant DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT = 100; // 1%
     uint16 constant DEFAULT_MAX_PROPOSAL_AMOUNT_BPS = 500; // 5%
     uint16 constant DEFAULT_MINIMUM_QUORUM_BPS = 25; // 0.25% minimum quorum to prevent early capture
-    uint16 constant DEFAULT_MAX_REWARD_TOKENS = 50; // Max non-whitelisted reward tokens
+    uint16 constant DEFAULT_MAX_REWARD_TOKENS = 10; // Max non-whitelisted reward tokens
 
     // Estimated gas costs for deployment (conservative estimates)
     uint256 constant ESTIMATED_FORWARDER_GAS = 500_000; // ~0.0005 ETH at 1 gwei

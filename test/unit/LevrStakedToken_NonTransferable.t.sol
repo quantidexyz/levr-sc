@@ -35,7 +35,7 @@ contract LevrStakedToken_NonTransferableTest is Test {
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50
+            maxRewardTokens: 10
         });
 
         factory = new LevrFactory_v1(config, address(this), address(0), address(0), address(0));

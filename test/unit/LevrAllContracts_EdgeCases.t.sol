@@ -51,7 +51,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 5000, // 50%
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
@@ -381,7 +381,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 10000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
         (
@@ -530,7 +530,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 2000, // 20% now!
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
         factory.updateConfig(newCfg);

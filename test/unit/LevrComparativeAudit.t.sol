@@ -54,7 +54,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 500, // 5%,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));

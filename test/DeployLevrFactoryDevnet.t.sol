@@ -31,7 +31,7 @@ contract DeployLevrFactoryDevnetTest is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
         // Deploy factory with forwarder and deployer logic using helper

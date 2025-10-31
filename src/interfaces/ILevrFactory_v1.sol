@@ -21,7 +21,7 @@ interface ILevrFactory_v1 {
         uint16 maxProposalAmountBps; // Max proposal amount as % of treasury (e.g., 500 = 5%)
         uint16 minimumQuorumBps; // Minimum quorum as % of current supply (e.g., 1000 = 10%) - prevents early capture
         // Staking parameters
-        uint16 maxRewardTokens; // Max non-whitelisted reward tokens (e.g., 50)
+        uint16 maxRewardTokens; // Max non-whitelisted reward tokens (e.g., 10)
     }
 
     /// @notice Project contract addresses.
@@ -200,6 +200,6 @@ interface ILevrFactory_v1 {
     function minimumQuorumBps() external view returns (uint16);
 
     // Staking config getters
-    /// @notice Maximum number of non-whitelisted reward tokens (e.g., 50).
+    /// @notice Maximum number of non-whitelisted reward tokens (e.g., 10).
     function maxRewardTokens() external view returns (uint16);
 }

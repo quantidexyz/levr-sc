@@ -51,7 +51,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 0, // Disabled for testing
             maxProposalAmountBps: 5000, // 50%
             minimumQuorumBps: 25, // 0.25% minimum quorum - prevents early capture
-            maxRewardTokens: 50
+            maxRewardTokens: 10
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
@@ -89,7 +89,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 0, // NO MINIMUM - shows the problem
-            maxRewardTokens: 50
+            maxRewardTokens: 10
         });
         factory.updateConfig(cfg);
 
@@ -634,7 +634,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 500, // 5%
-            maxRewardTokens: 50
+            maxRewardTokens: 10
         });
         factory.updateConfig(cfg);
 
@@ -666,7 +666,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 0, // Disabled
-            maxRewardTokens: 50
+            maxRewardTokens: 10
         });
         factory.updateConfig(cfg);
 

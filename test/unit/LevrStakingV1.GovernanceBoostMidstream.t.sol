@@ -38,7 +38,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
         factory = new LevrFactory_v1(config, address(this), address(0), address(0), address(0));

@@ -55,7 +55,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100, // 1% of supply required to propose
             maxProposalAmountBps: 1000, // 10% of supply max proposal amount
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
         (factory, forwarder, levrDeployer) = deployFactory(cfg, factoryOwner, CLANKER_FACTORY);
@@ -169,7 +169,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -235,7 +235,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -307,7 +307,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -359,7 +359,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -408,7 +408,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 3000, // INCREASED from 1% to 30%
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -477,7 +477,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -598,7 +598,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -822,7 +822,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -874,7 +874,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50 // Max non-whitelisted reward tokens
+            maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);

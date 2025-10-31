@@ -47,7 +47,7 @@ contract LevrAderynFindingsTest is Test {
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 50
+            maxRewardTokens: 10
         });
         
         // Deploy factory and deployer
