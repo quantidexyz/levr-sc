@@ -190,8 +190,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 userBalance = ILevrStakedToken_v1(stakedToken).balanceOf(claimer);
         if (userBalance == 0) return; // No balance = no rewards
 
-        uint256 totalStaked = _totalStaked;
-        if (totalStaked == 0) return; // Safety check
+        uint256 cachedTotalStaked = _totalStaked;
+        if (cachedTotalStaked == 0) return; // Safety check
 
         for (uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
@@ -204,7 +204,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             // Calculate proportional share of available pool
             uint256 claimable = RewardMath.calculateProportionalClaim(
                 userBalance,
-                totalStaked,
+                cachedTotalStaked,
                 tokenState.availablePool
             );
 
@@ -319,8 +319,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 userBalance = ILevrStakedToken_v1(stakedToken).balanceOf(account);
         if (userBalance == 0) return 0;
 
-        uint256 totalStaked = _totalStaked;
-        if (totalStaked == 0) return 0;
+        uint256 cachedTotalStaked = _totalStaked;
+        if (cachedTotalStaked == 0) return 0;
 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         if (!tokenState.exists) return 0;
@@ -336,7 +336,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         );
 
         // Calculate proportional claim (simple pool-based)
-        claimable = RewardMath.calculateProportionalClaim(userBalance, totalStaked, currentPool);
+        claimable = RewardMath.calculateProportionalClaim(
+            userBalance,
+            cachedTotalStaked,
+            currentPool
+        );
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -548,8 +552,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 userBalance = ILevrStakedToken_v1(stakedToken).balanceOf(claimer);
         if (userBalance == 0) return;
 
-        uint256 totalStaked = _totalStaked;
-        if (totalStaked == 0) return;
+        uint256 cachedTotalStaked = _totalStaked;
+        if (cachedTotalStaked == 0) return;
 
         uint256 len = _rewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
@@ -563,7 +567,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             // Calculate proportional share
             uint256 claimable = RewardMath.calculateProportionalClaim(
                 userBalance,
-                totalStaked,
+                cachedTotalStaked,
                 tokenState.availablePool
             );
 
