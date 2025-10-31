@@ -50,7 +50,6 @@ contract DeployLevrFeeSplitterTest is Test {
             config,
             deployer,
             address(forwarder),
-            address(0xE85A59c628F7d27878ACeB4bf3b35733630083a9), // Clanker factory
             address(levrDeployer)
         );
     }

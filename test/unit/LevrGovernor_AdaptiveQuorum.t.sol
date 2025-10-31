@@ -147,7 +147,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
         console2.log('\n=== SOLUTION: Early Capture Prevented by Minimum Quorum ===');
 
         // minimumQuorumBps = 0.25% (from setUp)
-        assertEq(factory.minimumQuorumBps(), 25, 'Minimum quorum should be 0.25%');
+        assertEq(factory.minimumQuorumBps(address(0)), 25, 'Minimum quorum should be 0.25%');
 
         // Alice stakes 1000 tokens (early supply)
         underlying.mint(alice, 10000 ether);
@@ -619,7 +619,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
         console2.log('\n=== Minimum Quorum BPS is Configurable ===');
 
         // Initial config has 0.25% minimum
-        assertEq(factory.minimumQuorumBps(), 25, 'Should start at 0.25%');
+        assertEq(factory.minimumQuorumBps(address(0)), 25, 'Should start at 0.25%');
 
         // Update to 5% minimum
         ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
@@ -638,14 +638,14 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
         });
         factory.updateConfig(cfg);
 
-        assertEq(factory.minimumQuorumBps(), 500, 'Should update to 5%');
+        assertEq(factory.minimumQuorumBps(address(0)), 500, 'Should update to 5%');
         console2.log('VERIFIED: Minimum quorum configurable (changed from 0.25% to 5%)');
 
         // Update to 1% minimum
         cfg.minimumQuorumBps = 100; // 1%
         factory.updateConfig(cfg);
 
-        assertEq(factory.minimumQuorumBps(), 100, 'Should update to 1%');
+        assertEq(factory.minimumQuorumBps(address(0)), 100, 'Should update to 1%');
         console2.log('VERIFIED: Can be updated to higher threshold (1%)');
     }
 
@@ -670,7 +670,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
         });
         factory.updateConfig(cfg);
 
-        assertEq(factory.minimumQuorumBps(), 0, 'Should be 0 (disabled)');
+        assertEq(factory.minimumQuorumBps(address(0)), 0, 'Should be 0 (disabled)');
         console2.log('VERIFIED: Minimum quorum can be disabled by setting to 0%');
     }
 }

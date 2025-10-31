@@ -43,7 +43,6 @@ contract LevrFactoryDeployHelper is Test {
             cfg,
             owner,
             address(forwarder),
-            clankerFactory,
             address(levrDeployer)
         );
 
@@ -56,6 +55,12 @@ contract LevrFactoryDeployHelper is Test {
             levrDeployer.authorizedFactory() == address(factory),
             'LevrFactoryDeployHelper: Deployer authorization failed'
         );
+        
+        // Step 6: Add Clanker factory to trusted list if provided
+        if (clankerFactory != address(0)) {
+            vm.prank(owner);
+            factory.addTrustedClankerFactory(clankerFactory);
+        }
     }
 
     /// @notice Deploy factory with default Base mainnet Clanker factory

@@ -44,7 +44,7 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
             maxRewardTokens: 10
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
 
         underlying = new MockERC20('Underlying', 'UND');
         weth = new MockERC20('Wrapped Ether', 'WETH');

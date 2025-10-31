@@ -24,12 +24,29 @@ interface ILevrFactory_v1 {
         uint16 maxRewardTokens; // Max non-whitelisted reward tokens (e.g., 10)
     }
 
+    /// @notice Project-specific configuration (subset of FactoryConfig, excludes protocolFeeBps).
+    struct ProjectConfig {
+        uint32 streamWindowSeconds;
+        // Governance parameters
+        uint32 proposalWindowSeconds;
+        uint32 votingWindowSeconds;
+        uint16 maxActiveProposals;
+        uint16 quorumBps;
+        uint16 approvalBps;
+        uint16 minSTokenBpsToSubmit;
+        uint16 maxProposalAmountBps;
+        uint16 minimumQuorumBps;
+        // Staking parameters
+        uint16 maxRewardTokens;
+    }
+
     /// @notice Project contract addresses.
     struct Project {
         address treasury;
         address governor;
         address staking;
         address stakedToken;
+        bool verified; // Whether project can override factory config
     }
 
     /// @notice Project information including token address.
@@ -56,6 +73,12 @@ interface ILevrFactory_v1 {
 
     /// @notice Revert if caller is not the token admin.
     error UnauthorizedCaller();
+
+    /// @notice Revert if project does not exist.
+    error ProjectNotFound();
+
+    /// @notice Revert if project is not verified.
+    error ProjectNotVerified();
 
     // ============ Events ============
 
@@ -90,6 +113,18 @@ interface ILevrFactory_v1 {
     /// @notice Emitted when configuration is updated.
     event ConfigUpdated();
 
+    /// @notice Emitted when a project is verified.
+    /// @param clankerToken Address of the verified project token
+    event ProjectVerified(address indexed clankerToken);
+
+    /// @notice Emitted when a project is unverified.
+    /// @param clankerToken Address of the unverified project token
+    event ProjectUnverified(address indexed clankerToken);
+
+    /// @notice Emitted when a verified project's configuration is updated.
+    /// @param clankerToken Address of the project token
+    event ProjectConfigUpdated(address indexed clankerToken);
+
     // ============ Functions ============
 
     /// @notice Prepare for deployment by deploying treasury and staking modules.
@@ -113,6 +148,24 @@ interface ILevrFactory_v1 {
     /// @notice Update global protocol configuration.
     /// @param cfg New configuration
     function updateConfig(FactoryConfig calldata cfg) external;
+
+    /// @notice Verify a project, allowing it to override factory configuration.
+    /// @dev Only callable by owner. Initializes project config with current factory config.
+    /// @param clankerToken Token address of the project to verify
+    function verifyProject(address clankerToken) external;
+
+    /// @notice Unverify a project, removing its config override ability.
+    /// @dev Only callable by owner. Clears project override config.
+    /// @param clankerToken Token address of the project to unverify
+    function unverifyProject(address clankerToken) external;
+
+    /// @notice Update configuration for a verified project.
+    /// @dev Only callable by token admin of a verified project.
+    ///      Cannot override protocolFeeBps (protocol revenue protection).
+    ///      Same validation rules as factory config apply.
+    /// @param clankerToken Token address of the project
+    /// @param cfg New project configuration
+    function updateProjectConfig(address clankerToken, ProjectConfig calldata cfg) external;
 
     /// @notice Add a trusted Clanker factory for token validation.
     /// @dev Only callable by owner. Supports multiple factory versions.
@@ -158,6 +211,8 @@ interface ILevrFactory_v1 {
     ) external view returns (ProjectInfo[] memory projects, uint256 total);
 
     // Config getters for periphery contracts
+    // NOTE: Optional clankerToken parameter - if provided and project is verified, returns project config
+
     /// @notice Protocol fee in basis points.
     function protocolFeeBps() external view returns (uint16);
 
@@ -165,41 +220,58 @@ interface ILevrFactory_v1 {
     function protocolTreasury() external view returns (address);
 
     /// @notice Reward streaming window for staking accruals (in seconds).
-    function streamWindowSeconds() external view returns (uint32);
-
-    /// @notice Clanker factory address.
-    function clankerFactory() external view returns (address);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Streaming window (project override if verified, otherwise default)
+    function streamWindowSeconds(address clankerToken) external view returns (uint32);
 
     /// @notice Trusted forwarder for ERC2771 meta-transactions.
     function trustedForwarder() external view returns (address);
 
     // Governance config getters
     /// @notice Duration of proposal submission window (in seconds).
-    function proposalWindowSeconds() external view returns (uint32);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Proposal window (project override if verified, otherwise default)
+    function proposalWindowSeconds(address clankerToken) external view returns (uint32);
 
     /// @notice Duration of voting window after proposals close (in seconds).
-    function votingWindowSeconds() external view returns (uint32);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Voting window (project override if verified, otherwise default)
+    function votingWindowSeconds(address clankerToken) external view returns (uint32);
 
     /// @notice Maximum concurrent active proposals per type.
-    function maxActiveProposals() external view returns (uint16);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Max active proposals (project override if verified, otherwise default)
+    function maxActiveProposals(address clankerToken) external view returns (uint16);
 
     /// @notice Minimum participation threshold in basis points (e.g., 7000 = 70%).
-    function quorumBps() external view returns (uint16);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Quorum BPS (project override if verified, otherwise default)
+    function quorumBps(address clankerToken) external view returns (uint16);
 
     /// @notice Minimum yes-vote threshold in basis points (e.g., 5100 = 51%).
-    function approvalBps() external view returns (uint16);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Approval BPS (project override if verified, otherwise default)
+    function approvalBps(address clankerToken) external view returns (uint16);
 
     /// @notice Minimum % of sToken supply to submit proposals (basis points, e.g., 100 = 1%).
-    function minSTokenBpsToSubmit() external view returns (uint16);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Min stake BPS (project override if verified, otherwise default)
+    function minSTokenBpsToSubmit(address clankerToken) external view returns (uint16);
 
     /// @notice Maximum proposal amount as % of treasury (basis points, e.g., 500 = 5%).
-    function maxProposalAmountBps() external view returns (uint16);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Max proposal amount BPS (project override if verified, otherwise default)
+    function maxProposalAmountBps(address clankerToken) external view returns (uint16);
 
     /// @notice Minimum quorum as % of current supply (basis points, e.g., 1000 = 10%).
     /// @dev Used with adaptive quorum to prevent early governance capture
-    function minimumQuorumBps() external view returns (uint16);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Minimum quorum BPS (project override if verified, otherwise default)
+    function minimumQuorumBps(address clankerToken) external view returns (uint16);
 
     // Staking config getters
     /// @notice Maximum number of non-whitelisted reward tokens (e.g., 10).
-    function maxRewardTokens() external view returns (uint16);
+    /// @param clankerToken Optional project token address (0x0 = default config)
+    /// @return Max reward tokens (project override if verified, otherwise default)
+    function maxRewardTokens(address clankerToken) external view returns (uint16);
 }

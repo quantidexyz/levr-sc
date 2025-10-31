@@ -39,11 +39,11 @@ contract LevrStaking_StuckFundsTest is Test {
             });
     }
 
-    function streamWindowSeconds() external pure returns (uint32) {
+    function streamWindowSeconds(address) external pure returns (uint32) {
         return 3 days;
     }
 
-    function maxRewardTokens() external pure returns (uint16) {
+    function maxRewardTokens(address) external pure returns (uint16) {
         return 10;
     }
 

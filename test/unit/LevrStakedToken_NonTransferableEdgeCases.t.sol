@@ -45,7 +45,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
             maxRewardTokens: 10
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
         underlying = new MockERC20('Underlying', 'UND');
 
         staking = new LevrStaking_v1(address(0));

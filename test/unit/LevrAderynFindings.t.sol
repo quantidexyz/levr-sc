@@ -51,7 +51,7 @@ contract LevrAderynFindingsTest is Test {
         });
         
         // Deploy factory and deployer
-        factory = new LevrFactory_v1(config, address(this), trustedForwarder, address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), trustedForwarder, address(0));
         deployer = new LevrDeployer_v1(address(factory));
         
         // Deploy mock token

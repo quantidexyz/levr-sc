@@ -322,7 +322,6 @@ contract DeployLevr is Script {
             config,
             params.deployer,
             address(forwarder),
-            params.clankerFactory,
             address(levrDeployer)
         );
         console.log('- Factory deployed at:', address(factory));
@@ -333,6 +332,12 @@ contract DeployLevr is Script {
             'Factory address mismatch - deployment order changed'
         );
         console.log('- Factory address verified!');
+        console.log('');
+
+        // Add Clanker factory to trusted factories list
+        console.log('Adding Clanker factory to trusted list...');
+        factory.addTrustedClankerFactory(params.clankerFactory);
+        console.log('- Clanker factory trusted:', params.clankerFactory);
         console.log('');
 
         // 5. Deploy the fee splitter deployer (creates per-project splitters)
@@ -355,36 +360,36 @@ contract DeployLevr is Script {
         // Verify factory configuration
         require(factory.protocolFeeBps() == params.protocolFeeBps, 'Protocol fee BPS mismatch');
         require(
-            factory.streamWindowSeconds() == params.streamWindowSeconds,
+            factory.streamWindowSeconds(address(0)) == params.streamWindowSeconds,
             'Stream window mismatch'
         );
         require(
-            factory.proposalWindowSeconds() == params.proposalWindowSeconds,
+            factory.proposalWindowSeconds(address(0)) == params.proposalWindowSeconds,
             'Proposal window mismatch'
         );
         require(
-            factory.votingWindowSeconds() == params.votingWindowSeconds,
+            factory.votingWindowSeconds(address(0)) == params.votingWindowSeconds,
             'Voting window mismatch'
         );
         require(
-            factory.maxActiveProposals() == params.maxActiveProposals,
+            factory.maxActiveProposals(address(0)) == params.maxActiveProposals,
             'Max active proposals mismatch'
         );
-        require(factory.quorumBps() == params.quorumBps, 'Quorum BPS mismatch');
-        require(factory.approvalBps() == params.approvalBps, 'Approval BPS mismatch');
+        require(factory.quorumBps(address(0)) == params.quorumBps, 'Quorum BPS mismatch');
+        require(factory.approvalBps(address(0)) == params.approvalBps, 'Approval BPS mismatch');
         require(
-            factory.minSTokenBpsToSubmit() == params.minSTokenBpsToSubmit,
+            factory.minSTokenBpsToSubmit(address(0)) == params.minSTokenBpsToSubmit,
             'Min sToken BPS mismatch'
         );
         require(
-            factory.maxProposalAmountBps() == params.maxProposalAmountBps,
+            factory.maxProposalAmountBps(address(0)) == params.maxProposalAmountBps,
             'Max proposal amount BPS mismatch'
         );
         require(
-            factory.minimumQuorumBps() == params.minimumQuorumBps,
+            factory.minimumQuorumBps(address(0)) == params.minimumQuorumBps,
             'Minimum quorum BPS mismatch'
         );
-        require(factory.maxRewardTokens() == params.maxRewardTokens, 'Max reward tokens mismatch');
+        require(factory.maxRewardTokens(address(0)) == params.maxRewardTokens, 'Max reward tokens mismatch');
         require(
             factory.protocolTreasury() == params.protocolTreasury,
             'Protocol treasury mismatch'

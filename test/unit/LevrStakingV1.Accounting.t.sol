@@ -29,10 +29,10 @@ contract LevrStakingV1_Accounting is Test {
         weth.mint(address(this), 1_000_000 ether);
     }
 
-    function streamWindowSeconds() external pure returns (uint32) {
+    function streamWindowSeconds(address) external pure returns (uint32) {
         return 7 days;
     }
-    function maxRewardTokens() external pure returns (uint16) {
+    function maxRewardTokens(address) external pure returns (uint16) {
         return 50;
     }
     function getClankerMetadata(

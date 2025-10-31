@@ -54,9 +54,8 @@ contract LevrGovernor_StuckProcessTest is Test {
         factory = new LevrFactory_v1(
             config,
             address(this),
-            address(0), // forwarder
-            address(0), // clanker factory
-            address(0) // deployer
+            address(0),
+            address(0)
         );
 
         // Deploy contracts

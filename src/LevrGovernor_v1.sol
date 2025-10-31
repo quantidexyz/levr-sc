@@ -352,7 +352,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         // Validate proposer stake
         {
-            uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit();
+            uint16 minStakeBps = ILevrFactory_v1(factory).minSTokenBpsToSubmit(underlying);
             if (minStakeBps > 0) {
                 uint256 totalSupply = IERC20(stakedToken).totalSupply();
                 if (
@@ -371,14 +371,14 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
                 revert InsufficientTreasuryBalance();
             }
 
-            uint16 maxProposalBps = ILevrFactory_v1(factory).maxProposalAmountBps();
+            uint16 maxProposalBps = ILevrFactory_v1(factory).maxProposalAmountBps(underlying);
             if (maxProposalBps > 0 && amount > (treasuryBalance * maxProposalBps) / 10_000) {
                 revert ProposalAmountExceedsLimit();
             }
         }
 
         // Check max active proposals per type
-        if (_activeProposalCount[proposalType] >= ILevrFactory_v1(factory).maxActiveProposals()) {
+        if (_activeProposalCount[proposalType] >= ILevrFactory_v1(factory).maxActiveProposals(underlying)) {
             revert MaxProposalsReached();
         }
 
@@ -412,8 +412,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
                 meetsQuorum: false,
                 meetsApproval: false,
                 totalSupplySnapshot: IERC20(stakedToken).totalSupply(),
-                quorumBpsSnapshot: ILevrFactory_v1(factory).quorumBps(),
-                approvalBpsSnapshot: ILevrFactory_v1(factory).approvalBps()
+                quorumBpsSnapshot: ILevrFactory_v1(factory).quorumBps(underlying),
+                approvalBpsSnapshot: ILevrFactory_v1(factory).approvalBps(underlying)
             });
         }
 
@@ -483,7 +483,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Use SNAPSHOT supply for minimum (not current) to avoid breaking anti-dilution
         // When supply increases: snapshot is used for both percentage and minimum
         // When supply decreases: current is used for percentage, snapshot for minimum
-        uint16 minimumQuorumBps = ILevrFactory_v1(factory).minimumQuorumBps();
+        uint16 minimumQuorumBps = ILevrFactory_v1(factory).minimumQuorumBps(underlying);
         uint256 minimumAbsoluteQuorum = (snapshotSupply * minimumQuorumBps) / 10_000;
 
         // Use whichever is higher: percentage quorum or minimum absolute quorum
@@ -554,8 +554,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     /// @dev Internal function to start a new governance cycle
     function _startNewCycle() internal {
         // Get config from factory
-        uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds();
-        uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds();
+        uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds(underlying);
+        uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds(underlying);
 
         uint256 cycleId = ++_currentCycleId;
         uint256 start = block.timestamp;

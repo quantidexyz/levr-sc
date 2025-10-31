@@ -30,11 +30,11 @@ contract LevrStakingV1_UnitTest is Test {
             });
     }
 
-    function streamWindowSeconds() external pure returns (uint32) {
+    function streamWindowSeconds(address) external pure returns (uint32) {
         return 3 days; // Default stream window for tests
     }
 
-    function maxRewardTokens() external pure returns (uint16) {
+    function maxRewardTokens(address) external pure returns (uint16) {
         return 50; // Default max reward tokens for tests
     }
 

@@ -34,7 +34,8 @@ contract MockFactory {
                 treasury: address(0),
                 governor: address(0),
                 staking: staking,
-                stakedToken: address(0)
+                stakedToken: address(0),
+                verified: false
             });
     }
 

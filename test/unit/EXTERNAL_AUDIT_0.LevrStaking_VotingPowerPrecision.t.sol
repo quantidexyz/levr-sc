@@ -49,7 +49,6 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
             config,
             address(this),
             address(forwarder),
-            address(0),
             address(0)
         );
 

@@ -85,8 +85,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Record state at proposal creation
         uint256 supplyAtCreation = sToken.totalSupply();
-        uint16 quorumAtCreation = factory.quorumBps();
-        uint16 approvalAtCreation = factory.approvalBps();
+        uint16 quorumAtCreation = factory.quorumBps(address(0));
+        uint16 approvalAtCreation = factory.approvalBps(address(0));
 
         console2.log('Supply at creation:', supplyAtCreation / 1e18);
         console2.log('Quorum BPS at creation:', quorumAtCreation);
@@ -162,8 +162,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(newCfg);
 
         console2.log('\nConfig changed:');
-        console2.log('  New quorum:', factory.quorumBps());
-        console2.log('  New approval:', factory.approvalBps());
+        console2.log('  New quorum:', factory.quorumBps(address(0)));
+        console2.log('  New approval:', factory.approvalBps(address(0)));
 
         // Verify snapshots UNCHANGED
         ILevrGovernor_v1.Proposal memory propAfter = governor.getProposal(pid);
@@ -431,8 +431,8 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(newCfg);
 
         console2.log('Config changed:');
-        console2.log('  New quorum:', factory.quorumBps());
-        console2.log('  New approval:', factory.approvalBps());
+        console2.log('  New quorum:', factory.quorumBps(address(0)));
+        console2.log('  New approval:', factory.approvalBps(address(0)));
 
         // Create second proposal in SAME cycle
         vm.prank(bob);
@@ -581,7 +581,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(newCfg);
 
         console2.log('Config changed to 90% approval requirement');
-        console2.log('Current config:', factory.approvalBps());
+        console2.log('Current config:', factory.approvalBps(address(0)));
 
         // CRITICAL: Should STILL meet approval because using snapshot (51%)
         vm.warp(block.timestamp + 5 days + 1);
@@ -790,7 +790,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         factory.updateConfig(newCfg);
 
         console2.log('\nConfig changed to 70% approval requirement');
-        console2.log('Current config:', factory.approvalBps());
+        console2.log('Current config:', factory.approvalBps(address(0)));
 
         // CRITICAL: Both should STILL meet approval using their snapshots
         assertTrue(governor.meetsApproval(pid1), 'Prop 1 STILL meets 51% approval (snapshot)');
@@ -927,9 +927,9 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         console2.log('Supply changed to:', sToken.totalSupply() / 1e18);
         console2.log(
             'Config changed to: quorum =',
-            factory.quorumBps(),
+            factory.quorumBps(address(0)),
             ', approval =',
-            factory.approvalBps()
+            factory.approvalBps(address(0))
         );
 
         // Cycle 2: Create proposal

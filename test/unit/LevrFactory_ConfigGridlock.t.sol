@@ -48,7 +48,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             maxRewardTokens: 10
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
 
         // Deploy contracts
         treasury = new LevrTreasury_v1(address(factory), address(0));

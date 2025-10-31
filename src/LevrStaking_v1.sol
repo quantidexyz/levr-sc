@@ -381,7 +381,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function streamWindowSeconds() external view returns (uint32) {
-        return ILevrFactory_v1(factory).streamWindowSeconds();
+        return ILevrFactory_v1(factory).streamWindowSeconds(underlying);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -457,7 +457,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     function _resetStreamForToken(address token, uint256 amount) internal {
         // Query stream window from factory config
-        uint32 window = ILevrFactory_v1(factory).streamWindowSeconds();
+        uint32 window = ILevrFactory_v1(factory).streamWindowSeconds(underlying);
 
         // Reset GLOBAL stream window (shared by all tokens)
         _streamStart = uint64(block.timestamp);
@@ -499,7 +499,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             bool wasWhitelisted = tokenState.whitelisted; // Preserve whitelist status if set
             if (!wasWhitelisted) {
                 // Read maxRewardTokens from factory config
-                uint16 maxRewardTokens = ILevrFactory_v1(factory).maxRewardTokens();
+                uint16 maxRewardTokens = ILevrFactory_v1(factory).maxRewardTokens(underlying);
 
                 // Count non-whitelisted reward tokens
                 uint256 nonWhitelistedCount = 0;

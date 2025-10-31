@@ -251,7 +251,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 
         // PROTECTION 2: maxActiveProposals prevents overall spam
         // Already configured to maxActiveProposals=10 in setUp
-        console2.log('Max active proposals:', factory.maxActiveProposals());
+        console2.log('Max active proposals:', factory.maxActiveProposals(address(0)));
 
         console2.log('RESULT: Spam blocked by per-cycle + maxActive limits');
     }

@@ -41,7 +41,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
             maxRewardTokens: 10 // Max non-whitelisted reward tokens
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
         underlying = new MockERC20('Underlying Token', 'UND');
 
         // Deploy treasury, staking, staked token

@@ -103,13 +103,10 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('Authorized Factory:', levrDeployer.authorizedFactory());
 
         // Deploy the factory with forwarder and deployer logic
-        // Use Base mainnet Clanker factory address for deployment
-        address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
             deployer,
             address(forwarder),
-            clankerFactory,
             address(levrDeployer)
         );
 
@@ -119,6 +116,12 @@ contract DeployLevrFactoryDevnet is Script {
             'Factory address mismatch - deployment order changed'
         );
         console.log('Factory address verified:', address(factory));
+
+        // Add Base mainnet Clanker factory to trusted list
+        address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+        console.log('Adding Clanker factory to trusted list...');
+        factory.addTrustedClankerFactory(clankerFactory);
+        console.log('Clanker factory trusted:', clankerFactory);
 
         // Deploy the fee splitter factory (creates per-project splitters)
         console.log('Deploying LevrFeeSplitterFactory_v1...');
@@ -142,15 +145,15 @@ contract DeployLevrFactoryDevnet is Script {
         // Verify factory configuration
         console.log('=== FACTORY CONFIGURATION VERIFICATION ===');
         console.log('protocolFeeBps:', factory.protocolFeeBps());
-        console.log('streamWindowSeconds:', factory.streamWindowSeconds());
-        console.log('proposalWindowSeconds:', factory.proposalWindowSeconds());
-        console.log('votingWindowSeconds:', factory.votingWindowSeconds());
-        console.log('maxActiveProposals:', factory.maxActiveProposals());
-        console.log('quorumBps:', factory.quorumBps());
-        console.log('approvalBps:', factory.approvalBps());
-        console.log('minSTokenBpsToSubmit:', factory.minSTokenBpsToSubmit());
-        console.log('maxProposalAmountBps:', factory.maxProposalAmountBps());
-        console.log('maxRewardTokens:', factory.maxRewardTokens());
+        console.log('streamWindowSeconds:', factory.streamWindowSeconds(address(0)));
+        console.log('proposalWindowSeconds:', factory.proposalWindowSeconds(address(0)));
+        console.log('votingWindowSeconds:', factory.votingWindowSeconds(address(0)));
+        console.log('maxActiveProposals:', factory.maxActiveProposals(address(0)));
+        console.log('quorumBps:', factory.quorumBps(address(0)));
+        console.log('approvalBps:', factory.approvalBps(address(0)));
+        console.log('minSTokenBpsToSubmit:', factory.minSTokenBpsToSubmit(address(0)));
+        console.log('maxProposalAmountBps:', factory.maxProposalAmountBps(address(0)));
+        console.log('maxRewardTokens:', factory.maxRewardTokens(address(0)));
         console.log('protocolTreasury:', factory.protocolTreasury());
         console.log('trustedForwarder:', factory.trustedForwarder());
 

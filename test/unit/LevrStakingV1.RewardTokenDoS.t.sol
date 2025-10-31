@@ -35,11 +35,11 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
         rewardToken.mint(address(this), 10_000 ether);
     }
 
-    function streamWindowSeconds() external pure returns (uint32) {
+    function streamWindowSeconds(address) external pure returns (uint32) {
         return 7 days;
     }
 
-    function maxRewardTokens() external pure returns (uint16) {
+    function maxRewardTokens(address) external pure returns (uint16) {
         return 50;
     }
 

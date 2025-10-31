@@ -43,13 +43,13 @@ contract DeployLevrFactoryDevnetTest is Test, LevrFactoryDeployHelper {
 
         // Verify configuration
         assertEq(factory.protocolFeeBps(), protocolFeeBps);
-        assertEq(factory.streamWindowSeconds(), streamWindowSeconds);
+        assertEq(factory.streamWindowSeconds(address(0)), streamWindowSeconds);
         assertEq(factory.protocolTreasury(), protocolTreasury);
-        assertEq(factory.proposalWindowSeconds(), 2 days);
-        assertEq(factory.votingWindowSeconds(), 5 days);
-        assertEq(factory.maxActiveProposals(), 7);
-        assertEq(factory.quorumBps(), 7000);
-        assertEq(factory.approvalBps(), 5100);
-        assertEq(factory.minSTokenBpsToSubmit(), 100);
+        assertEq(factory.proposalWindowSeconds(address(0)), 2 days);
+        assertEq(factory.votingWindowSeconds(address(0)), 5 days);
+        assertEq(factory.maxActiveProposals(address(0)), 7);
+        assertEq(factory.quorumBps(address(0)), 7000);
+        assertEq(factory.approvalBps(address(0)), 5100);
+        assertEq(factory.minSTokenBpsToSubmit(address(0)), 100);
     }
 }

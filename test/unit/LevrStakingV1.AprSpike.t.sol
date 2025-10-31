@@ -51,8 +51,7 @@ contract LevrStakingV1AprSpikeTest is Test {
             config,
             address(this),
             address(0),
-            address(0), // clankerFactory
-            address(0) // levrDeployer
+            address(0)
         );
 
         // Deploy tokens

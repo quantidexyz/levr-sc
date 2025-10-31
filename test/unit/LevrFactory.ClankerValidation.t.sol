@@ -32,7 +32,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
 
         // Deploy factory with default config (no trusted factories initially)
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(owner);
-        (factory, , ) = deployFactory(cfg, owner, mockClankerFactoryV1);
+        (factory, , ) = deployFactory(cfg, owner, address(0));
     }
 
     /// @notice Test 1: Reject tokens not deployed by any trusted factory
@@ -204,8 +204,8 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
     }
 
     /// @notice Test 7: Works correctly when no factories configured (allows all)
-    function test_noFactories_allowsAllTokens() public {
-        console2.log('\n=== C-1 Test 7: No Factories = Allow All Tokens ===');
+    function test_noFactories_blocksAllTokens() public {
+        console2.log('\n=== C-1 Test 7: No Factories = Block All Tokens ===');
 
         // Verify no factories configured
         address[] memory factories = factory.getTrustedClankerFactories();
@@ -218,16 +218,16 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
             'ANY'
         );
 
-        // Register should succeed (no validation when array is empty)
+        // Register should FAIL (require at least one trusted factory)
         vm.prank(alice);
         factory.prepareForDeployment();
 
         vm.prank(alice);
-        ILevrFactory_v1.Project memory project = factory.register(address(token));
+        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        factory.register(address(token));
 
-        assertNotEq(project.staking, address(0), 'Should register successfully');
-        console2.log('SUCCESS: Token registered when no factories configured');
-        console2.log('Backward compatible: empty array = allow all');
+        console2.log('BLOCKED: Registration prevented when no factories configured');
+        console2.log('Security: Require at least one trusted factory');
     }
 
     /// @notice Test 8: Token valid in one factory is accepted even if other factories don\'t know it
@@ -277,12 +277,12 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
     }
 
     /// @notice Test: Removing all trusted factories falls back to allow-all mode
-    function test_removeAllFactories_fallsBackToAllowAll() public {
-        console2.log('\n=== C-1 Test 9: Remove All Factories = Fallback to Allow-All ===');
+    function test_removeAllFactories_blocksNewRegistrations() public {
+        console2.log('\n=== C-1 Test 9: Remove All Factories = Block New Registrations ===');
 
-        // Step 1: Add trusted factory
+        // Add factory first
         factory.addTrustedClankerFactory(mockClankerFactoryV1);
-        console2.log('Added trusted factory v1');
+        console2.log('Added factory v1 to trusted list');
 
         // Deploy token from v1
         MockClankerTokenForTest token1 = MockClankerFactory(mockClankerFactoryV1).deployToken(
@@ -308,24 +308,23 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         address[] memory factories = factory.getTrustedClankerFactories();
         assertEq(factories.length, 0, 'Should have no factories');
 
-        // Deploy token from FAKE factory (untrusted)
+        // Deploy token from any factory
         MockClankerTokenForTest token2 = MockClankerFactory(fakeClankerFactory).deployToken(
             bob,
             'FakeToken',
             'FAKE'
         );
 
-        // Step 3: Should NOW succeed even though it's from untrusted factory
-        // Because validation is skipped when array is empty (fallback to allow-all)
+        // Step 3: Should NOW REVERT because no trusted factories configured
         vm.prank(bob);
         factory.prepareForDeployment();
 
         vm.prank(bob);
-        ILevrFactory_v1.Project memory project2 = factory.register(address(token2));
+        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        factory.register(address(token2));
 
-        assertNotEq(project2.staking, address(0), 'Token 2 should register');
-        console2.log('SUCCESS: Token from untrusted factory registered after removing all');
-        console2.log('Fallback to allow-all mode confirmed (empty array = no validation)');
+        console2.log('BLOCKED: New registrations prevented when no trusted factories');
+        console2.log('Security: Empty factory list blocks all registrations');
     }
 
     /// @notice Test: Dynamic factory rotation (remove old, add new)
@@ -436,7 +435,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         address[] memory finalFactories = factory.getTrustedClankerFactories();
         assertEq(finalFactories.length, 0, 'Should have no factories');
 
-        // During emergency: any token can be registered (no validation)
+        // During emergency: NO token can be registered (require at least one trusted factory)
         MockClankerTokenForTest emergencyToken = MockClankerFactory(fakeClankerFactory).deployToken(
             alice,
             'EmergencyToken',
@@ -447,11 +446,13 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         factory.prepareForDeployment();
 
         vm.prank(alice);
-        ILevrFactory_v1.Project memory project = factory.register(address(emergencyToken));
+        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        factory.register(address(emergencyToken));
 
-        assertNotEq(project.staking, address(0), 'Emergency token should register');
-        console2.log('Emergency: Token registered (validation skipped)');
-        console2.log('SUCCESS: Emergency fallback to allow-all mode works');
+        console2.log('BLOCKED: Registrations prevented when no factories configured');
+        console2.log(
+            'SUCCESS: Security requirement enforced (must have at least 1 trusted factory)'
+        );
     }
 }
 
