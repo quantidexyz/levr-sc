@@ -330,7 +330,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         staking.accrueRewards(address(underlying));
 
         // Complete stream - claim AT end, not after
-        uint64 streamEnd = staking.streamEnd();
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(streamEnd);
 
         // Both should have equal claimable (50/50 split)
@@ -476,7 +476,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         staking.accrueRewards(address(underlying));
 
         // Warp to stream end to fully vest
-        uint64 streamEnd = staking.streamEnd();
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(streamEnd);
 
         uint256 vpBefore = staking.getVotingPower(alice);

@@ -241,7 +241,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         console2.log('Charlie staked - stream resumed with unvested rewards');
 
         // 7. Wait for stream to complete
-        uint64 streamEnd = staking.streamEnd();
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(streamEnd);
 
         // 8. Charlie claims all remaining rewards (unvested from when Alice/Bob left)
@@ -278,8 +278,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         console2.log('Re-accrued 50 ether new rewards');
 
         // 10. Wait for new stream to complete
-        uint64 newStreamEnd = staking.streamEnd();
-        uint64 newStreamStart = staking.streamStart();
+        (uint64 newStreamStart, uint64 newStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         console2.log('New stream start:', newStreamStart);
         console2.log('New stream end:', newStreamEnd);
         console2.log('Current time after accrue:', block.timestamp);
@@ -571,8 +570,8 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         console2.log('Limit reached - 11th token rejected');
 
-        // 4. Wait for one token to finish streaming - claim AT end
-        uint64 streamEnd = staking.streamEnd();
+        // 4. Wait for tokens[0] to finish streaming - claim AT end
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(tokens[0]));
         vm.warp(streamEnd);
 
         // 5. Alice claims from one token

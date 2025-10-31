@@ -439,8 +439,8 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Accrue rewards
         ILevrStaking_v1(staking).accrueRewards(WETH);
 
-        // Check that stream is now active
-        uint64 streamEnd = ILevrStaking_v1(staking).streamEnd();
+        // Check that WETH stream is now active (not clankerToken)
+        (, uint64 streamEnd, ) = ILevrStaking_v1(staking).getTokenStreamInfo(WETH);
         assertTrue(streamEnd > block.timestamp, 'Stream should be active after accrual');
 
         // Check outstanding rewards after accrual (should be 0 available, since they're now streaming)

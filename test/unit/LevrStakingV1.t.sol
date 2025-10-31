@@ -111,7 +111,7 @@ contract LevrStakingV1_UnitTest is Test {
         }
         // move to end of window and claim remainder - claim AT end
         beforeBal = underlying.balanceOf(address(this));
-        uint64 streamEnd = staking.streamEnd();
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(streamEnd);
         staking.claimRewards(toks, address(this));
         afterBal = underlying.balanceOf(address(this));

@@ -89,12 +89,10 @@ contract MockStaking is ILevrStaking_v1 {
         return 0;
     }
 
-    function streamStart() external pure override returns (uint64) {
-        return 0;
-    }
-
-    function streamEnd() external pure override returns (uint64) {
-        return 0;
+    function getTokenStreamInfo(
+        address
+    ) external pure override returns (uint64, uint64, uint256) {
+        return (0, 0, 0);
     }
 
     function rewardRatePerSecond(address) external pure override returns (uint256) {

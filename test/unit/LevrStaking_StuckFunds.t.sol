@@ -298,7 +298,7 @@ contract LevrStaking_StuckFundsTest is Test {
         underlying.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(underlying));
 
-        uint256 streamStart = staking.streamStart();
+        (uint64 streamStart, , ) = staking.getTokenStreamInfo(address(underlying));
         console2.log('Stream started at:', streamStart);
 
         // Advance time significantly
@@ -398,7 +398,7 @@ contract LevrStaking_StuckFundsTest is Test {
         console2.log('Accrued again - only new rewards in NEW stream');
 
         // Wait for new stream - claim AT end
-        uint64 newStreamEnd = staking.streamEnd();
+        (, uint64 newStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(newStreamEnd);
 
         // Bob claims from new stream
@@ -507,8 +507,8 @@ contract LevrStaking_StuckFundsTest is Test {
         dustToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(dustToken));
 
-        // Wait for stream to complete - claim AT end
-        uint64 streamEnd = staking.streamEnd();
+        // Wait for dustToken's stream to complete - claim AT end
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(dustToken));
         vm.warp(streamEnd);
 
         // Alice claims all rewards
@@ -631,8 +631,8 @@ contract LevrStaking_StuckFundsTest is Test {
         underlying.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(underlying));
 
-        uint256 streamStart = staking.streamStart();
-        uint256 streamEnd = staking.streamEnd();
+        (uint64 streamStart, , ) = staking.getTokenStreamInfo(address(underlying));
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
 
         console2.log('Stream start:', streamStart);
         console2.log('Stream end:', streamEnd);
@@ -680,7 +680,7 @@ contract LevrStaking_StuckFundsTest is Test {
         vm.warp(block.timestamp + 3 days + 1);
 
         // Wait for new stream to vest
-        uint64 newStreamEnd = staking.streamEnd();
+        (, uint64 newStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(newStreamEnd);
 
         // NOW Alice can claim vested rewards from the NEW stream

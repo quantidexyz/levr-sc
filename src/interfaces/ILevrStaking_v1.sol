@@ -32,6 +32,8 @@ interface ILevrStaking_v1 {
         uint64 lastUpdate;
         bool exists;
         bool whitelisted;
+        uint64 streamStart; // Per-token stream start (isolation fix for CRITICAL-3)
+        uint64 streamEnd; // Per-token stream end (isolation fix for CRITICAL-3)
     }
 
     // ============ Errors ============
@@ -56,7 +58,12 @@ interface ILevrStaking_v1 {
     event RewardsAccrued(address indexed token, uint256 amount, uint256 newPoolTotal);
 
     /// @notice Emitted when streaming window resets due to new accruals.
-    event StreamReset(uint32 windowSeconds, uint64 streamStart, uint64 streamEnd);
+    event StreamReset(
+        address indexed token,
+        uint32 windowSeconds,
+        uint64 streamStart,
+        uint64 streamEnd
+    );
 
     /// @notice Emitted when rewards claimed.
     event RewardsClaimed(
@@ -139,8 +146,15 @@ interface ILevrStaking_v1 {
 
     /// @notice View streaming parameters.
     function streamWindowSeconds() external view returns (uint32);
-    function streamStart() external view returns (uint64);
-    function streamEnd() external view returns (uint64);
+
+    /// @notice Get stream info for a specific reward token
+    /// @param token The reward token address
+    /// @return streamStart Per-token stream start timestamp
+    /// @return streamEnd Per-token stream end timestamp
+    /// @return streamTotal Total amount streaming for this token
+    function getTokenStreamInfo(
+        address token
+    ) external view returns (uint64 streamStart, uint64 streamEnd, uint256 streamTotal);
 
     /// @notice Current reward emission rate per second for a token, based on remaining stream.
     function rewardRatePerSecond(address token) external view returns (uint256);

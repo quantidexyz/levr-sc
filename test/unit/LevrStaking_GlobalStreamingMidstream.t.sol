@@ -86,8 +86,7 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         weth.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(weth));
 
-        uint64 firstStreamStart = staking.streamStart();
-        uint64 firstStreamEnd = staking.streamEnd();
+        (uint64 firstStreamStart, uint64 firstStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         console.log('First stream: start =', firstStreamStart, ', end =', firstStreamEnd);
 
         // T=1 day: 333 ether should be vested for WETH
@@ -102,8 +101,7 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         underlying.mint(address(staking), 500 ether);
         staking.accrueRewards(address(underlying));
 
-        uint64 secondStreamStart = staking.streamStart();
-        uint64 secondStreamEnd = staking.streamEnd();
+        (uint64 secondStreamStart, uint64 secondStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         console.log('Second stream: start =', secondStreamStart, ', end =', secondStreamEnd);
 
         // CRITICAL: Verify window was reset
@@ -117,7 +115,7 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         console.log('WETH claimable after reset (immediate):', wethClaimableAfterReset);
 
         // Wait for new stream to complete - claim AT end, not after
-        uint64 newStreamEnd = staking.streamEnd();
+        (, uint64 newStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(newStreamEnd);
 
         uint256 wethFinal = staking.claimableRewards(alice, address(weth));
@@ -177,14 +175,16 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         staking.accrueRewards(address(usdc));
         totalUsdcAccrued += 300 ether;
 
-        // Day 3: Accrue more WETH (window resets again)
+        // Day 3: Accrue more WETH (extends WETH's stream)
         vm.warp(block.timestamp + 1 days);
         weth.mint(address(staking), 200 ether);
         staking.accrueRewards(address(weth));
         totalWethAccrued += 200 ether;
 
-        // Complete the final stream
-        vm.warp(staking.streamEnd());
+        // Wait for ALL streams to complete
+        // WETH was last accrued at day 3, so it ends at day 6
+        (, uint64 wethStreamEnd, ) = staking.getTokenStreamInfo(address(weth));
+        vm.warp(wethStreamEnd);
 
         // Claim all rewards
         address[] memory tokens = new address[](3);
@@ -227,8 +227,9 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         weth.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(weth));
 
-        // Complete stream
-        vm.warp(staking.streamEnd());
+        // Complete WETH's stream
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(weth));
+        vm.warp(streamEnd);
 
         // Claim WETH
         address[] memory wethTokens = new address[](1);
@@ -313,7 +314,8 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         staking.accrueRewards(address(underlying));
 
         // Complete stream
-        vm.warp(staking.streamEnd());
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
+        vm.warp(streamEnd);
 
         // Both users claim both tokens
         address[] memory tokens = new address[](2);
@@ -380,8 +382,9 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         // Unvested from first: 1000 (since 0 seconds passed)
         // New stream should have: 1000 + 500 = 1500 ether
 
-        // Complete stream
-        vm.warp(staking.streamEnd());
+        // Complete WETH's stream
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(weth));
+        vm.warp(streamEnd);
 
         uint256 claimable = staking.claimableRewards(alice, address(weth));
         console.log('WETH claimable:', claimable);
@@ -404,24 +407,25 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        // T=0: WETH accrual (1000 over 3 days)
+        // T=0: WETH accrual (1000 over 3 days) - ends at T=3
         weth.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(weth));
 
-        // T=1 day: Underlying accrual (500 over 3 days)
-        // WETH has 666.67 unvested, moves to new window
+        // T=1 day: Underlying accrual (500 over 3 days) - ends at T=4
+        // With per-token streams: WETH continues vesting independently
         vm.warp(block.timestamp + 1 days);
         underlying.mint(address(staking), 500 ether);
         staking.accrueRewards(address(underlying));
 
-        // T=2 days: USDC accrual (300 over 3 days)
-        // WETH has some unvested, underlying has some unvested, both move to new window
+        // T=2 days: USDC accrual (300 over 3 days) - ends at T=5
+        // With per-token streams: WETH and underlying continue independently
         vm.warp(block.timestamp + 1 days);
         usdc.mint(address(staking), 300 ether);
         staking.accrueRewards(address(usdc));
 
-        // T=5 days: Complete final stream
-        vm.warp(staking.streamEnd());
+        // T=5 days: Complete ALL streams (USDC ends last at T=5)
+        (, uint64 usdcStreamEnd, ) = staking.getTokenStreamInfo(address(usdc));
+        vm.warp(usdcStreamEnd);
 
         // Claim all
         address[] memory tokens = new address[](3);
@@ -490,7 +494,8 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         console.log('WETH claimable after reset:', wethClaimableAfterReset);
 
         // Complete new stream
-        vm.warp(staking.streamEnd());
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
+        vm.warp(streamEnd);
 
         address[] memory tokens = new address[](2);
         tokens[0] = address(weth);

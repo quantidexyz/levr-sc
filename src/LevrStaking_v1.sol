@@ -36,10 +36,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     address public treasury;
     address public factory;
 
-    // Global streaming window (shared by all reward tokens for efficiency)
-    uint64 private _streamStart;
-    uint64 private _streamEnd;
-
     uint256 private _totalStaked;
 
     // Voting power: tracks when each user started staking (time-weighted)
@@ -80,7 +76,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             streamTotal: 0,
             lastUpdate: 0,
             exists: true,
-            whitelisted: true
+            whitelisted: true,
+            streamStart: 0,
+            streamEnd: 0
         });
         _rewardTokens.push(underlying_);
     }
@@ -225,6 +223,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             tokenState.availablePool = 0;
             tokenState.streamTotal = 0;
             tokenState.lastUpdate = 0;
+            tokenState.streamStart = 0;
+            tokenState.streamEnd = 0;
         }
 
         emit ILevrStaking_v1.TokenWhitelisted(token);
@@ -267,12 +267,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         if (!tokenState.exists) return 0;
 
-        // Calculate current pool including vested rewards using library
+        // Calculate current pool including vested rewards using library (CRITICAL-3 fix: use per-token window)
         uint256 currentPool = RewardMath.calculateCurrentPool(
             tokenState.availablePool,
             tokenState.streamTotal,
-            _streamStart,
-            _streamEnd,
+            tokenState.streamStart,
+            tokenState.streamEnd,
             tokenState.lastUpdate,
             uint64(block.timestamp)
         );
@@ -330,13 +330,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function streamStart() external view returns (uint64) {
-        return _streamStart;
-    }
-
-    /// @inheritdoc ILevrStaking_v1
-    function streamEnd() external view returns (uint64) {
-        return _streamEnd;
+    function getTokenStreamInfo(
+        address token
+    ) external view returns (uint64 streamStart, uint64 streamEnd, uint256 streamTotal) {
+        ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
+        return (tokenState.streamStart, tokenState.streamEnd, tokenState.streamTotal);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -371,45 +369,59 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function rewardRatePerSecond(address token) external view returns (uint256) {
-        // Use GLOBAL stream window
-        uint64 start = _streamStart;
-        uint64 end = _streamEnd;
+        ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
+
+        // Use PER-TOKEN stream window (CRITICAL-3 fix: isolation)
+        uint64 start = tokenState.streamStart;
+        uint64 end = tokenState.streamEnd;
         if (end == 0 || end <= start) return 0;
         if (block.timestamp >= end) return 0;
         uint256 window = end - start;
-        uint256 total = _tokenState[token].streamTotal;
-        return total / window;
+        return tokenState.streamTotal / window;
     }
 
     /// @inheritdoc ILevrStaking_v1
     function aprBps() external view returns (uint256) {
         if (_totalStaked == 0) return 0;
-        // Use GLOBAL stream window
-        uint64 start = _streamStart;
-        uint64 end = _streamEnd;
-        if (end == 0 || end <= start) return 0;
-        if (block.timestamp >= end) return 0;
-        uint256 window = end - start;
-        uint256 total = _tokenState[underlying].streamTotal;
-        if (total == 0) return 0;
-        uint256 rate = total / window;
-        uint256 annual = rate * 365 days;
-        return (annual * BASIS_POINTS) / _totalStaked;
+
+        uint32 window = ILevrFactory_v1(factory).streamWindowSeconds(underlying);
+        if (window == 0) return 0;
+
+        // CRITICAL-3 fix: Aggregate APR from ALL active streams
+        uint256 totalAnnualRate = 0;
+
+        for (uint256 i = 0; i < _rewardTokens.length; i++) {
+            address token = _rewardTokens[i];
+            ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
+
+            // Only include active streams
+            if (
+                tokenState.streamTotal > 0 &&
+                tokenState.streamEnd > block.timestamp &&
+                tokenState.streamStart > 0
+            ) {
+                uint256 rate = tokenState.streamTotal / window;
+                uint256 annual = rate * 365 days;
+                totalAnnualRate += annual;
+            }
+        }
+
+        if (totalAnnualRate == 0) return 0;
+        return (totalAnnualRate * BASIS_POINTS) / _totalStaked;
     }
 
     function _resetStreamForToken(address token, uint256 amount) internal {
         // Query stream window from factory config
         uint32 window = ILevrFactory_v1(factory).streamWindowSeconds(underlying);
 
-        // Reset GLOBAL stream window (shared by all tokens)
-        _streamStart = uint64(block.timestamp);
-        _streamEnd = uint64(block.timestamp + window);
-        emit StreamReset(window, _streamStart, _streamEnd);
-
-        // Set per-token amount and last update
+        // Set PER-TOKEN stream window (CRITICAL-3 fix: isolation)
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
+        tokenState.streamStart = uint64(block.timestamp);
+        tokenState.streamEnd = uint64(block.timestamp + window);
         tokenState.streamTotal = amount;
         tokenState.lastUpdate = uint64(block.timestamp);
+
+        emit StreamReset(token, window, tokenState.streamStart, tokenState.streamEnd);
     }
 
     function _creditRewards(address token, uint256 amount) internal {
@@ -449,7 +461,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
                 streamTotal: 0,
                 lastUpdate: 0,
                 exists: true,
-                whitelisted: wasWhitelisted
+                whitelisted: wasWhitelisted,
+                streamStart: 0,
+                streamEnd: 0
             });
             tokenState = _tokenState[token];
             _rewardTokens.push(token);
@@ -534,11 +548,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @notice Settle reward pool by vesting streamed rewards
     function _settlePoolForToken(address token) internal {
-        uint64 start = _streamStart;
-        uint64 end = _streamEnd;
-        if (end == 0 || start == 0) return;
-
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
+
+        // Use PER-TOKEN stream window (CRITICAL-3 fix: isolation)
+        uint64 start = tokenState.streamStart;
+        uint64 end = tokenState.streamEnd;
+        if (end == 0 || start == 0) return;
 
         // Pause if no stakers (preserves rewards)
         if (_totalStaked == 0) {

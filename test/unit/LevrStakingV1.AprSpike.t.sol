@@ -158,7 +158,7 @@ contract LevrStakingV1AprSpikeTest is Test {
 
         // Verify rewards will be fully emitted
         console2.log('\n=== REWARD EMISSION VERIFICATION ===');
-        uint64 streamEnd = staking.streamEnd();
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         console2.log('Stream ends at:', streamEnd);
         console2.log('Current time:', block.timestamp);
         console2.log('Time until stream end:', streamEnd - block.timestamp, 'seconds');
@@ -256,7 +256,7 @@ contract LevrStakingV1AprSpikeTest is Test {
             console2.log('');
 
             // Fast forward to claim all
-            uint64 streamEnd = staking.streamEnd();
+            (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
             vm.warp(streamEnd);
 
             address[] memory tokens = new address[](1);

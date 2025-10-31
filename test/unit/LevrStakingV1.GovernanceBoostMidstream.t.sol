@@ -107,7 +107,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
         console2.log('  accrueFromTreasury() called');
 
         // Complete the stream
-        uint64 streamEnd = staking.streamEnd();
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(streamEnd);
 
         // Claim all rewards
@@ -170,7 +170,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
         console2.log('Boost 2 (day 2): 50K tokens');
 
         // Complete final stream
-        uint64 streamEnd = staking.streamEnd();
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
         vm.warp(streamEnd);
 
         // Claim

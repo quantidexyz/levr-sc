@@ -95,8 +95,8 @@ contract LevrFactory_ConfigGridlockTest is Test {
         rewardToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(rewardToken));
 
-        // Wait for stream to finish - claim AT end
-        uint64 streamEnd = staking.streamEnd();
+        // Wait for rewardToken's stream to finish - claim AT end
+        (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(rewardToken));
         vm.warp(streamEnd);
 
         // Alice claims all
@@ -144,7 +144,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         underlying.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(underlying));
 
-        uint256 streamEndBefore = staking.streamEnd();
+        (, uint64 streamEndBefore, ) = staking.getTokenStreamInfo(address(underlying));
         console2.log('Stream end before config change:', streamEndBefore);
 
         // Change stream window to 1 day
@@ -165,7 +165,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
 
         factory.updateConfig(newConfig);
 
-        uint256 streamEndAfter = staking.streamEnd();
+        (, uint64 streamEndAfter, ) = staking.getTokenStreamInfo(address(underlying));
         console2.log('Stream end after config change:', streamEndAfter);
 
         // Active stream should not be affected
@@ -655,7 +655,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         underlying.mint(address(staking), 500 ether);
         staking.accrueRewards(address(underlying));
 
-        uint256 stream1End = staking.streamEnd();
+        (, uint64 stream1End, ) = staking.getTokenStreamInfo(address(underlying));
 
         // Change to 1-day window
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
@@ -682,7 +682,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         underlying.mint(address(staking), 500 ether);
         staking.accrueRewards(address(underlying));
 
-        uint256 stream2End = staking.streamEnd();
+        (, uint64 stream2End, ) = staking.getTokenStreamInfo(address(underlying));
 
         // Stream 2 should end 1 day from now (not 3 days)
         uint256 expectedEnd = block.timestamp + 1 days;
