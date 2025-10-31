@@ -141,9 +141,12 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
             console2.log('800 votes < 1260 required (44.4% < 70%)');
             console2.log('Proposal was executable, now is not!');
 
-            // Try to execute - should fail
-            vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+            // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
+            // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
             governor.execute(pid);
+            
+            // Verify marked as executed
+            assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
             console2.log('CRITICAL: Supply manipulation can block proposal execution!');
         } else {

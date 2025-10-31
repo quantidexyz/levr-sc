@@ -254,8 +254,13 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         );
 
         // Execution should fail because snapshot protects against config changes
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
+
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
 
         console2.log(
             '[RESULT] Proposal still defeated - snapshot protects against mid-cycle config changes'
@@ -712,9 +717,13 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         console2.log('[STATE] Voting window ended, proposal failed quorum (20% < 70%)');
 
-        // Try to execute - will fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute - will fail - FIX [OCT-31-CRITICAL-1]
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
+
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
 
         console2.log('[STATE] Proposal execution failed (as expected)');
 
@@ -838,8 +847,13 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         );
 
         // Execution fails - config changes cannot unblock stuck proposals
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
+
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
 
         console2.log('[RESULT] Snapshot protection prevents config-based recovery');
         console2.log('[RESULT] Must use manual startNewCycle() to recover instead');

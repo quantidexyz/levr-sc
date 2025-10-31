@@ -140,31 +140,38 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         assertFalse(p1.meetsQuorum);
         assertFalse(p2.meetsQuorum);
 
-        // Try to execute proposal 1 - should fail
+        // Try to execute proposal 1 - FIX [OCT-31-CRITICAL-1]: no longer reverts
         console2.log('\nAttempting to execute proposal 1 (will fail quorum)...');
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid1);
 
-        // Check active count AFTER failed execute attempt
+        // Check active count AFTER defeated execute
         uint256 countAfterFailedExecute = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
-        console2.log('Active count after failed execute:', countAfterFailedExecute);
-
-        if (countAfterFailedExecute == 2) {
-            console2.log('Count still = 2 (revert rolled back decrement)');
-        } else if (countAfterFailedExecute == 1) {
-            console2.log('Count = 1 (somehow decremented despite revert?)');
-        }
+        console2.log('Active count after defeated execute:', countAfterFailedExecute);
+        
+        // FIX: Count should be 1 (decremented from 2)
+        assertEq(countAfterFailedExecute, 1, 'Count should be 1 after defeated');
+        console2.log('Count = 1 (decremented correctly)');
+        
+        // Verify P1 marked as executed
+        assertTrue(governor.getProposal(pid1).executed, 'P1 should be executed');
 
         // Try to execute proposal 2 - should also fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid2);
 
         uint256 countAfterBothFailed = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
         console2.log('Active count after both failed:', countAfterBothFailed);
+        
+        // FIX: Count should be 0 (decremented from 1)
+        assertEq(countAfterBothFailed, 0, 'Count should be 0 after both defeated');
+        
+        // Verify P2 marked as executed
+        assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
 
         // START CYCLE 2
         console2.log('\n-------');
@@ -258,9 +265,12 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         console2.log('Active count after successful execute:', countAfterSuccess);
         console2.log('(Should be 1: proposal 2 still active)');
 
-        // Try to execute proposal 2 - should fail quorum
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute proposal 2 - should fail quorum - FIX [OCT-31-CRITICAL-1]
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid2);
+        
+        // Verify P2 marked as executed
+        assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
 
         uint256 countAfterFailed = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool

@@ -157,12 +157,14 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         // 4. End voting
         vm.warp(block.timestamp + 5 days);
 
-        // 5. Both fail (no votes or insufficient quorum)
-        vm.expectRevert();
+        // 5. Both fail (no votes or insufficient quorum) - FIX [OCT-31-CRITICAL-1]
+        // OLD: vm.expectRevert();
         governor.execute(pid1);
-
-        vm.expectRevert();
         governor.execute(pid2);
+
+        // Verify both marked as executed
+        assertEq(governor.getProposal(pid1).executed, true, 'P1 should be executed');
+        assertEq(governor.getProposal(pid2).executed, true, 'P2 should be executed');
 
         console2.log('Both proposals failed - cycle stuck');
 
@@ -343,18 +345,20 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         vm.prank(bob);
         uint256 pidSmall = governor.proposeTransfer(address(underlying), bob, 1000 ether, 'Small');
 
-        // 3. Both vote
+        // 3. Both vote - but vote differently to ensure clear winner/loser
         vm.warp(block.timestamp + 2 days + 1);
 
+        // Both vote YES on pidLarge (winner)
         vm.prank(alice);
         governor.vote(pidLarge, true);
-        vm.prank(alice);
-        governor.vote(pidSmall, true);
+        vm.prank(bob);
+        governor.vote(pidLarge, true);
 
+        // Both vote NO on pidSmall (loser - fails approval)
+        vm.prank(alice);
+        governor.vote(pidSmall, false);
         vm.prank(bob);
-        governor.vote(pidLarge, true);
-        vm.prank(bob);
-        governor.vote(pidSmall, true);
+        governor.vote(pidSmall, false);
 
         // 4. Before execution, drain treasury
         vm.prank(address(governor));
@@ -364,28 +368,49 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         vm.warp(block.timestamp + 5 days);
 
-        // 5. Large proposal fails
-        vm.expectRevert();
+        // 5. Large proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert();
         governor.execute(pidLarge);
 
-        console2.log('Large proposal failed (insufficient balance)');
+        // Verify marked as executed (defeated)
+        assertEq(
+            governor.getProposal(pidLarge).executed,
+            true,
+            'Large proposal should be executed'
+        );
 
-        // 6. Governance stuck (revert rolled back cycle advance)
-        assertEq(governor.currentCycleId(), 1, 'Cycle unchanged after revert');
+        console2.log('Large proposal failed (insufficient balance, marked as defeated)');
 
-        // CRITICAL FINDING: Cannot start new cycle - proposal still "executable"
-        vm.expectRevert();
-        governor.startNewCycle(); // Fails with ExecutableProposalsRemaining
+        // 6. FIX [OCT-31-CRITICAL-1]: Cycle does NOT advance (defeated proposals don't trigger new cycle)
+        assertEq(governor.currentCycleId(), 1, 'Cycle unchanged (defeated proposals dont advance)');
 
-        console2.log('FINDING: Underfunded proposals block cycle advancement');
+        // Winner is pidLarge (only one that got YES votes)
+        uint256 winner = governor.getWinner(1);
+        assertEq(winner, pidLarge, 'pidLarge is the winner');
 
-        // Recovery: Refill treasury and execute
-        underlying.mint(address(treasury), 2000 ether);
-        governor.execute(pidLarge); // Now succeeds
+        // pidSmall voted NO by both, so it's Defeated (not Succeeded - won't block cycle)
+        ILevrGovernor_v1.ProposalState smallState = governor.state(pidSmall);
+        assertEq(
+            uint8(smallState),
+            uint8(ILevrGovernor_v1.ProposalState.Defeated),
+            'pidSmall is Defeated'
+        );
 
-        assertEq(governor.currentCycleId(), 2, 'Cycle advances after successful execution');
+        console2.log('pidSmall failed approval (all voted NO) - marked as defeated');
 
-        console2.log('SUCCESS: Governance recovered via treasury refill + execution');
+        // Execute pidSmall to mark it as defeated too
+        governor.execute(pidSmall);
+        assertEq(governor.getProposal(pidSmall).executed, true, 'pidSmall should be executed');
+
+        // Now can start new cycle - no Succeeded proposals remain
+        governor.startNewCycle();
+
+        assertEq(governor.currentCycleId(), 2, 'Cycle advances (no executable proposals block it)');
+
+        console2.log(
+            '[VERIFIED] CYCLE NOT LOCKED: Can start new cycle after all proposals processed'
+        );
+        console2.log('SUCCESS: Governance continues despite treasury depletion');
     }
 
     /// @notice E2E: Fee splitter self-send recovery flow
@@ -590,8 +615,12 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         vm.warp(block.timestamp + 7 days + 1);
 
-        vm.expectRevert();
+        // FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert();
         governor.execute(pid);
+
+        // Verify marked as executed
+        assertEq(governor.getProposal(pid).executed, true, 'Proposal should be executed');
 
         console2.log('Issue 1: Governance cycle stuck');
 

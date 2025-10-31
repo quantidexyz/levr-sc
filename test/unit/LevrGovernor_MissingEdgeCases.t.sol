@@ -118,19 +118,24 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         assertEq(countAfterReset, 0, 'Count should be 0 after reset');
 
         // Try to execute old Cycle 1 proposal (will fail quorum)
+        // FIX [OCT-31-CRITICAL-1]: No longer reverts, marks as defeated
         // The execute() function has: if (_activeProposalCount > 0) { count-- }
         // Since count = 0, decrement is skipped (preventing underflow)
         console2.log('\nAttempting to execute old Cycle 1 proposal after count reset...');
 
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // NEW: Should mark as defeated and return
         governor.execute(pid1);
 
         // Verify count STILL 0 (no underflow occurred)
         uint256 countAfter = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
-        console2.log('Count after failed execute:', countAfter);
+        console2.log('Count after defeated execute:', countAfter);
         assertEq(countAfter, 0, 'Count should still be 0 (underflow prevented)');
+
+        // Verify proposal marked as executed
+        assertTrue(governor.getProposal(pid1).executed, 'Proposal should be marked as executed');
 
         console2.log('[PASS] Underflow protection working correctly');
     }
@@ -359,7 +364,8 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         // Try to execute Cycle 1 proposal in Cycle 2
         console2.log('Attempting to execute Cycle 1 proposal...');
 
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // FIX [OCT-31-CRITICAL-1]: No longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid1);
 
         // Verify count STILL 0 (underflow protection worked)
@@ -368,6 +374,9 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         );
         console2.log('Count after execute attempt:', countAfter);
         assertEq(countAfter, 0, 'Underflow protection: count stays at 0');
+
+        // Verify proposal marked as executed
+        assertTrue(governor.getProposal(pid1).executed, 'Proposal should be marked as executed');
 
         console2.log('[PASS] Underflow protection prevents negative count');
     }
@@ -707,15 +716,16 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
         console2.log('Winner:', winner);
         assertEq(winner, 0, 'No winner when all proposals defeated');
 
-        // Try to execute any proposal - should fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute any proposal - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid1);
-
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid2);
-
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid3);
+
+        // Verify all marked as executed
+        assertTrue(governor.getProposal(pid1).executed, 'P1 should be executed');
+        assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
+        assertTrue(governor.getProposal(pid3).executed, 'P3 should be executed');
 
         // Should be able to start new cycle
         governor.startNewCycle();
@@ -814,11 +824,14 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Should fail with InsufficientTreasuryBalance
-        vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
+        // Should fail - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pid1);
 
-        console2.log('[PASS] Execution validates treasury balance at execution time');
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid1).executed, 'Proposal should be executed');
+
+        console2.log('[PASS] Execution validates treasury balance, marks as defeated');
         console2.log('[SAFE] Amount validation at creation + balance check at execution');
     }
 
@@ -987,9 +1000,13 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Try to execute (will fail)
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute (will fail quorum)
+        // FIX [OCT-31-CRITICAL-1]: No longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
+
+        // Verify proposal marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be marked as executed');
 
         // Verify snapshots UNCHANGED
         ILevrGovernor_v1.Proposal memory propAfter = governor.getProposal(pid);
@@ -1135,9 +1152,9 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
     // EDGE CASE 19: Defeated Proposal - activeProposalCount Handling
     // ============================================================================
     /// @notice Test that defeated proposals correctly emit ProposalDefeated event
-    /// @dev Lines 168, 180, 192 emit ProposalDefeated before reverting
-    function test_edgeCase_defeatedProposal_emitsEventBeforeRevert() public {
-        console2.log('\n=== EDGE CASE 19: Defeated Proposal Event Emission ===');
+    /// @dev FIX [OCT-31-CRITICAL-1]: Return instead of revert to persist state changes
+    function test_edgeCase_defeatedProposal_emitsEventAndPersists() public {
+        console2.log('\n=== EDGE CASE 19: Defeated Proposal Event Emission (FIXED) ===');
 
         // Setup
         underlying.mint(alice, 1000 ether);
@@ -1165,19 +1182,24 @@ contract LevrGovernor_MissingEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Execute should emit ProposalDefeated then revert
-        // However, the event is emitted AND proposal.executed is set,
-        // but then the entire transaction reverts, rolling back BOTH changes
+        // FIX: Execute should emit ProposalDefeated and return cleanly (not revert)
+        // The event is emitted AND proposal.executed is set, AND state persists
 
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // OLD BEHAVIOR: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // NEW BEHAVIOR: Expect event and clean execution
+        governor.execute(pid); // Should NOT revert
+
+        // Verify proposal IS marked as executed (state persisted)
+        ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
+        assertTrue(prop.executed, 'State should persist - proposal marked as executed');
+
+        // Verify cannot retry
+        vm.expectRevert(ILevrGovernor_v1.AlreadyExecuted.selector);
         governor.execute(pid);
 
-        // Verify proposal NOT marked as executed (revert rolled back)
-        ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
-        assertFalse(prop.executed, 'Revert should roll back executed flag');
-
-        console2.log('[SAFE] Revert rolls back all state changes (events AND state)');
-        console2.log('[NOTE] ProposalDefeated event is emitted but rolled back');
+        console2.log('[FIX APPLIED] State changes persist (no revert)');
+        console2.log('[SECURITY] ProposalDefeated event emitted and persisted');
+        console2.log('[SECURITY] No retry attack possible - marked as executed');
     }
 
     // ============================================================================

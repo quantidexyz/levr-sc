@@ -407,14 +407,20 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         bool meetsQuorum = ILevrGovernor_v1(governor).meetsQuorum(pid);
         assertFalse(meetsQuorum, 'should not meet quorum');
 
-        // Try to execute (should revert)
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
 
-        // Check state is Defeated
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
+
+        // Check state is Executed (FIX: defeated proposals marked as executed)
+        // FIX [OCT-31-CRITICAL-1]: Defeated proposals now show as Executed because executed=true
         assertEq(
             uint256(ILevrGovernor_v1(governor).state(pid)),
-            uint256(ILevrGovernor_v1.ProposalState.Defeated)
+            uint256(ILevrGovernor_v1.ProposalState.Executed),
+            'Should be Executed (defeated but marked as executed)'
         );
     }
 
@@ -455,9 +461,13 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         bool meetsApproval = ILevrGovernor_v1(governor).meetsApproval(pid);
         assertFalse(meetsApproval, 'should not meet approval threshold');
 
-        // Try to execute (should revert)
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
+
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
     }
 
     // ============ Test 7: Only Winner Executes ============

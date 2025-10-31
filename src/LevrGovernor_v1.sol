@@ -168,36 +168,42 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Check quorum
         if (!_meetsQuorum(proposalId)) {
             proposal.executed = true; // Mark as processed
-            emit ProposalDefeated(proposalId);
             // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
             // (can be 0 if new cycle already started and reset the count)
             if (_activeProposalCount[proposal.proposalType] > 0) {
                 _activeProposalCount[proposal.proposalType]--;
             }
-            revert ProposalNotSucceeded();
+            emit ProposalDefeated(proposalId);
+            // FIX [OCT-31-CRITICAL-1]: Return instead of revert to persist state changes
+            // This prevents retry attacks and ensures proper event emission
+            return;
         }
 
         // Check approval
         if (!_meetsApproval(proposalId)) {
             proposal.executed = true; // Mark as processed
-            emit ProposalDefeated(proposalId);
             // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
             if (_activeProposalCount[proposal.proposalType] > 0) {
                 _activeProposalCount[proposal.proposalType]--;
             }
-            revert ProposalNotSucceeded();
+            emit ProposalDefeated(proposalId);
+            // FIX [OCT-31-CRITICAL-1]: Return instead of revert to persist state changes
+            // This prevents retry attacks and ensures proper event emission
+            return;
         }
 
         // TOKEN AGNOSTIC: Check treasury has sufficient balance for proposal token and amount
         uint256 treasuryBalance = IERC20(proposal.token).balanceOf(treasury);
         if (treasuryBalance < proposal.amount) {
             proposal.executed = true; // Mark as processed to avoid retries
-            emit ProposalDefeated(proposalId);
             // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
             if (_activeProposalCount[proposal.proposalType] > 0) {
                 _activeProposalCount[proposal.proposalType]--;
             }
-            revert InsufficientTreasuryBalance();
+            emit ProposalDefeated(proposalId);
+            // FIX [OCT-31-CRITICAL-1]: Return instead of revert to persist state changes
+            // This prevents retry attacks and ensures proper event emission
+            return;
         }
 
         // Check this is the winner for the cycle
@@ -378,7 +384,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         }
 
         // Check max active proposals per type
-        if (_activeProposalCount[proposalType] >= ILevrFactory_v1(factory).maxActiveProposals(underlying)) {
+        if (
+            _activeProposalCount[proposalType] >=
+            ILevrFactory_v1(factory).maxActiveProposals(underlying)
+        ) {
             revert MaxProposalsReached();
         }
 

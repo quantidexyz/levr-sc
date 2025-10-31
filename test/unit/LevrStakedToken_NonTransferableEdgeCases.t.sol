@@ -339,7 +339,12 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
         // POOL-BASED: Perfect proportional distribution
         assertApproxEqAbs(aliceClaimable, bobClaimable, 1, 'Equal stakes = equal rewards');
-        assertApproxEqAbs(aliceClaimable + bobClaimable, 2000 ether, 1 ether, 'Total claimable = accrued');
+        assertApproxEqAbs(
+            aliceClaimable + bobClaimable,
+            2000 ether,
+            1 ether,
+            'Total claimable = accrued'
+        );
 
         // No transfer complications - clean accounting
         address[] memory tokens = new address[](1);
@@ -359,15 +364,20 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 bobBalBefore = underlying.balanceOf(bob);
         staking.claimRewards(tokens, bob);
         uint256 bobClaimed = underlying.balanceOf(bob) - bobBalBefore;
-        assertApproxEqAbs(bobClaimed, bobClaimableAfterAlice, 1, 'Bob claims his share of remaining pool');
-        
+        assertApproxEqAbs(
+            bobClaimed,
+            bobClaimableAfterAlice,
+            1,
+            'Bob claims his share of remaining pool'
+        );
+
         // POOL-BASED NOTE: Claim order creates timing dependency
         // Alice claims 50% of pool (1000), Bob claims 50% of REMAINING pool (500)
         // This leaves 500 in pool - users should claim together or use auto-claim on unstake
         // Total distributed to users (not including pool remainder)
         uint256 totalClaimedByUsers = aliceClaimed + bobClaimed;
         uint256 poolRemainder = 2000 ether - totalClaimedByUsers;
-        
+
         assertEq(aliceClaimed, 1000 ether, 'Alice gets 50% of original pool');
         assertEq(bobClaimed, 500 ether, 'Bob gets 50% of reduced pool');
         assertApproxEqAbs(poolRemainder, 500 ether, 1, 'Pool remainder from claim timing');
@@ -375,24 +385,32 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
     /// @notice Test multiple users with independent operations
     function test_multipleUsers_independentOperations() public {
-        // Alice stakes at time 0
+        // FIX: Use absolute timestamp to avoid test pollution
+        // Set to a known future timestamp to avoid underflow issues
+        uint256 startTime = 365 days; // Start at day 365 to avoid conflicts
+        vm.warp(startTime);
+
+        // Alice stakes at day 365
         vm.startPrank(alice);
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
+        vm.stopPrank();
 
-        // Bob stakes at time 0
+        // Bob stakes at day 365
         vm.startPrank(bob);
         underlying.approve(address(staking), 500 ether);
         staking.stake(500 ether);
+        vm.stopPrank();
 
-        vm.warp(block.timestamp + 50 days);
+        vm.warp(startTime + 50 days); // Day 415
 
-        // Charlie stakes at day 50
+        // Charlie stakes at day 415
         vm.startPrank(charlie);
         underlying.approve(address(staking), 300 ether);
         staking.stake(300 ether);
+        vm.stopPrank();
 
-        vm.warp(block.timestamp + 50 days); // Now at day 100
+        vm.warp(startTime + 100 days); // Day 465 (Charlie has been staked 50 days)
 
         // VP should be independent for each user
         uint256 aliceVP = staking.getVotingPower(alice);
@@ -412,7 +430,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
         // Alice staked more tokens than Bob for same time
         assertGt(aliceVP, bobVP, 'Alice staked more tokens');
-        
+
         // Alice has been staking 2x longer than Charlie
         assertGt(aliceVP, charlieVP, 'Alice staked longer');
 

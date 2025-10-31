@@ -137,14 +137,16 @@ contract LevrGovernor_StuckProcessTest is Test {
         // End voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Both proposals should fail quorum
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Both proposals should fail quorum - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid1);
-
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid2);
+        
+        // Verify both marked as executed
+        assertTrue(governor.getProposal(pid1).executed, 'P1 should be executed');
+        assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
 
-        console2.log('Both proposals failed quorum');
+        console2.log('Both proposals failed quorum (marked as defeated)');
         console2.log('Cycle is stuck - no executable proposals');
 
         // Manual recovery: Anyone can start new cycle
@@ -178,9 +180,12 @@ contract LevrGovernor_StuckProcessTest is Test {
         // No one votes
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Proposal fails
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid1);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid1).executed, 'Proposal should be executed');
 
         console2.log('Proposal failed, cycle ended');
 
@@ -252,9 +257,12 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         vm.warp(block.timestamp + 7 days + 1);
 
-        // Proposal fails
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
         // Charlie (random user) can recover
         vm.prank(charlie);
@@ -327,16 +335,18 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Execution should fail with InsufficientTreasuryBalance
-        vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
+        // Execution fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
-        // NOTE: Revert rolls back ALL state changes, so proposal.executed is still false
-        // This is expected Solidity behavior
+        // FIX [OCT-31-CRITICAL-1]: State changes persist, proposal.executed is now true
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
-        assertFalse(proposal.executed, 'Proposal state rolled back due to revert');
+        assertTrue(proposal.executed, 'Proposal marked as executed (state persists)');
 
-        console2.log('SUCCESS: Insufficient balance reverts execution (state rolled back)');
+        console2.log('SUCCESS: Insufficient balance marks as defeated (state persisted)');
         console2.log('Recovery: Start new cycle or wait for treasury refill');
     }
 
@@ -435,27 +445,26 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Execution fails (needs 5000, only has 2000)
-        vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
+        // Execution fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
-        console2.log('Execution reverted due to insufficient balance');
+        console2.log('Execution marked as defeated due to insufficient balance');
 
-        // Cycle does not automatically advance on revert (state rolled back)
+        // FIX [OCT-31-CRITICAL-1]: Cycle does NOT advance (defeated proposals don't trigger new cycle)
         uint256 cycleAfter = governor.currentCycleId();
-        assertEq(cycleAfter, 1, 'Cycle unchanged (revert rolled back state)');
+        assertEq(cycleAfter, 1, 'Cycle unchanged (defeated proposals dont advance cycle)');
 
-        // Manual recovery: Can't start new cycle (proposal still executable in theory)
-        vm.expectRevert();
-        governor.startNewCycle();
+        // Manual recovery: CAN start new cycle now (no executable proposals remain)
+        // FIX: Since proposal is marked as executed (defeated), no executable proposals block new cycle
+        governor.startNewCycle(); // Should succeed
 
-        console2.log('Cannot start new cycle - executable proposal exists');
+        assertEq(governor.currentCycleId(), 2, 'Should advance to cycle 2');
 
-        // Recovery option: Fund treasury and execute
-        underlying.mint(address(treasury), 5000 ether);
-
-        // Now execution succeeds
-        governor.execute(pid);
+        console2.log('SUCCESS: Can start new cycle - defeated proposal marked as executed');
 
         console2.log('SUCCESS: Proposal executed after treasury refund');
         assertEq(governor.currentCycleId(), 2, 'Cycle advances after execution');
@@ -491,9 +500,12 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // WETH proposal fails (needs 2000, only 500 available)
-        vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
+        // WETH proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pidWeth);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pidWeth).executed, 'WETH proposal should be executed');
 
         // Underlying balance unaffected - still 10000 ether
         uint256 underlyingBal = underlying.balanceOf(address(treasury));

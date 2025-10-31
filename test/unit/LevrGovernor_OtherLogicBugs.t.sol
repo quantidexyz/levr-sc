@@ -222,18 +222,21 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Try to execute - should fail quorum
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute - should fail quorum - FIX [OCT-31-CRITICAL-1]
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
-        // activeProposalCount is decremented IN the execute() call (line 169)
-        // But then it reverts, so the decrement is rolled back
+        // FIX [OCT-31-CRITICAL-1]: activeProposalCount is decremented AND persists
+        // No longer reverts - state changes are kept
         uint256 countAfter = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
-        console2.log('Count after failed execute:', countAfter);
+        console2.log('Count after defeated execute:', countAfter);
 
-        assertEq(countAfter, countBefore, 'Count should remain same (revert rolls back)');
+        assertEq(countAfter, 0, 'Count should be decremented (no revert)');
         console2.log('SAFE: Revert rolls back the decrement');
     }
 
@@ -272,20 +275,22 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         console2.log('Proposal executed before:', propBefore.executed);
         assertFalse(propBefore.executed);
 
-        // Execute fails quorum
-        // Line 167: proposal.executed = true
-        // Line 169: _activeProposalCount--
-        // Line 170: revert
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Execute fails quorum - FIX [OCT-31-CRITICAL-1]
+        // NEW: proposal.executed = true, count--, return (no revert!)
+        // OLD: proposal.executed = true, count--, revert (rolled back)
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
-        // After failed execution
+        // After failed execution - FIX [OCT-31-CRITICAL-1]
         ILevrGovernor_v1.Proposal memory propAfter = governor.getProposal(pid);
-        console2.log('Proposal executed after failed execute:', propAfter.executed);
+        console2.log('Proposal executed after defeated execute:', propAfter.executed);
 
-        // The ENTIRE transaction reverts, so proposal.executed should still be false
-        assertFalse(propAfter.executed, 'Should still be false - revert rolls back ALL changes');
-        console2.log('SAFE: Revert rolls back ALL state changes including proposal.executed');
+        // FIX: proposal.executed should be TRUE (state persists, no revert)
+        assertTrue(propAfter.executed, 'Should be true - state changes persist (no revert)');
+        console2.log('FIX: State changes persist (no revert) - proposal marked as executed');
     }
 
     /// @notice BUG?: What if NotWinner check passes but winner changes before execution completes?
@@ -344,11 +349,13 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         console2.log('Winner ID:', winner);
         assertEq(winner, 0, 'No winner when no proposals meet quorum');
 
-        // FIX: Test expects NotWinner error, but ProposalNotSucceeded error is thrown first
-        // because the execute function checks quorum/approval BEFORE checking if winner
-        // This is the correct implementation order (fail fast)
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // FIX [OCT-31-CRITICAL-1]: No longer reverts on quorum failure
+        // The execute function checks quorum/approval BEFORE checking if winner (fail fast)
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
         console2.log('Cannot execute when proposal does not meet quorum: SAFE');
     }
@@ -504,9 +511,12 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Execute attempt fails
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Execute attempt fails - FIX [OCT-31-CRITICAL-1]
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
         // Check count after failed execution
         uint256 countAfterFailed = governor.activeProposalCount(
@@ -558,10 +568,13 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         console2.log('\nTreasury drained to: 5000 tokens');
         console2.log('Proposal needs: 10000 tokens');
 
-        // Try to execute - should fail with InsufficientTreasuryBalance
-        vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
+        // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pid);
+        
+        // Verify marked as executed
+        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
-        console2.log('SAFE: Treasury balance validated at execution (M-6 fix)');
+        console2.log('SAFE: Treasury balance validated at execution, marked as defeated');
     }
 }
