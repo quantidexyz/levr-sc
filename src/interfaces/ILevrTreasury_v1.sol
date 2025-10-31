@@ -21,9 +21,6 @@ interface ILevrTreasury_v1 {
     /// @notice Revert if invalid amount is provided.
     error InvalidAmount();
 
-    /// @notice Revert if user attempts to unstake more than staked.
-    error InsufficientStake();
-
     // ============ Events ============
 
     /// @notice Emitted when the treasury is initialized by the factory.

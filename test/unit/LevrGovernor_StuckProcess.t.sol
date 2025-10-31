@@ -141,7 +141,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid1);
         governor.execute(pid2);
-        
+
         // Verify both marked as executed
         assertTrue(governor.getProposal(pid1).executed, 'P1 should be executed');
         assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
@@ -338,7 +338,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         // Execution fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
         // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pid);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
@@ -448,7 +448,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         // Execution fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
         // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pid);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 

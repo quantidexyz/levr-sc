@@ -225,18 +225,18 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         // Try to execute - should fail quorum - FIX [OCT-31-CRITICAL-1]
         // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
-        // FIX [OCT-31-CRITICAL-1]: activeProposalCount is decremented AND persists
-        // No longer reverts - state changes are kept
+        // FIX [OCT-31-SIMPLIFICATION]: Count no longer decrements during execution
+        // It only resets at cycle start
         uint256 countAfter = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
         console2.log('Count after defeated execute:', countAfter);
 
-        assertEq(countAfter, 0, 'Count should be decremented (no revert)');
+        assertEq(countAfter, 1, 'Count stays same (only resets at cycle start)');
         console2.log('SAFE: Revert rolls back the decrement');
     }
 
@@ -280,7 +280,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         // OLD: proposal.executed = true, count--, revert (rolled back)
         // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
@@ -571,7 +571,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
         // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pid);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 

@@ -41,13 +41,9 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
         return _decimals;
     }
 
-    /// @notice Override _update to block transfers
-    /// @dev Staked tokens represent a position in the staking contract
-    ///      Transferring them would require complex VP and reward recalculations
-    ///      Blocking transfers keeps the system simple and secure
+    /// @notice Block transfers (staked tokens are non-transferable positions)
+    /// @dev Allows mint/burn only - transfers would break VP and reward accounting
     function _update(address from, address to, uint256 value) internal override {
-        // Allow minting (from == address(0)) and burning (to == address(0))
-        // Block all other transfers between users
         require(from == address(0) || to == address(0), 'STAKED_TOKENS_NON_TRANSFERABLE');
         super._update(from, to, value);
     }

@@ -23,7 +23,6 @@ interface ILevrFeeSplitter_v1 {
     // ============ Errors ============
 
     error OnlyTokenAdmin();
-    error InvalidSplits();
     error InvalidTotalBps();
     error ZeroAddress();
     error ZeroBps();
@@ -31,11 +30,8 @@ interface ILevrFeeSplitter_v1 {
     error DuplicateReceiver();
     error TooManyReceivers();
     error SplitsNotConfigured();
-    error NoPendingFees();
     error NoReceivers();
     error ProjectNotRegistered();
-    error ClankerMetadataNotFound();
-    error LpLockerNotConfigured();
 
     // ============ Events ============
 
@@ -102,10 +98,9 @@ interface ILevrFeeSplitter_v1 {
 
     // ============ Distribution Functions ============
 
-    /// @notice Collect rewards from LP locker and distribute according to configured splits
+    /// @notice Distribute fees according to configured splits
     /// @dev Permissionless - anyone can trigger distribution
-    ///      Supports multiple tokens (ETH, WETH, underlying, etc.)
-    /// @param rewardToken The reward token to distribute (e.g., WETH, clankerToken itself)
+    /// @param rewardToken The reward token to distribute
     function distribute(address rewardToken) external;
 
     /// @notice Batch distribute multiple reward tokens

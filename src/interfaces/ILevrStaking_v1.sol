@@ -34,21 +34,6 @@ interface ILevrStaking_v1 {
         bool whitelisted;
     }
 
-    /// @notice DEPRECATED: User reward state (no longer needed with pool-based system)
-    /// @dev Kept for interface compatibility
-    struct UserRewardState {
-        int256 debt;
-        uint256 pending;
-    }
-
-    /// @notice Reward token accumulator info (deprecated - use RewardTokenState)
-    /// @param accPerShare Accumulated rewards per staked token, scaled by 1e18
-    /// @param exists Whether this reward token is registered
-    struct RewardInfo {
-        uint256 accPerShare;
-        bool exists;
-    }
-
     // ============ Errors ============
 
     error ZeroAddress();
@@ -86,18 +71,6 @@ interface ILevrStaking_v1 {
 
     /// @notice Emitted when a token is added to the whitelist
     event TokenWhitelisted(address indexed token);
-
-    /// @notice Emitted when external claims fail (e.g., ClankerFeeLocker)
-    event ClaimFailed(address indexed locker, address indexed token, string reason);
-
-    /// @notice DEPRECATED: Emitted when user debt increases (pool-based system doesn't use debt)
-    event DebtIncreased(address indexed user, address indexed token, int256 amount);
-
-    /// @notice DEPRECATED: Emitted when user debt is updated (pool-based system doesn't use debt)
-    event DebtUpdated(address indexed user, address indexed token, int256 newDebt);
-
-    /// @notice DEPRECATED: Emitted when reward shortfall occurs (pool-based system has perfect accounting)
-    event RewardShortfall(address indexed user, address indexed token, uint256 amount);
 
     // ============ State Variables ============
 
@@ -139,8 +112,8 @@ interface ILevrStaking_v1 {
     /// @notice Claim rewards for tokens to `to`.
     function claimRewards(address[] calldata tokens, address to) external;
 
-    /// @notice Accrue rewards for token.
-    /// @dev If ClankerFeeLocker is configured, automatically claims pending rewards first, then credits all available rewards.
+    /// @notice Accrue rewards for token
+    /// @dev Fee collection handled externally via SDK
     /// @param token Reward token to accrue
     function accrueRewards(address token) external;
 
@@ -181,6 +154,30 @@ interface ILevrStaking_v1 {
 
     /// @notice Escrow balance per token (non-reward reserves held for users).
     function escrowBalance(address token) external view returns (uint256);
+
+    // ============ Admin Functions ============
+
+    /// @notice Add a token to the whitelist (exempt from MAX_REWARD_TOKENS)
+    /// @dev Only token admin can call - useful for trusted tokens like WETH, USDC
+    /// @param token The token to whitelist
+    function whitelistToken(address token) external;
+
+    /// @notice Clean up finished reward tokens to free slots
+    /// @dev Permissionless cleanup when token has no rewards remaining
+    ///      Cannot remove underlying or whitelisted tokens
+    /// @param token The token to clean up
+    function cleanupFinishedRewardToken(address token) external;
+
+    // ============ View Functions (Whitelist) ============
+
+    /// @notice Get all whitelisted tokens
+    /// @return Array of whitelisted token addresses
+    function getWhitelistedTokens() external view returns (address[] memory);
+
+    /// @notice Check if a token is whitelisted
+    /// @param token The token address to check
+    /// @return True if whitelisted, false otherwise
+    function isTokenWhitelisted(address token) external view returns (bool);
 
     // ============ Governance Functions ============
 

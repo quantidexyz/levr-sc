@@ -123,11 +123,11 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
         assertTrue(prop.executed, 'Should be marked as executed');
 
-        // Verify count decremented
+        // FIX [OCT-31-SIMPLIFICATION]: Count no longer decrements during execution
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
-            0,
-            'Count should be decremented'
+            1,
+            'Count stays same (only resets at cycle start)'
         );
 
         // Verify cannot retry (already executed)
@@ -221,14 +221,14 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         // FIX: Execute should mark as defeated (not enough funds)
         governor.execute(pid);
 
-        // Verify count decremented
+        // FIX [OCT-31-SIMPLIFICATION]: Count no longer decrements during execution
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
-            0,
-            'Count should be decremented'
+            1,
+            'Count stays same (only resets at cycle start)'
         );
 
-        console2.log('[PASS] Active proposal count correctly decremented');
+        console2.log('[PASS] Active proposal count management simplified');
     }
 
     // ============================================================================
@@ -258,18 +258,18 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         // Use different proposal types to avoid AlreadyProposedInCycle
         uint256[] memory pids = new uint256[](4); // Just test with 4 proposals
-        
+
         // Boost proposals from Alice and Bob
         vm.prank(alice);
         pids[0] = governor.proposeBoost(address(underlying), 1000 ether);
-        
+
         vm.prank(bob);
         pids[1] = governor.proposeBoost(address(underlying), 2000 ether);
-        
+
         // Transfer proposals from Alice and Bob
         vm.prank(alice);
         pids[2] = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'test1');
-        
+
         vm.prank(bob);
         pids[3] = governor.proposeTransfer(address(underlying), charlie, 600 ether, 'test2');
 
@@ -283,16 +283,16 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
             governor.execute(pids[i]);
         }
 
-        // Verify all counts decremented to 0
+        // FIX [OCT-31-SIMPLIFICATION]: Counts don't decrement, they reset at cycle start
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
-            0,
-            'Boost count should be 0'
+            2,
+            'Boost count stays at 2 (only resets at cycle start)'
         );
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.TransferToAddress),
-            0,
-            'Transfer count should be 0'
+            2,
+            'Transfer count stays at 2 (only resets at cycle start)'
         );
 
         console2.log('All failed proposals executed (marked as defeated)');
@@ -375,16 +375,16 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
         assertTrue(governor.getProposal(pid3).executed, 'P3 should be executed');
 
-        // Verify counts
+        // FIX [OCT-31-SIMPLIFICATION]: Counts don't decrement during execution
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
-            0,
-            'Boost count should be 0'
+            2,
+            'Boost count stays at 2 (resets at cycle start)'
         );
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.TransferToAddress),
-            0,
-            'Transfer count should be 0'
+            1,
+            'Transfer count stays at 1 (resets at cycle start)'
         );
 
         console2.log('[PASS] All defeat reasons handled correctly');
@@ -522,7 +522,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         // Vote: pid1 NO (both), pid2 NO votes, pid3 YES (both)
         vm.prank(alice);
         governor.vote(pid1, false); // Fail approval
-        
+
         vm.prank(bob);
         governor.vote(pid1, false); // Fail approval
 
@@ -530,7 +530,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         vm.prank(alice);
         governor.vote(pid3, true); // Success!
-        
+
         vm.prank(bob);
         governor.vote(pid3, true); // Success!
 
@@ -555,4 +555,3 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         console2.log('[PASS] Normal execution flow works after defeats');
     }
 }
-

@@ -57,6 +57,11 @@ interface ILevrForwarder_v1 {
     /// @notice Caller is not the deployer
     error OnlyDeployer();
 
+    /// @notice Target contract does not trust this forwarder
+    /// @param target The target contract address
+    /// @param forwarder This forwarder address
+    error ERC2771UntrustfulTarget(address target, address forwarder);
+
     // ============ Functions ============
 
     /// @notice Execute multiple calls in a single transaction (ERC2771 mode)

@@ -76,7 +76,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     /// @inheritdoc ILevrGovernor_v1
     function proposeBoost(address token, uint256 amount) external returns (uint256 proposalId) {
-        if (token == address(0)) revert InvalidRecipient(); // Reusing error for zero address
+        if (token == address(0)) revert InvalidRecipient();
         return _propose(ProposalType.BoostStakingPool, token, amount, address(0), '');
     }
 
@@ -107,24 +107,18 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert AlreadyVoted();
         }
 
-        // Get user's current voting power from staking contract
-        // VP = balance × time staked (naturally protects against last-minute gaming)
+        // Get voting power (time-weighted to prevent flash loan attacks)
         uint256 votes = ILevrStaking_v1(staking).getVotingPower(voter);
-
-        // Prevent 0 VP votes
         if (votes == 0) revert InsufficientVotingPower();
 
-        // Get user's balance for quorum tracking
         uint256 voterBalance = IERC20(stakedToken).balanceOf(voter);
 
-        // Record vote (VP for yes/no tallying)
+        // Two-tier system: VP for approval (merit), balance for quorum (participation)
         if (support) {
             proposal.yesVotes += votes;
         } else {
             proposal.noVotes += votes;
         }
-
-        // Track balance participation for quorum
         proposal.totalBalanceVoted += voterBalance;
 
         _voteReceipts[proposalId][voter] = VoteReceipt({
@@ -138,12 +132,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     /// @inheritdoc ILevrGovernor_v1
     function startNewCycle() external {
-        // Allow anyone to start a new cycle if current one has ended
-        // This helps recover from failed cycles where no proposals were executed
+        // Permissionless cycle recovery if current cycle has ended
         if (_currentCycleId == 0) {
             _startNewCycle();
         } else if (_needsNewCycle()) {
-            // Check for orphan proposals before advancing cycle
             _checkNoExecutableProposals();
             _startNewCycle();
         } else {
@@ -157,7 +149,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         // Check voting ended
         if (block.timestamp <= proposal.votingEndsAt) {
-            revert VotingNotActive();
+            revert VotingNotEnded();
         }
 
         // Check not already executed
@@ -165,44 +157,25 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert AlreadyExecuted();
         }
 
-        // Check quorum
+        // Defeat if quorum not met (state persists to prevent retry attacks)
         if (!_meetsQuorum(proposalId)) {
-            proposal.executed = true; // Mark as processed
-            // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
-            // (can be 0 if new cycle already started and reset the count)
-            if (_activeProposalCount[proposal.proposalType] > 0) {
-                _activeProposalCount[proposal.proposalType]--;
-            }
+            proposal.executed = true;
             emit ProposalDefeated(proposalId);
-            // FIX [OCT-31-CRITICAL-1]: Return instead of revert to persist state changes
-            // This prevents retry attacks and ensures proper event emission
             return;
         }
 
-        // Check approval
+        // Defeat if approval not met
         if (!_meetsApproval(proposalId)) {
-            proposal.executed = true; // Mark as processed
-            // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
-            if (_activeProposalCount[proposal.proposalType] > 0) {
-                _activeProposalCount[proposal.proposalType]--;
-            }
+            proposal.executed = true;
             emit ProposalDefeated(proposalId);
-            // FIX [OCT-31-CRITICAL-1]: Return instead of revert to persist state changes
-            // This prevents retry attacks and ensures proper event emission
             return;
         }
 
-        // TOKEN AGNOSTIC: Check treasury has sufficient balance for proposal token and amount
+        // Defeat if treasury lacks sufficient balance
         uint256 treasuryBalance = IERC20(proposal.token).balanceOf(treasury);
         if (treasuryBalance < proposal.amount) {
-            proposal.executed = true; // Mark as processed to avoid retries
-            // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
-            if (_activeProposalCount[proposal.proposalType] > 0) {
-                _activeProposalCount[proposal.proposalType]--;
-            }
+            proposal.executed = true;
             emit ProposalDefeated(proposalId);
-            // FIX [OCT-31-CRITICAL-1]: Return instead of revert to persist state changes
-            // This prevents retry attacks and ensures proper event emission
             return;
         }
 
@@ -219,16 +192,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         }
         cycle.executed = true;
 
-        // FIX [TOKEN-AGNOSTIC-DOS]: Mark executed BEFORE attempting execution
-        // to prevent reverting tokens (pausable, blocklist, fee-on-transfer) from blocking cycle
+        // Mark executed before external calls (prevents reverting tokens from blocking cycle)
         proposal.executed = true;
-        // FIX [NEW-C-4]: Only decrement if count > 0 to prevent underflow
-        if (_activeProposalCount[proposal.proposalType] > 0) {
-            _activeProposalCount[proposal.proposalType]--;
-        }
 
-        // TOKEN AGNOSTIC: Execute with proposal.token
-        // Wrapped in try-catch to handle reverting tokens without blocking governance
+        // Execute proposal (try-catch handles reverting tokens gracefully)
         try
             this._executeProposal(
                 proposalId,
@@ -249,8 +216,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         _startNewCycle();
     }
 
-    /// @notice Internal execution helper callable via try-catch
-    /// @dev External but only callable by this contract (checked in try-catch pattern)
+    /// @notice Internal execution helper (external visibility for try-catch pattern)
+    /// @dev Only callable by this contract to prevent unauthorized treasury access
     function _executeProposal(
         uint256, // proposalId - unused but kept for future extensibility
         ProposalType proposalType,
@@ -332,13 +299,12 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         string memory description
     ) internal returns (uint256 proposalId) {
         if (amount == 0) revert InvalidAmount();
-        if (token == address(0)) revert InvalidRecipient(); // Token must be valid
+        if (token == address(0)) revert InvalidRecipient();
 
         address proposer = _msgSender();
 
-        // Auto-start new cycle if none exists or current cycle has ended
+        // Auto-start new cycle if needed (prevents orphaning executable proposals)
         if (_currentCycleId == 0 || _needsNewCycle()) {
-            // Check for orphan proposals before advancing cycle
             _checkNoExecutableProposals();
             _startNewCycle();
         }
@@ -369,13 +335,11 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
-        // Validate treasury balance and proposal amount
+        // Validate treasury and proposal limits
         uint256 treasuryBalance;
         {
             treasuryBalance = IERC20(token).balanceOf(treasury);
-            if (treasuryBalance < amount) {
-                revert InsufficientTreasuryBalance();
-            }
+            if (treasuryBalance < amount) revert InsufficientTreasuryBalance();
 
             uint16 maxProposalBps = ILevrFactory_v1(factory).maxProposalAmountBps(underlying);
             if (maxProposalBps > 0 && amount > (treasuryBalance * maxProposalBps) / 10_000) {
@@ -383,20 +347,18 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
-        // Check max active proposals per type
+        // Rate limiting: max proposals per type, one per user per type per cycle
         if (
             _activeProposalCount[proposalType] >=
             ILevrFactory_v1(factory).maxActiveProposals(underlying)
         ) {
             revert MaxProposalsReached();
         }
-
-        // Check user hasn't already proposed this type in this cycle
         if (_hasProposedInCycle[cycleId][proposalType][proposer]) {
             revert AlreadyProposedInCycle();
         }
 
-        // Create proposal with snapshots
+        // Create proposal with config snapshots (prevents manipulation)
         proposalId = ++_proposalCount;
 
         {
@@ -444,15 +406,12 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     function _state(uint256 proposalId) internal view returns (ProposalState) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
 
-        if (proposal.id == 0) revert InvalidProposalType(); // Proposal doesn't exist
-
+        if (proposal.id == 0) revert InvalidProposalType();
         if (proposal.executed) return ProposalState.Executed;
-
         if (block.timestamp < proposal.votingStartsAt) return ProposalState.Pending;
-
         if (block.timestamp <= proposal.votingEndsAt) return ProposalState.Active;
 
-        // After voting ends
+        // After voting: check quorum and approval
         if (!_meetsQuorum(proposalId) || !_meetsApproval(proposalId)) {
             return ProposalState.Defeated;
         }
@@ -463,39 +422,23 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     function _meetsQuorum(uint256 proposalId) internal view returns (bool) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
 
-        // FIX [NEW-C-1, NEW-C-2]: Use snapshot instead of current quorum threshold
-        // Prevents manipulation via config changes after proposal creation
+        // Use snapshot values (prevents manipulation after proposal creation)
         uint16 quorumBps = proposal.quorumBpsSnapshot;
-
-        // If quorum is 0, no participation requirement
         if (quorumBps == 0) return true;
 
-        // FIX [NEW-C-1, NEW-C-2]: Use snapshot instead of current total supply
-        // Prevents manipulation via staking/unstaking after voting ends
-        // Quorum uses staked token balance (not VP) to measure participation rate.
-        // This two-tier system ensures:
-        // 1. Quorum: Democratic participation (all stakers equal)
-        // 2. Approval: Time-weighted influence (VP rewards long-term commitment)
         uint256 snapshotSupply = proposal.totalSupplySnapshot;
         if (snapshotSupply == 0) return false;
 
-        // ADAPTIVE QUORUM: Use lower of snapshot vs current supply
-        // - If supply increased → use snapshot (anti-dilution protection)
-        // - If supply decreased → use current (anti-deadlock protection)
+        // Adaptive quorum: min(snapshot, current) prevents dilution attacks & deadlock
         uint256 currentSupply = IERC20(stakedToken).totalSupply();
         uint256 effectiveSupply = currentSupply < snapshotSupply ? currentSupply : snapshotSupply;
 
-        // Calculate percentage-based quorum from effective supply
         uint256 percentageQuorum = (effectiveSupply * quorumBps) / 10_000;
 
-        // MINIMUM ABSOLUTE QUORUM: Prevent early governance capture
-        // Use SNAPSHOT supply for minimum (not current) to avoid breaking anti-dilution
-        // When supply increases: snapshot is used for both percentage and minimum
-        // When supply decreases: current is used for percentage, snapshot for minimum
+        // Enforce minimum absolute quorum (prevents early governance capture)
         uint16 minimumQuorumBps = ILevrFactory_v1(factory).minimumQuorumBps(underlying);
         uint256 minimumAbsoluteQuorum = (snapshotSupply * minimumQuorumBps) / 10_000;
 
-        // Use whichever is higher: percentage quorum or minimum absolute quorum
         uint256 requiredQuorum = percentageQuorum > minimumAbsoluteQuorum
             ? percentageQuorum
             : minimumAbsoluteQuorum;
@@ -506,18 +449,14 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     function _meetsApproval(uint256 proposalId) internal view returns (bool) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
 
-        // FIX [NEW-C-3]: Use snapshot instead of current approval threshold
-        // Prevents manipulation via config changes after proposal creation
+        // Use snapshot (prevents config manipulation)
         uint16 approvalBps = proposal.approvalBpsSnapshot;
-
-        // If approval is 0, no approval requirement
         if (approvalBps == 0) return true;
 
         uint256 totalVotes = proposal.yesVotes + proposal.noVotes;
         if (totalVotes == 0) return false;
 
         uint256 requiredApproval = (totalVotes * approvalBps) / 10_000;
-
         return proposal.yesVotes >= requiredApproval;
     }
 
@@ -529,15 +468,11 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             uint256 pid = proposals[i];
             ILevrGovernor_v1.Proposal storage proposal = _proposals[pid];
 
-            // Check if proposal meets quorum and approval
             if (_meetsQuorum(pid) && _meetsApproval(pid)) {
-                // FIX [H-2]: Use approval ratio (YES / TOTAL) instead of absolute YES votes
-                // This prevents strategic NO voting from manipulating the winner
                 uint256 totalVotes = proposal.yesVotes + proposal.noVotes;
-                if (totalVotes == 0) continue; // Skip if no votes (shouldn't happen if quorum met)
+                if (totalVotes == 0) continue;
 
-                // Calculate approval ratio: (yesVotes * 10000) / totalVotes
-                // Using 10000 multiplier for precision
+                // Use approval ratio (not absolute votes) to prevent strategic NO voting
                 uint256 approvalRatio = (proposal.yesVotes * 10000) / totalVotes;
 
                 if (approvalRatio > bestApprovalRatio) {
@@ -547,7 +482,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
-        return winnerId; // Returns 0 if no winner
+        return winnerId; // 0 if no winner
     }
 
     /// @dev Check if a new cycle needs to be started
@@ -560,9 +495,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         return block.timestamp > cycle.votingWindowEnd;
     }
 
-    /// @dev Internal function to start a new governance cycle
+    /// @dev Start a new governance cycle
     function _startNewCycle() internal {
-        // Get config from factory
         uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds(underlying);
         uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds(underlying);
 
@@ -571,9 +505,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         uint256 proposalEnd = start + proposalWindow;
         uint256 voteEnd = proposalEnd + votingWindow;
 
-        // FIX [NEW-C-4]: Reset active proposal counts when starting new cycle
-        // Proposals are scoped to cycles, so counts should reset each cycle
-        // This prevents permanent gridlock from defeated proposals consuming slots
+        // Reset proposal counts (proposals are cycle-scoped)
         _activeProposalCount[ProposalType.BoostStakingPool] = 0;
         _activeProposalCount[ProposalType.TransferToAddress] = 0;
 
@@ -587,19 +519,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         emit CycleStarted(cycleId, start, proposalEnd, voteEnd);
     }
 
-    /// @dev Check if there are any executable (Succeeded) proposals in the current cycle
-    /// @notice Reverts if found to prevent orphaning proposals when advancing cycles
+    /// @dev Prevent cycle advancement if executable proposals remain (prevents orphaning)
     function _checkNoExecutableProposals() internal view {
         uint256[] memory proposals = _cycleProposals[_currentCycleId];
         for (uint256 i = 0; i < proposals.length; i++) {
             uint256 pid = proposals[i];
             ILevrGovernor_v1.Proposal storage proposal = _proposals[pid];
 
-            // Skip already executed proposals
             if (proposal.executed) continue;
 
-            // If proposal is in Succeeded state, it can be executed
-            // Prevent cycle advancement to avoid orphaning it
             if (_state(pid) == ProposalState.Succeeded) {
                 revert ExecutableProposalsRemaining();
             }

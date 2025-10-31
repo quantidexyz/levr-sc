@@ -29,7 +29,7 @@ interface ILevrGovernor_v1 {
         uint256 id; // Proposal ID
         ProposalType proposalType; // Type of proposal
         address proposer; // Address that created the proposal
-        address token; // TOKEN AGNOSTIC: ERC20 token address (underlying, WETH, or any ERC20)
+        address token; // ERC20 token address (underlying, WETH, or any ERC20)
         uint256 amount; // Amount of tokens to transfer
         address recipient; // Recipient address (for TransferToAddress type)
         string description; // Proposal description (for TransferToAddress type)
@@ -41,12 +41,12 @@ interface ILevrGovernor_v1 {
         uint256 totalBalanceVoted; // Total sToken balance that voted (for quorum)
         bool executed; // Whether proposal has been executed
         uint256 cycleId; // Governance cycle ID
-        ProposalState state; // Current state of the proposal (computed)
-        bool meetsQuorum; // Whether proposal meets quorum threshold (computed)
-        bool meetsApproval; // Whether proposal meets approval threshold (computed)
-        uint256 totalSupplySnapshot; // FIX [NEW-C-1, NEW-C-2]: Snapshot of sToken supply at proposal creation
-        uint16 quorumBpsSnapshot; // FIX [NEW-C-3]: Snapshot of quorum threshold at proposal creation
-        uint16 approvalBpsSnapshot; // FIX [NEW-C-3]: Snapshot of approval threshold at proposal creation
+        ProposalState state; // Current state (computed)
+        bool meetsQuorum; // Whether quorum threshold met (computed)
+        bool meetsApproval; // Whether approval threshold met (computed)
+        uint256 totalSupplySnapshot; // Snapshot of sToken supply at proposal creation
+        uint16 quorumBpsSnapshot; // Snapshot of quorum threshold at proposal creation
+        uint16 approvalBpsSnapshot; // Snapshot of approval threshold at proposal creation
     }
 
     /// @notice Vote receipt for a user on a proposal
@@ -73,20 +73,17 @@ interface ILevrGovernor_v1 {
     /// @notice User has already voted on this proposal
     error AlreadyVoted();
 
-    /// @notice Voting is not active for this proposal
+    /// @notice Voting is not active for this proposal (hasn't started or already ended)
     error VotingNotActive();
 
-    /// @notice Proposal has not succeeded
-    error ProposalNotSucceeded();
+    /// @notice Voting has not ended yet (cannot execute while voting is active)
+    error VotingNotEnded();
 
     /// @notice Proposal is not the winner for this cycle
     error NotWinner();
 
     /// @notice Proposal has already been executed
     error AlreadyExecuted();
-
-    /// @notice Caller is not authorized
-    error NotAuthorized();
 
     /// @notice Invalid proposal type
     error InvalidProposalType();
@@ -96,9 +93,6 @@ interface ILevrGovernor_v1 {
 
     /// @notice Invalid recipient address
     error InvalidRecipient();
-
-    /// @notice No active governance cycle
-    error NoActiveCycle();
 
     /// @notice Insufficient voting power to vote
     error InsufficientVotingPower();

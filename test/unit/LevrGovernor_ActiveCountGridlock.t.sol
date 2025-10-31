@@ -150,26 +150,25 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
         console2.log('Active count after defeated execute:', countAfterFailedExecute);
-        
-        // FIX: Count should be 1 (decremented from 2)
-        assertEq(countAfterFailedExecute, 1, 'Count should be 1 after defeated');
-        console2.log('Count = 1 (decremented correctly)');
-        
+
+        // FIX [OCT-31-SIMPLIFICATION]: Count no longer decrements during execution
+        assertEq(countAfterFailedExecute, 2, 'Count stays at 2 (only resets at cycle start)');
+        console2.log('Count = 2 (stays same, will reset at cycle start)');
+
         // Verify P1 marked as executed
         assertTrue(governor.getProposal(pid1).executed, 'P1 should be executed');
 
         // Try to execute proposal 2 - should also fail
-        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid2);
 
         uint256 countAfterBothFailed = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
         console2.log('Active count after both failed:', countAfterBothFailed);
-        
-        // FIX: Count should be 0 (decremented from 1)
-        assertEq(countAfterBothFailed, 0, 'Count should be 0 after both defeated');
-        
+
+        // FIX [OCT-31-SIMPLIFICATION]: Count still at 2 (will reset at cycle start)
+        assertEq(countAfterBothFailed, 2, 'Count stays at 2');
+
         // Verify P2 marked as executed
         assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
 
@@ -268,7 +267,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         // Try to execute proposal 2 - should fail quorum - FIX [OCT-31-CRITICAL-1]
         // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid2);
-        
+
         // Verify P2 marked as executed
         assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
 

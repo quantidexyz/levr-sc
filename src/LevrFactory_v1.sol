@@ -87,18 +87,16 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             revert UnauthorizedCaller();
         }
 
-        // FIX [C-1]: Validate token is from a trusted Clanker factory
-        // Require at least one trusted factory to be configured
+        // Validate token from trusted Clanker factory
         require(_trustedClankerFactories.length > 0, 'NO_TRUSTED_FACTORIES');
 
         bool validFactory = false;
         bool hasDeployedFactory = false;
 
-        // Check each trusted factory
         for (uint256 i = 0; i < _trustedClankerFactories.length; i++) {
             address factory = _trustedClankerFactories[i];
 
-            // Skip if factory has no code (for testing or if not deployed yet)
+            // Skip if factory not deployed (testing/future support)
             uint256 size;
             assembly {
                 size := extcodesize(factory)
@@ -107,22 +105,18 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
             hasDeployedFactory = true;
 
-            // Call factory to verify this token was deployed by it
             try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (
                 IClanker.DeploymentInfo memory info
             ) {
-                // If call succeeds and token matches, this is valid
                 if (info.token == clankerToken) {
                     validFactory = true;
                     break;
                 }
             } catch {
-                // Factory doesn't know this token, try next factory
                 continue;
             }
         }
 
-        // Only require validation if we actually have deployed factories
         if (hasDeployedFactory) {
             require(validFactory, 'TOKEN_NOT_FROM_TRUSTED_FACTORY');
         }
@@ -530,11 +524,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         }
     }
 
-    /// @dev Validate config parameters (shared by factory and project configs)
-    /// @param cfg Configuration to validate
-    /// @param validateProtocolFee Whether to validate protocol fee (only for factory config)
+    /// @dev Validate config parameters
     function _validateConfig(FactoryConfig memory cfg, bool validateProtocolFee) private pure {
-        // FIX [CONFIG-GRIDLOCK]: Validate BPS values are <= 100% (10000 basis points)
+        // BPS values must be ≤ 100% (10000 basis points)
         require(cfg.quorumBps <= 10000, 'INVALID_QUORUM_BPS');
         require(cfg.approvalBps <= 10000, 'INVALID_APPROVAL_BPS');
         require(cfg.minSTokenBpsToSubmit <= 10000, 'INVALID_MIN_STAKE_BPS');
@@ -545,13 +537,11 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             require(cfg.protocolFeeBps <= 10000, 'INVALID_PROTOCOL_FEE_BPS');
         }
 
-        // FIX [CONFIG-GRIDLOCK]: Prevent zero values that freeze functionality
+        // Prevent zero values that disable functionality
         require(cfg.maxActiveProposals > 0, 'MAX_ACTIVE_PROPOSALS_ZERO');
         require(cfg.maxRewardTokens > 0, 'MAX_REWARD_TOKENS_ZERO');
         require(cfg.proposalWindowSeconds > 0, 'PROPOSAL_WINDOW_ZERO');
         require(cfg.votingWindowSeconds > 0, 'VOTING_WINDOW_ZERO');
-
-        // Stream window validation
         require(cfg.streamWindowSeconds >= 1 days, 'STREAM_WINDOW_TOO_SHORT');
     }
 
