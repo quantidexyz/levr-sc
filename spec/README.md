@@ -1,26 +1,27 @@
 # Levr V1 Protocol Documentation
 
 **Last Updated:** October 31, 2025  
-**Protocol Status:** ⚠️ **18 items to mainnet** (2 weeks)  
-**Test Coverage:** 487/487 tests passing (100%) ✅  
-**Latest Release:** v1.4.0 - Verified Projects Feature
+**Protocol Status:** 🔴 **AUDIT 4 - 17 NEW FINDINGS** (4-5 weeks to fix)  
+**Test Coverage:** 444/444 tests passing (100%) ✅  
+**Latest Release:** v1.3.0 - Critical Security Fixes
 
 ---
 
 ## 🚨 START HERE
 
-### ⭐ Current Audit Status
+### ⭐ Current Audit Status - AUDIT 4
 
 **[AUDIT_STATUS.md](./AUDIT_STATUS.md)** - Security Dashboard
 
-**Quick Facts:**
+**⚠️ CRITICAL UPDATE - FRESH PERSPECTIVE AUDIT:**
 
-- ✅ 34/52 total audit findings fixed (65%)
-- ⚠️ 18 items remaining
-- 🎯 8 pre-mainnet items (2 weeks)
-- 🟢 10 post-launch items (4 weeks)
+- 🔴 **17 NEW findings identified** (4 Critical, 4 High, 4 Medium, 5 Low)
+- ❌ **0/17 fixed** (0% complete)
+- ⚠️ **Mainnet BLOCKED** until critical issues resolved
+- 🎯 **4-5 weeks estimated** to address all findings
 
-**For Developers:** Read **[EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)**
+**For Developers:** Read **[EXTERNAL_AUDIT_4_ACTIONS.md](./EXTERNAL_AUDIT_4_ACTIONS.md)**  
+**Source Audit:** [SECURITY_AUDIT_OCT_31_2025.md](./SECURITY_AUDIT_OCT_31_2025.md)
 
 ---
 
@@ -28,14 +29,16 @@
 
 ### Security & Audits
 
-| Document                                                           | Purpose                        | Priority           |
-| ------------------------------------------------------------------ | ------------------------------ | ------------------ |
-| **[AUDIT_STATUS.md](./AUDIT_STATUS.md)**                           | Current audit dashboard        | ⭐ **Read First**  |
-| **[EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)**   | Active action plan (18 items)  | 🔴 **Active Work** |
-| **[EXTERNAL_AUDIT_2_COMPLETE.md](./EXTERNAL_AUDIT_2_COMPLETE.md)** | Previous fixes (13/13)         | ✅ Reference       |
-| **[AUDIT.md](./AUDIT.md)**                                         | Complete security log (master) | 📖 Deep Dive       |
-| **[HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)**                   | Past vulnerabilities           | 📖 Learning        |
-| **[COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)**                 | vs Compound/MakerDAO/Optimism  | 📖 Benchmarking    |
+| Document                                                                | Purpose                        | Priority                    |
+| ----------------------------------------------------------------------- | ------------------------------ | --------------------------- |
+| **[AUDIT_STATUS.md](./AUDIT_STATUS.md)**                                | Current audit dashboard        | ⭐ **Read First**           |
+| **[EXTERNAL_AUDIT_4_ACTIONS.md](./EXTERNAL_AUDIT_4_ACTIONS.md)** 🆕     | Latest action plan (17 items)  | 🔴 **URGENT - Active Work** |
+| **[SECURITY_AUDIT_OCT_31_2025.md](./SECURITY_AUDIT_OCT_31_2025.md)** 🆕 | Source audit report            | 📖 **Fresh Perspective**    |
+| **[EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)**        | Previous work (Phase 1 done)   | ✅ Reference                |
+| **[EXTERNAL_AUDIT_2_COMPLETE.md](./EXTERNAL_AUDIT_2_COMPLETE.md)**      | Previous fixes (13/13)         | ✅ Reference                |
+| **[AUDIT.md](./AUDIT.md)**                                              | Complete security log (master) | 📖 Deep Dive                |
+| **[HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)**                        | Past vulnerabilities           | 📖 Learning                 |
+| **[COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)**                      | vs Compound/MakerDAO/Optimism  | 📖 Benchmarking             |
 
 ### Protocol Specifications
 
@@ -79,20 +82,21 @@ See [archive/README.md](./archive/README.md) for index.
 
 ### "I need to..."
 
-| Task                          | Document                                                       | Section           |
-| ----------------------------- | -------------------------------------------------------------- | ----------------- |
-| **See current audit status**  | [AUDIT_STATUS.md](./AUDIT_STATUS.md)                           | Top summary       |
-| **Implement audit fixes**     | [EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)   | Phase 1           |
-| **Understand governance**     | [GOV.md](./GOV.md)                                             | Full doc          |
-| **Verify/customize projects** | [VERIFIED_PROJECTS_FEATURE.md](./VERIFIED_PROJECTS_FEATURE.md) | Admin guide       |
-| **Check security**            | [AUDIT.md](./AUDIT.md)                                         | Executive summary |
-| **See what was fixed**        | [HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)                   | By category       |
-| **Compare to competitors**    | [COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)                 | Comparison tables |
-| **Test the protocol**         | [TESTING.md](./TESTING.md)                                     | Test commands     |
-| **Understand fee flow**       | [FEE_SPLITTER.md](./FEE_SPLITTER.md)                           | Architecture      |
-| **See user journeys**         | [USER_FLOWS.md](./USER_FLOWS.md)                               | By user type      |
-| **Check version history**     | [CHANGELOG.md](./CHANGELOG.md)                                 | Chronological     |
-| **See roadmap**               | [FUTURE_ENHANCEMENTS.md](./FUTURE_ENHANCEMENTS.md)             | By priority       |
+| Task                          | Document                                                         | Section           |
+| ----------------------------- | ---------------------------------------------------------------- | ----------------- |
+| **See current audit status**  | [AUDIT_STATUS.md](./AUDIT_STATUS.md)                             | Top summary       |
+| **Implement audit fixes** 🆕  | [EXTERNAL_AUDIT_4_ACTIONS.md](./EXTERNAL_AUDIT_4_ACTIONS.md)     | All 17 items      |
+| **Read source audit** 🆕      | [SECURITY_AUDIT_OCT_31_2025.md](./SECURITY_AUDIT_OCT_31_2025.md) | Full report       |
+| **Understand governance**     | [GOV.md](./GOV.md)                                               | Full doc          |
+| **Verify/customize projects** | [VERIFIED_PROJECTS_FEATURE.md](./VERIFIED_PROJECTS_FEATURE.md)   | Admin guide       |
+| **Check security**            | [AUDIT.md](./AUDIT.md)                                           | Executive summary |
+| **See what was fixed**        | [HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)                     | By category       |
+| **Compare to competitors**    | [COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)                   | Comparison tables |
+| **Test the protocol**         | [TESTING.md](./TESTING.md)                                       | Test commands     |
+| **Understand fee flow**       | [FEE_SPLITTER.md](./FEE_SPLITTER.md)                             | Architecture      |
+| **See user journeys**         | [USER_FLOWS.md](./USER_FLOWS.md)                                 | By user type      |
+| **Check version history**     | [CHANGELOG.md](./CHANGELOG.md)                                   | Chronological     |
+| **See roadmap**               | [FUTURE_ENHANCEMENTS.md](./FUTURE_ENHANCEMENTS.md)               | By priority       |
 
 ---
 
@@ -100,14 +104,16 @@ See [archive/README.md](./archive/README.md) for index.
 
 ### Security Audits
 
-| Audit          | Date     | Findings | Fixed  | Status       |
-| -------------- | -------- | -------- | ------ | ------------ |
-| **External 0** | Oct 2025 | 8        | 8      | ✅ Complete  |
-| **External 2** | Oct 2025 | 13       | 13     | ✅ Complete  |
-| **External 3** | Oct 2025 | 31\*     | 13     | ⚠️ 18 remain |
-| **TOTAL**      |          | **52**   | **34** | **65% done** |
+| Audit               | Date     | Findings | Fixed  | Status              |
+| ------------------- | -------- | -------- | ------ | ------------------- |
+| **External 0**      | Oct 2025 | 8        | 8      | ✅ Complete         |
+| **External 2**      | Oct 2025 | 13       | 13     | ✅ Complete         |
+| **External 3**      | Oct 2025 | 31       | 17     | 🚀 Phase 1 Complete |
+| **Oct 31 Critical** | Oct 2025 | 1        | 1      | ✅ Fixed            |
+| **External 4** 🆕   | Oct 2025 | **17**   | **0**  | 🔴 **Not Started**  |
+| **TOTAL**           |          | **70**   | **39** | **56% complete**    |
 
-\*After validation: 13 already fixed, 18 actual remaining work
+**Status:** Audit 4 identified 17 new findings requiring 4-5 weeks to address
 
 ### Test Coverage
 
@@ -118,11 +124,15 @@ Test Files:      40 files
 Coverage:        High (all critical paths tested)
 ```
 
-### Current Work
+### Current Work - AUDIT 4
 
-**Phase 1 (Week 1):** 3 Critical issues (13 hours)  
-**Phase 2 (Week 2):** 5 High issues (15 hours)  
-**Total to Mainnet:** 8 items, 28 hours, 2 weeks
+**Week 1 (Critical Blockers):** CRITICAL-1, 3, 4 (fix immediately)  
+**Week 2 (Architecture):** CRITICAL-2 + HIGH-4 (design decisions needed)  
+**Week 3 (High Priority):** HIGH-1, 2, 3 (security hardening)  
+**Week 4 (Medium Priority):** MEDIUM-1, 2, 3, 4 (operational fixes)  
+**Week 5 (Polish):** LOW/INFO items + comprehensive testing
+
+**Total to Mainnet:** 17 items, 4-5 weeks estimated
 
 ---
 
@@ -194,22 +204,38 @@ Coverage:        High (all critical paths tested)
 - Cycle management (auto-progress)
 - Vesting restart (prevents first staker MEV)
 
-❌ **Needed Before Mainnet:**
+❌ **Needed Before Mainnet (AUDIT 4 - 17 items):**
 
-- Clanker factory validation (C-1)
-- Fee-on-transfer support (C-2)
-- VP cap at 365 days (C-4)
-- Quorum 70% → 80% (H-1)
-- Winner by approval ratio (H-2)
-- Multisig ownership (H-4)
-- Deployment fee (H-5)
-- Emergency pause (H-6)
+**Critical (Week 1-2):**
+
+- CRITICAL-1: Fix import case sensitivity (5 min)
+- CRITICAL-2: Redesign voting power mechanism (2-3 days)
+- CRITICAL-3: Implement per-token stream windows (1-2 days)
+- CRITICAL-4: Fix adaptive quorum manipulation (1 day)
+
+**High (Week 2-3):**
+
+- HIGH-1: Fix reward precision loss (4h)
+- HIGH-2: Handle unvested rewards on exit (6h)
+- HIGH-3: Implement factory owner timelock (2 days)
+- HIGH-4: Add slippage protection (4h)
+
+**Medium (Week 4):**
+
+- MEDIUM-1 through MEDIUM-4 (operational fixes)
+
+**Low/Info (Week 5):**
+
+- Documentation, gas optimization, events
 
 ### Timeline
 
-- **Now → Week 1:** Fix Critical (C-1, C-2, C-4)
-- **Week 2:** Fix High (H-1, H-2, H-4, H-5, H-6)
-- **Week 3:** ✅ **MAINNET READY**
+- **Week 1:** Fix CRITICAL-1, 3, 4 (blockers)
+- **Week 2:** Fix CRITICAL-2 + HIGH-4 (architecture)
+- **Week 3:** Fix HIGH-1, 2, 3 (security)
+- **Week 4:** Fix MEDIUM items (operational)
+- **Week 5:** Fix LOW/INFO + comprehensive testing
+- **Week 6+:** ✅ **MAINNET READY** (pending successful fixes)
 
 ---
 
@@ -289,26 +315,50 @@ Coverage:        High (all critical paths tested)
 
 ---
 
-## 🚀 NEXT ACTIONS
+## 🚀 NEXT ACTIONS - AUDIT 4
 
-### This Week
+### Immediate (Day 1)
 
-1. Create branch: `audit-3-fixes`
-2. Begin C-1 (Clanker validation)
-3. Daily standup on progress
+1. Create branch: `audit-4-fixes`
+2. Fix CRITICAL-1 (import case) - **5 minutes**
+3. Schedule team meeting for architectural decisions (CRITICAL-2, 3, 4)
+4. Review all 17 findings in detail
 
-### Week 1
+### Week 1 (Critical Blockers)
 
-- Fix C-1, C-2, C-4 (3 Critical)
-- Add 12 new tests
+- Fix CRITICAL-1 (import case - 5 min) ✅ **DO FIRST**
+- Fix CRITICAL-3 (per-token streams - 1-2 days)
+- Fix CRITICAL-4 (quorum manipulation - 1 day)
+- Add 10-15 new tests
 - Code review
 
-### Week 2
+### Week 2 (Architecture)
 
-- Fix H-1, H-2, H-4, H-5, H-6 (5 High)
-- Add 15 new tests
-- Deploy multisig
-- **MAINNET READY** ✨
+- Fix CRITICAL-2 (voting power redesign - 2-3 days) - **Needs design discussion**
+- Fix HIGH-4 (slippage protection - 4h)
+- Add 5-10 new tests
+- Integration testing
+
+### Week 3 (High Priority)
+
+- Fix HIGH-1, HIGH-2, HIGH-3 (security hardening)
+- Add 10-15 new tests
+- Security review
+
+### Week 4 (Medium Priority)
+
+- Fix MEDIUM-1, 2, 3, 4 (operational fixes)
+- Add 5-10 new tests
+- Deploy multisig with timelock
+
+### Week 5 (Polish)
+
+- Fix LOW/INFO items
+- Comprehensive testing
+- Gas profiling
+- Documentation updates
+- Final security review
+- **Schedule follow-up audit**
 
 ---
 
@@ -318,7 +368,8 @@ Coverage:        High (all critical paths tested)
 
 **Developers:**
 
-- Start: [EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)
+- Start: [EXTERNAL_AUDIT_4_ACTIONS.md](./EXTERNAL_AUDIT_4_ACTIONS.md) 🆕 **URGENT**
+- Source: [SECURITY_AUDIT_OCT_31_2025.md](./SECURITY_AUDIT_OCT_31_2025.md)
 - Reference: [GOV.md](./GOV.md), [FEE_SPLITTER.md](./FEE_SPLITTER.md), [TESTING.md](./TESTING.md)
 
 **Security Reviewers:**
@@ -343,26 +394,29 @@ Coverage:        High (all critical paths tested)
 
 ## 📂 FILE ORGANIZATION
 
-### Active Documents (spec/ - 13 files)
+### Active Documents (spec/ - 15 files)
 
 ```
 spec/
-├── README.md                          ⭐ You are here
-├── AUDIT_STATUS.md                    ⭐ Start here for audit status
-├── EXTERNAL_AUDIT_3_ACTIONS.md        🔴 Current work (18 items)
-├── EXTERNAL_AUDIT_2_COMPLETE.md       ✅ Reference
+├── README.md                                    ⭐ You are here
+├── AUDIT_STATUS.md                              ⭐ Start here for audit status
 │
-├── GOV.md                             📖 Governance reference
-├── FEE_SPLITTER.md                    📖 Fee distribution
-├── USER_FLOWS.md                      📖 User interactions
-├── TESTING.md                         📖 Test guide
+├── EXTERNAL_AUDIT_4_ACTIONS.md 🆕              🔴 URGENT: Current work (17 items)
+├── SECURITY_AUDIT_OCT_31_2025.md 🆕            📖 Source audit (fresh perspective)
+├── EXTERNAL_AUDIT_3_ACTIONS.md                  ✅ Phase 1 complete
+├── EXTERNAL_AUDIT_2_COMPLETE.md                 ✅ Reference
 │
-├── AUDIT.md                           🔐 Security master log
-├── HISTORICAL_FIXES.md                🔐 Past vulnerabilities
-├── COMPARATIVE_AUDIT.md               🔐 Industry comparison
+├── GOV.md                                       📖 Governance reference
+├── FEE_SPLITTER.md                              📖 Fee distribution
+├── USER_FLOWS.md                                📖 User interactions
+├── TESTING.md                                   📖 Test guide
 │
-├── CHANGELOG.md                       📅 Feature evolution
-└── FUTURE_ENHANCEMENTS.md             📅 Roadmap
+├── AUDIT.md                                     🔐 Security master log
+├── HISTORICAL_FIXES.md                          🔐 Past vulnerabilities
+├── COMPARATIVE_AUDIT.md                         🔐 Industry comparison
+│
+├── CHANGELOG.md                                 📅 Feature evolution
+└── FUTURE_ENHANCEMENTS.md                       📅 Roadmap
 ```
 
 ### Directories
@@ -402,8 +456,11 @@ spec/
 ### Implementation Work
 
 ```bash
-# Current audit fixes
-→ EXTERNAL_AUDIT_3_ACTIONS.md
+# Current audit fixes (URGENT)
+→ EXTERNAL_AUDIT_4_ACTIONS.md 🆕
+
+# Source audit report
+→ SECURITY_AUDIT_OCT_31_2025.md 🆕
 
 # Test writing
 → TESTING.md
@@ -501,22 +558,25 @@ spec/
 
 ### Can Deploy Now?
 
-❌ **NO** - 8 pre-mainnet items remain
+❌ **NO** - 17 AUDIT 4 findings must be addressed
 
-### Can Deploy in 2 Weeks?
+### Can Deploy in 4-5 Weeks?
 
-✅ **YES** - After Critical + High fixes (recommended)
+⚠️ **MAYBE** - After all Critical + High fixes (highly recommended)
 
 ### What's Needed?
 
-1. Fix 3 Critical issues (Week 1)
-2. Fix 5 High issues (Week 2)
-3. Deploy multisig
-4. 27 new tests passing
-5. Gas profiling
-6. Final review
+1. Fix 4 Critical issues (Week 1-2)
+2. Fix 4 High issues (Week 2-3)
+3. Fix 4 Medium issues (Week 4)
+4. Fix 5 Low/Info issues (Week 5)
+5. Comprehensive test suite (50+ new tests)
+6. Deploy multisig with timelock
+7. Gas profiling
+8. Final security review
+9. Follow-up audit recommended
 
-**Target Date:** ~November 13, 2025
+**Target Date:** ~Early December 2025 (pending successful implementation)
 
 ---
 
