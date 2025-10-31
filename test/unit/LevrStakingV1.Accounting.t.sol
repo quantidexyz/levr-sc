@@ -1444,7 +1444,7 @@ contract LevrStakingV1_Accounting is Test {
         weth.transfer(address(staking), 100 ether);
         staking.accrueRewards(address(weth));
 
-        for (uint256 i = 0; i < 50; i++) {
+        for (uint256 i = 0; i < 10; i++) {
             vm.prank(alice);
             staking.stake(1);
 

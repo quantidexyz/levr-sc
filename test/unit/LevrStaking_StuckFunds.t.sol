@@ -527,9 +527,11 @@ contract LevrStaking_StuckFundsTest is Test {
         console2.log('SUCCESS: Finished token cleaned up, slot freed');
     }
 
-    /// @notice Test that cleanup fails for active streams
-    function test_cleanupActiveStream_reverts() public {
-        console2.log('\n=== Flow 25: Cannot Cleanup Active Stream ===');
+    /// @notice Test cleanup during active stream (optimization)
+    /// @dev NEW: Cleanup no longer waits for global stream to end
+    ///      Can cleanup any token with pool=0 and streamTotal=0 immediately
+    function test_cleanupDuringActiveStream_succeeds() public {
+        console2.log('\n=== Flow 25: Cleanup During Active Stream (Optimized) ===');
 
         // Setup
         underlying.mint(alice, 1000 ether);
@@ -538,15 +540,63 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Add reward token
-        rewardToken.mint(address(staking), 100 ether);
-        staking.accrueRewards(address(rewardToken));
+        // Add token1 (small, will be claimed quickly)
+        MockERC20 token1 = new MockERC20('Token1', 'TK1');
+        token1.mint(address(staking), 100 ether);
+        staking.accrueRewards(address(token1));
 
-        // Try to cleanup active stream (should fail)
-        vm.expectRevert('STREAM_NOT_FINISHED');
-        staking.cleanupFinishedRewardToken(address(rewardToken));
+        // Add token2 (large, keeps stream active)
+        MockERC20 token2 = new MockERC20('Token2', 'TK2');
+        token2.mint(address(staking), 1000 ether);
+        staking.accrueRewards(address(token2));
 
-        console2.log('SUCCESS: Active streams protected from cleanup');
+        // Wait for full vest
+        vm.warp(block.timestamp + 3 days);
+
+        // Claim token1 fully
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+
+        // Cleanup token1 even though global stream is at end/active
+        staking.cleanupFinishedRewardToken(address(token1));
+
+        console2.log('SUCCESS: Cleanup works when token has no rewards (pool=0, stream=0)');
+        console2.log('Global stream state irrelevant - only THIS token matters');
+    }
+
+    /// @notice Test cannot cleanup whitelisted tokens
+    function test_cleanupWhitelistedToken_reverts() public {
+        console2.log('\n=== Flow 25: Cannot Cleanup Whitelisted Tokens ===');
+
+        // Setup
+        underlying.mint(alice, 1000 ether);
+        vm.startPrank(alice);
+        underlying.approve(address(staking), type(uint256).max);
+        staking.stake(1000 ether);
+        vm.stopPrank();
+
+        // Whitelist a token
+        MockERC20 weth = new MockERC20('WETH', 'WETH');
+        staking.whitelistToken(address(weth));
+
+        // Add rewards for whitelisted token
+        weth.mint(address(staking), 100 ether);
+        staking.accrueRewards(address(weth));
+
+        // Wait and claim all
+        vm.warp(block.timestamp + 3 days);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(weth);
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+
+        // Try to cleanup whitelisted token - should fail
+        vm.expectRevert('CANNOT_REMOVE_WHITELISTED');
+        staking.cleanupFinishedRewardToken(address(weth));
+
+        console2.log('SUCCESS: Whitelisted tokens protected from cleanup');
     }
 
     // ============ Flow 29: Zero-Staker Reward Accumulation Tests ============

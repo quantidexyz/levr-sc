@@ -263,9 +263,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @notice Clean up finished reward tokens to free up slots
-    /// @dev Removes tokens whose streams have ended and all rewards claimed
-    ///      Can only remove non-underlying tokens
+    /// @dev Removes tokens with no remaining rewards (pool = 0 and streamTotal = 0)
+    ///      Can remove even during active global stream if THIS token has no rewards
+    ///      Can only remove non-underlying, non-whitelisted tokens
     ///      Anyone can call to help maintain the system
+    ///      SECURITY: No token transfers, just state cleanup - malicious tokens cannot block this
     /// @param token The token to clean up
     function cleanupFinishedRewardToken(address token) external nonReentrant {
         // Cannot remove underlying token
@@ -275,25 +277,20 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         require(tokenState.exists, 'TOKEN_NOT_REGISTERED');
 
-        // Stream must be finished (global stream ended and past end time)
-        // Check if global stream has ended
-        require(_streamEnd > 0 && block.timestamp >= _streamEnd, 'STREAM_NOT_FINISHED');
+        // Cannot remove whitelisted tokens (permanent reward tokens like WETH, USDC)
+        require(!tokenState.whitelisted, 'CANNOT_REMOVE_WHITELISTED');
 
-        // All rewards must be claimed (pool = 0 AND no streaming rewards left)
+        // OPTIMIZATION: No longer requires global stream to end
+        // Only requires THIS token to have no rewards (pool = 0 AND streamTotal = 0)
+        // This allows cleanup during active stream if token is fully distributed
+        // Safe because: we only check OUR internal state, no external calls
         require(
             tokenState.availablePool == 0 && tokenState.streamTotal == 0,
             'REWARDS_STILL_PENDING'
         );
 
         // Remove from _rewardTokens array
-        for (uint256 i = 0; i < _rewardTokens.length; i++) {
-            if (_rewardTokens[i] == token) {
-                // Swap with last element and pop
-                _rewardTokens[i] = _rewardTokens[_rewardTokens.length - 1];
-                _rewardTokens.pop();
-                break;
-            }
-        }
+        _removeTokenFromArray(token);
 
         // Mark as non-existent (clears all token state)
         delete _tokenState[token];
@@ -524,6 +521,19 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             });
             tokenState = _tokenState[token];
             _rewardTokens.push(token);
+        }
+    }
+
+    /// @notice Internal helper to remove token from array
+    /// @param token The token to remove
+    function _removeTokenFromArray(address token) internal {
+        for (uint256 i = 0; i < _rewardTokens.length; i++) {
+            if (_rewardTokens[i] == token) {
+                // Swap with last element and pop
+                _rewardTokens[i] = _rewardTokens[_rewardTokens.length - 1];
+                _rewardTokens.pop();
+                break;
+            }
         }
     }
 

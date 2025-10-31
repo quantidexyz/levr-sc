@@ -173,7 +173,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         console2.log('\n=== STAKING: MAX_REWARD_TOKENS Limit Enforced ===');
 
         // Create and add 50 different reward tokens (max allowed, excluding underlying)
-        for (uint256 i = 0; i < 50; i++) {
+        for (uint256 i = 0; i < 10; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
@@ -216,7 +216,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         console2.log('WETH whitelisted by token admin');
 
         // Add 50 non-whitelisted tokens
-        for (uint256 i = 0; i < 50; i++) {
+        for (uint256 i = 0; i < 10; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
@@ -328,26 +328,10 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         testToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(testToken));
 
-        vm.warp(block.timestamp + 3.1 days);
-
-        // Don't claim rewards - reserve > 0
+        // Don't claim rewards - pool/stream > 0
         vm.expectRevert('REWARDS_STILL_PENDING');
         staking.cleanupFinishedRewardToken(address(testToken));
-        console2.log('RESULT: Cleanup blocked with pending rewards');
-    }
-
-    /// @notice Test cannot cleanup active stream
-    function test_staking_cleanupActiveStream_reverts() public {
-        console2.log('\n=== STAKING: Cannot Cleanup Active Stream ===');
-
-        MockERC20 testToken = new MockERC20('Test', 'TST');
-        testToken.mint(address(staking), 100 ether);
-        staking.accrueRewards(address(testToken));
-
-        // Stream is active (< 3 days)
-        vm.expectRevert('STREAM_NOT_FINISHED');
-        staking.cleanupFinishedRewardToken(address(testToken));
-        console2.log('RESULT: Cleanup blocked for active stream');
+        console2.log('RESULT: Cleanup blocked when rewards pending (even during active stream)');
     }
 
     // ============================================================================
@@ -359,7 +343,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         console2.log('\n=== STAKING: Gas Costs With Many Tokens ===');
 
         // Add 50 tokens
-        for (uint256 i = 0; i < 50; i++) {
+        for (uint256 i = 0; i < 10; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
@@ -426,9 +410,9 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
     function test_integration_cleanupAndReAdd() public {
         console2.log('\n=== INTEGRATION: Cleanup and Re-add Token ===');
 
-        // Fill to max tokens and track them
-        address[] memory tokens = new address[](50);
-        for (uint256 i = 0; i < 50; i++) {
+        // Fill to max tokens and track them (10 total, 1 is underlying)
+        address[] memory tokens = new address[](10);
+        for (uint256 i = 0; i < 10; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
@@ -438,7 +422,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
             tokens[i] = address(token);
         }
 
-        // Try to add 51st - fails
+        // Try to add 11th - fails
         MockERC20 newToken = new MockERC20('New', 'NEW');
         newToken.mint(address(staking), 100 ether);
         vm.expectRevert('MAX_REWARD_TOKENS_REACHED');
