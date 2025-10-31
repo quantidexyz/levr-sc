@@ -1,8 +1,9 @@
 # Levr V1 Protocol Documentation
 
-**Last Updated:** October 30, 2025  
+**Last Updated:** October 31, 2025  
 **Protocol Status:** ⚠️ **18 items to mainnet** (2 weeks)  
-**Test Coverage:** 390/391 tests passing (99.7%) ✅
+**Test Coverage:** 487/487 tests passing (100%) ✅  
+**Latest Release:** v1.4.0 - Verified Projects Feature
 
 ---
 
@@ -38,12 +39,13 @@
 
 ### Protocol Specifications
 
-| Document                                 | Purpose                         | Use Case               |
-| ---------------------------------------- | ------------------------------- | ---------------------- |
-| **[GOV.md](./GOV.md)**                   | Governance mechanics & glossary | Quick reference        |
-| **[FEE_SPLITTER.md](./FEE_SPLITTER.md)** | Fee distribution architecture   | Integration            |
-| **[USER_FLOWS.md](./USER_FLOWS.md)**     | User interaction patterns       | Understanding behavior |
-| **[TESTING.md](./TESTING.md)**           | Test strategies & utilities     | Writing tests          |
+| Document                                                           | Purpose                              | Use Case               |
+| ------------------------------------------------------------------ | ------------------------------------ | ---------------------- |
+| **[GOV.md](./GOV.md)**                                             | Governance mechanics & glossary      | Quick reference        |
+| **[VERIFIED_PROJECTS_FEATURE.md](./VERIFIED_PROJECTS_FEATURE.md)** | Verified projects & config overrides | Admin customization    |
+| **[FEE_SPLITTER.md](./FEE_SPLITTER.md)**                           | Fee distribution architecture        | Integration            |
+| **[USER_FLOWS.md](./USER_FLOWS.md)**                               | User interaction patterns            | Understanding behavior |
+| **[TESTING.md](./TESTING.md)**                                     | Test strategies & utilities          | Writing tests          |
 
 ### Planning & Evolution
 
@@ -77,19 +79,20 @@ See [archive/README.md](./archive/README.md) for index.
 
 ### "I need to..."
 
-| Task                         | Document                                                     | Section           |
-| ---------------------------- | ------------------------------------------------------------ | ----------------- |
-| **See current audit status** | [AUDIT_STATUS.md](./AUDIT_STATUS.md)                         | Top summary       |
-| **Implement audit fixes**    | [EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md) | Phase 1           |
-| **Understand governance**    | [GOV.md](./GOV.md)                                           | Full doc          |
-| **Check security**           | [AUDIT.md](./AUDIT.md)                                       | Executive summary |
-| **See what was fixed**       | [HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)                 | By category       |
-| **Compare to competitors**   | [COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)               | Comparison tables |
-| **Test the protocol**        | [TESTING.md](./TESTING.md)                                   | Test commands     |
-| **Understand fee flow**      | [FEE_SPLITTER.md](./FEE_SPLITTER.md)                         | Architecture      |
-| **See user journeys**        | [USER_FLOWS.md](./USER_FLOWS.md)                             | By user type      |
-| **Check version history**    | [CHANGELOG.md](./CHANGELOG.md)                               | Chronological     |
-| **See roadmap**              | [FUTURE_ENHANCEMENTS.md](./FUTURE_ENHANCEMENTS.md)           | By priority       |
+| Task                          | Document                                                       | Section           |
+| ----------------------------- | -------------------------------------------------------------- | ----------------- |
+| **See current audit status**  | [AUDIT_STATUS.md](./AUDIT_STATUS.md)                           | Top summary       |
+| **Implement audit fixes**     | [EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)   | Phase 1           |
+| **Understand governance**     | [GOV.md](./GOV.md)                                             | Full doc          |
+| **Verify/customize projects** | [VERIFIED_PROJECTS_FEATURE.md](./VERIFIED_PROJECTS_FEATURE.md) | Admin guide       |
+| **Check security**            | [AUDIT.md](./AUDIT.md)                                         | Executive summary |
+| **See what was fixed**        | [HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)                   | By category       |
+| **Compare to competitors**    | [COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)                 | Comparison tables |
+| **Test the protocol**         | [TESTING.md](./TESTING.md)                                     | Test commands     |
+| **Understand fee flow**       | [FEE_SPLITTER.md](./FEE_SPLITTER.md)                           | Architecture      |
+| **See user journeys**         | [USER_FLOWS.md](./USER_FLOWS.md)                               | By user type      |
+| **Check version history**     | [CHANGELOG.md](./CHANGELOG.md)                                 | Chronological     |
+| **See roadmap**               | [FUTURE_ENHANCEMENTS.md](./FUTURE_ENHANCEMENTS.md)             | By priority       |
 
 ---
 

@@ -30,7 +30,52 @@ Holds project funds. Executes authorized actions: boost staking rewards or trans
 
 ### LevrFactory_v1
 
-Global registry and configuration source. All governance parameters are defined here.
+Global registry and configuration source. All governance parameters are defined here. Supports verified projects with custom config overrides.
+
+## Verified Projects
+
+**NEW:** Factory owner can verify trusted projects, allowing them to override factory config parameters.
+
+### Verification Flow
+
+1. **Factory Owner** calls `verifyProject(clankerToken)` → initializes override config
+2. **Project Admin** calls `updateProjectConfig(clankerToken, customConfig)` → customizes settings
+3. **Automatic Resolution** → Governor/Staking automatically use project config
+
+### What Can Be Overridden
+
+Verified projects can customize:
+
+- ✅ Proposal window (faster/slower governance)
+- ✅ Voting window
+- ✅ Quorum and approval thresholds (stricter/looser requirements)
+- ✅ Max active proposals per type
+- ✅ Minimum stake to submit proposals
+- ✅ Max proposal amount limits
+- ✅ Streaming window (reward vesting duration)
+- ✅ Max reward tokens
+- ❌ **Protocol fee BPS** (NOT overridable - protocol revenue protected)
+
+### Example Use Cases
+
+**Established Project (Faster Governance):**
+
+- Proposal window: 1 day (vs 2 day default)
+- Voting window: 3 days (vs 5 day default)
+- Result: Complete cycle in 4 days instead of 7
+
+**High-Value Treasury (Stricter Security):**
+
+- Quorum: 90% (vs 70% default)
+- Approval: 75% (vs 51% default)
+- Min stake to submit: 5% (vs 1% default)
+- Result: Higher bar for treasury access
+
+**Experimental Project (More Flexible):**
+
+- Max active proposals: 20 (vs 7 default)
+- Streaming window: 14 days (vs 7 default)
+- Result: More concurrent governance, longer reward vesting
 
 ## Governance Parameters (Factory Config)
 

@@ -4,6 +4,100 @@ All notable changes to the Levr V1 protocol are documented here.
 
 ---
 
+## [1.4.0] - 2025-10-31 - Verified Projects Feature
+
+**Status:** ✅ Complete - All 487 tests passing (436 unit + 51 E2E)
+
+### 🎯 New Feature: Verified Project Config Overrides
+
+#### Overview
+
+Factory owner can now verify trusted projects, allowing them to customize governance and staking parameters (except protocol fee BPS) independently from the global factory defaults.
+
+**What Changed:**
+
+- Added `verified` boolean to `Project` struct
+- Added `ProjectConfig` struct (subset of FactoryConfig without protocolFeeBps)
+- Added `verifyProject()` and `unverifyProject()` owner functions
+- Added `updateProjectConfig()` for verified project admins
+- Enhanced all config getters with optional `address clankerToken` parameter
+- Removed immutable `clankerFactory` field from constructor
+- Refactored `getClankerMetadata()` to loop through all trusted Clanker factories
+
+**Why This Matters:**
+
+Premium/trusted projects can now set their own:
+
+- Governance windows (proposal/voting duration)
+- Quorum and approval thresholds
+- Proposal limits and staking requirements
+- Reward streaming windows
+- Max reward token limits
+
+This enables:
+
+- Faster governance for established projects (shorter windows)
+- Stricter requirements for high-value treasuries (higher quorum)
+- Flexible staking parameters for different token economics
+- Protocol still receives standard fee (protocolFeeBps not overridable)
+
+**Security:**
+
+- Only factory owner can verify/unverify projects
+- Only token admin can update their project's config
+- Same validation rules apply (no gridlock configs)
+- Protocol fee BPS cannot be overridden (revenue protection)
+- Factory removal doesn't break existing projects (tested)
+- Requires ≥1 trusted Clanker factory for registrations
+
+**Architecture:**
+
+```solidity
+// Config getter with optional parameter
+function quorumBps(address clankerToken) external view returns (uint16);
+// Pass address(0) for global default
+// Pass project token for project-specific config (if verified)
+
+// Unified internal config update
+_updateConfig(cfg, address(0), true);      // Factory config
+_updateConfig(cfg, clankerToken, false);   // Project config
+```
+
+**Files Modified:**
+
+- `src/interfaces/ILevrFactory_v1.sol` - New structs, events, functions
+- `src/LevrFactory_v1.sol` - Core implementation with modular config system
+- `src/LevrGovernor_v1.sol` - Pass `underlying` to factory getters
+- `src/LevrStaking_v1.sol` - Pass `underlying` to factory getters
+- `script/DeployLevr.s.sol` - Add Clanker factory after deployment
+- `script/DeployLevrFactoryDevnet.s.sol` - Add Clanker factory after deployment
+- `test/unit/LevrFactory_TrustedFactoryRemoval.t.sol` (NEW) - 9 safety tests
+- Multiple test files - Updated for new signatures
+
+**Test Coverage:**
+
+- ✅ 9 factory removal safety tests (staking/governance/treasury continue working)
+- ✅ 14 Clanker validation tests (updated)
+- ✅ All 436 unit tests passing
+- ✅ All 51 E2E tests passing
+- ✅ **Total: 487/487 tests passing**
+
+**Gas Optimization:**
+
+- No reverse lookup mapping needed
+- Simple conditional check + single SLOAD for verified projects
+- Contracts access `underlying` from immutable storage (zero gas)
+- Optional parameter approach is gas-efficient
+
+**Documentation:**
+
+- `spec/VERIFIED_PROJECTS_FEATURE.md` - Complete design and implementation guide
+- `spec/CHANGELOG.md` - This entry
+- `spec/GOV.md` - Updated with verified projects section
+- `spec/USER_FLOWS.md` - Updated with admin verification flows
+
+---
+
 ## [1.3.0] - 2025-10-30 - Audit 3 Phase 1: Security Hardening & Risk Mitigation
 
 **Status:** ✅ Phase 1 Complete - 4 Critical/High Fixes + 10 Pre-existing Test Fixes

@@ -9,12 +9,13 @@
 ## Table of Contents
 
 1. [Project Registration Flows](#project-registration-flows)
-2. [Staking Flows](#staking-flows)
-3. [Governance Flows](#governance-flows)
-4. [Treasury Flows](#treasury-flows)
-5. [Fee Splitter Flows](#fee-splitter-flows)
-6. [Forwarder Flows](#forwarder-flows)
-7. [Cross-Contract Flows](#cross-contract-flows)
+2. [Admin Flows (Verified Projects)](#admin-flows-verified-projects)
+3. [Staking Flows](#staking-flows)
+4. [Governance Flows](#governance-flows)
+5. [Treasury Flows](#treasury-flows)
+6. [Fee Splitter Flows](#fee-splitter-flows)
+7. [Forwarder Flows](#forwarder-flows)
+8. [Cross-Contract Flows](#cross-contract-flows)
 
 ---
 
@@ -71,6 +72,138 @@
 
 - ✅ Tested: Registration fails appropriately
 - ❓ What if deployer logic doesn't validate zero addresses properly?
+
+---
+
+## Admin Flows (Verified Projects)
+
+### Flow 2A: Factory Owner Verifies Project
+
+**Actors:** Factory Owner (admin)
+
+**Steps:**
+
+1. Owner calls `factory.verifyProject(clankerToken)`
+   - Validates project exists (checks `_projects[clankerToken].staking != address(0)`)
+   - Validates not already verified
+   - Sets `_projects[clankerToken].verified = true`
+   - Initializes `_projectOverrideConfig[clankerToken]` with current factory config
+   - Emits `ProjectVerified(clankerToken)` event
+
+**State Changes:**
+
+- Factory: `_projects[clankerToken].verified` = false → true
+- Factory: `_projectOverrideConfig[clankerToken]` = current factory config
+- Project contracts automatically start using override config (if updated)
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Only owner can verify
+- ✅ Tested: Cannot verify non-existent project
+- ✅ Tested: Cannot verify already verified project
+- ✅ Tested: Config initialized with current factory defaults
+
+---
+
+### Flow 2B: Project Admin Updates Custom Config
+
+**Actors:** Token Admin (owner of verified project's Clanker token)
+
+**Steps:**
+
+1. Token Admin calls `factory.updateProjectConfig(clankerToken, customConfig)`
+   - Validates project exists
+   - Validates project is verified
+   - Validates caller is token admin
+   - Validates custom config (same rules as factory config)
+   - Preserves `protocolFeeBps` and `protocolTreasury` (not overridable)
+   - Updates `_projectOverrideConfig[clankerToken]` with custom values
+   - Emits `ProjectConfigUpdated(clankerToken)` event
+
+**State Changes:**
+
+- Factory: `_projectOverrideConfig[clankerToken]` updated with custom values
+- Governor: Next proposal creation uses new config
+- Staking: Next stream reset uses new window
+- All config getters return new values when called with this clankerToken
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Only token admin can update
+- ✅ Tested: Only verified projects can update
+- ✅ Tested: Validation prevents invalid configs (BPS > 100%, zero values, etc.)
+- ✅ Tested: Cannot override protocolFeeBps
+- ✅ Tested: Config changes apply immediately to new operations
+
+---
+
+### Flow 2C: Factory Owner Unverifies Project
+
+**Actors:** Factory Owner (admin)
+
+**Steps:**
+
+1. Owner calls `factory.unverifyProject(clankerToken)`
+   - Validates project exists
+   - Validates project is verified
+   - Sets `_projects[clankerToken].verified = false`
+   - Deletes `_projectOverrideConfig[clankerToken]` (frees storage)
+   - Emits `ProjectUnverified(clankerToken)` event
+
+**State Changes:**
+
+- Factory: `_projects[clankerToken].verified` = true → false
+- Factory: `_projectOverrideConfig[clankerToken]` deleted
+- Project contracts fall back to global factory config
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Only owner can unverify
+- ✅ Tested: Cannot unverify non-existent project
+- ✅ Tested: Cannot unverify already unverified project
+- ✅ Tested: Config immediately reverts to factory defaults
+- ✅ Tested: Storage cleanup refunds gas
+
+---
+
+### Flow 2D: Config Resolution (Automatic)
+
+**How Contracts Get Config:**
+
+All contracts (Governor, Staking) call factory config getters with their `underlying` token:
+
+```solidity
+// In Governor/Staking:
+uint16 quorum = ILevrFactory_v1(factory).quorumBps(underlying);
+```
+
+**Factory Logic:**
+
+```solidity
+function quorumBps(address clankerToken) external view returns (uint16) {
+    // If clankerToken provided AND project verified → return override
+    if (clankerToken != address(0) && _projects[clankerToken].verified) {
+        return _projectOverrideConfig[clankerToken].quorumBps;
+    }
+    // Otherwise → return global default
+    return _quorumBps;
+}
+```
+
+**Examples:**
+
+- `factory.quorumBps(address(0))` → Always returns global default
+- `factory.quorumBps(unverifiedToken)` → Returns global default
+- `factory.quorumBps(verifiedToken)` → Returns project override
+- Governor calls `factory.quorumBps(underlying)` → Automatic resolution
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Unverified project gets default config
+- ✅ Tested: Verified project gets override config
+- ✅ Tested: address(0) always returns default
+- ✅ Tested: Non-existent project returns default
+- ✅ Tested: Config changes apply immediately to next operations
 
 ---
 
