@@ -53,6 +53,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 

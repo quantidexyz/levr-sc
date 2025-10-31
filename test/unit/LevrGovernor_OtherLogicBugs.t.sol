@@ -47,6 +47,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 

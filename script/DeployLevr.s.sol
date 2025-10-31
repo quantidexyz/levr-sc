@@ -69,6 +69,7 @@ contract DeployLevr is Script {
     uint16 constant DEFAULT_APPROVAL_BPS = 5100; // 51%
     uint16 constant DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT = 100; // 1%
     uint16 constant DEFAULT_MAX_PROPOSAL_AMOUNT_BPS = 500; // 5%
+    uint16 constant DEFAULT_MINIMUM_QUORUM_BPS = 25; // 0.25% minimum quorum to prevent early capture
     uint16 constant DEFAULT_MAX_REWARD_TOKENS = 50; // Max non-whitelisted reward tokens
 
     // Estimated gas costs for deployment (conservative estimates)
@@ -101,6 +102,7 @@ contract DeployLevr is Script {
         uint16 approvalBps;
         uint16 minSTokenBpsToSubmit;
         uint16 maxProposalAmountBps;
+        uint16 minimumQuorumBps;
         uint16 maxRewardTokens;
     }
 
@@ -155,6 +157,9 @@ contract DeployLevr is Script {
         params.maxProposalAmountBps = vm.envExists('MAX_PROPOSAL_AMOUNT_BPS')
             ? uint16(vm.envUint('MAX_PROPOSAL_AMOUNT_BPS'))
             : DEFAULT_MAX_PROPOSAL_AMOUNT_BPS;
+        params.minimumQuorumBps = vm.envExists('MINIMUM_QUORUM_BPS')
+            ? uint16(vm.envUint('MINIMUM_QUORUM_BPS'))
+            : DEFAULT_MINIMUM_QUORUM_BPS;
         params.maxRewardTokens = vm.envExists('MAX_REWARD_TOKENS')
             ? uint16(vm.envUint('MAX_REWARD_TOKENS'))
             : DEFAULT_MAX_REWARD_TOKENS;
@@ -239,6 +244,7 @@ contract DeployLevr is Script {
         require(params.approvalBps <= 10000, 'Approval BPS cannot exceed 100%');
         require(params.minSTokenBpsToSubmit <= 10000, 'Min sToken BPS cannot exceed 100%');
         require(params.maxProposalAmountBps <= 10000, 'Max proposal amount BPS cannot exceed 100%');
+        require(params.minimumQuorumBps <= 10000, 'Minimum quorum BPS cannot exceed 100%');
         require(params.clankerFactory != address(0), 'Clanker factory cannot be zero address');
 
         // Build factory configuration
@@ -253,6 +259,7 @@ contract DeployLevr is Script {
             approvalBps: params.approvalBps,
             minSTokenBpsToSubmit: params.minSTokenBpsToSubmit,
             maxProposalAmountBps: params.maxProposalAmountBps,
+            minimumQuorumBps: params.minimumQuorumBps,
             maxRewardTokens: params.maxRewardTokens
         });
 
@@ -274,6 +281,7 @@ contract DeployLevr is Script {
         console.log('- Approval BPS:', config.approvalBps);
         console.log('- Min sToken BPS to Submit:', config.minSTokenBpsToSubmit);
         console.log('- Max Proposal Amount BPS:', config.maxProposalAmountBps);
+        console.log('- Minimum Quorum BPS:', config.minimumQuorumBps);
         console.log('- Max Reward Tokens (non-whitelisted):', config.maxRewardTokens);
         console.log('');
 
@@ -371,6 +379,10 @@ contract DeployLevr is Script {
         require(
             factory.maxProposalAmountBps() == params.maxProposalAmountBps,
             'Max proposal amount BPS mismatch'
+        );
+        require(
+            factory.minimumQuorumBps() == params.minimumQuorumBps,
+            'Minimum quorum BPS mismatch'
         );
         require(factory.maxRewardTokens() == params.maxRewardTokens, 'Max reward tokens mismatch');
         require(

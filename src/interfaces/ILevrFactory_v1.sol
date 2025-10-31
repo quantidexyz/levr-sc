@@ -19,6 +19,7 @@ interface ILevrFactory_v1 {
         uint16 approvalBps; // Minimum yes-vote threshold (e.g., 5100 = 51%)
         uint16 minSTokenBpsToSubmit; // Min % of sToken supply to submit (e.g., 100 = 1%)
         uint16 maxProposalAmountBps; // Max proposal amount as % of treasury (e.g., 500 = 5%)
+        uint16 minimumQuorumBps; // Minimum quorum as % of current supply (e.g., 1000 = 10%) - prevents early capture
         // Staking parameters
         uint16 maxRewardTokens; // Max non-whitelisted reward tokens (e.g., 50)
     }
@@ -193,6 +194,10 @@ interface ILevrFactory_v1 {
 
     /// @notice Maximum proposal amount as % of treasury (basis points, e.g., 500 = 5%).
     function maxProposalAmountBps() external view returns (uint16);
+
+    /// @notice Minimum quorum as % of current supply (basis points, e.g., 1000 = 10%).
+    /// @dev Used with adaptive quorum to prevent early governance capture
+    function minimumQuorumBps() external view returns (uint16);
 
     // Staking config getters
     /// @notice Maximum number of non-whitelisted reward tokens (e.g., 50).

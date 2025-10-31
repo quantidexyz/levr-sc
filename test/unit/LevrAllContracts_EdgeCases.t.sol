@@ -49,7 +49,8 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
-            maxProposalAmountBps: 5000, // 50%,
+            maxProposalAmountBps: 5000, // 50%
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
@@ -379,6 +380,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 0,
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 10000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
@@ -527,6 +529,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 2000, // 20% now!
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 

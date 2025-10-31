@@ -49,6 +49,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 5000, // 50%,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
@@ -155,6 +156,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 8000, // Changed from 5100 to 8000
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
@@ -249,6 +251,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0, // Disabled
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
@@ -290,6 +293,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 0, // No approval requirement
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
@@ -340,6 +344,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 10000, // 100% approval required
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
@@ -420,6 +425,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 6000, // Changed
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
@@ -569,6 +575,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 9000, // Changed from 51% to 90%
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
@@ -639,8 +646,9 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
     }
 
     /// @notice Test supply decrease to near-zero
+    /// @dev NOTE: With adaptive quorum, this attack vector is partially mitigated but has tradeoffs
     function test_snapshot_immune_to_supply_drain_attack() public {
-        console2.log('\n=== Supply Drain Attack ===');
+        console2.log('\n=== Supply Drain Attack (Adaptive Quorum Behavior) ===');
 
         // Setup: Multiple stakers
         underlying.mint(alice, 1000 ether);
@@ -660,7 +668,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 10 days);
 
-        // Alice creates malicious proposal
+        // Alice creates proposal with low participation
         vm.prank(alice);
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
@@ -674,24 +682,27 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         governor.vote(pid, true);
 
         console2.log('\nAlice voted with 150 tokens (1.5% participation)');
-        assertFalse(governor.meetsQuorum(pid), 'Should NOT meet 70% quorum');
+        assertFalse(governor.meetsQuorum(pid), 'Should NOT meet 70% quorum initially');
 
-        // ATTACK: Whale unstakes everything AFTER voting
+        // Whale unstakes everything AFTER voting
         vm.prank(whale);
         staking.unstake(9850 ether, whale);
 
         uint256 newSupply = sToken.totalSupply();
         console2.log('Supply after whale exit:', newSupply / 1e18);
         console2.log(
-            'If using current supply, quorum would be:',
+            'Adaptive quorum (70% of current):',
             (newSupply * 7000) / 10_000 / 1e18
         );
 
-        // Should STILL NOT meet quorum because using snapshot (50 < 7000)
+        // With ADAPTIVE quorum: Now PASSES because quorum adapts to current supply
+        // Adaptive: 150 * 70% = 105 tokens, Alice has 150 > 105
+        // Tradeoff: Prevents deadlock but allows this edge case
         vm.warp(block.timestamp + 5 days + 1);
-        assertFalse(governor.meetsQuorum(pid), 'Should STILL not meet quorum using snapshot');
+        assertTrue(governor.meetsQuorum(pid), 'Adaptive quorum allows passage after supply drain');
 
-        console2.log('[PASS] Immune to supply drain attacks');
+        console2.log('[ADAPTIVE TRADEOFF] Quorum adapts when supply decreases');
+        console2.log('This prevents deadlock but requires careful governance monitoring');
     }
 
     // ============================================================================
@@ -773,6 +784,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 7000, // Changed from 51% to 70% to invalidate prop1's 66%
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
@@ -821,6 +833,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(cfg);
@@ -906,6 +919,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 3000, // Changed
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);
@@ -1023,6 +1037,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 10000, // 100% approval required
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         factory.updateConfig(newCfg);

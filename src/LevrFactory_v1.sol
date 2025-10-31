@@ -30,6 +30,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 public override approvalBps;
     uint16 public override minSTokenBpsToSubmit;
     uint16 public override maxProposalAmountBps;
+    uint16 public override minimumQuorumBps;
 
     // Staking parameters
     uint16 public override maxRewardTokens;
@@ -296,6 +297,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         require(cfg.minSTokenBpsToSubmit <= 10000, 'INVALID_MIN_STAKE_BPS');
         require(cfg.maxProposalAmountBps <= 10000, 'INVALID_MAX_PROPOSAL_BPS');
         require(cfg.protocolFeeBps <= 10000, 'INVALID_PROTOCOL_FEE_BPS');
+        require(cfg.minimumQuorumBps <= 10000, 'INVALID_MINIMUM_QUORUM_BPS');
 
         // FIX [CONFIG-GRIDLOCK]: Prevent zero values that freeze functionality
         require(cfg.maxActiveProposals > 0, 'MAX_ACTIVE_PROPOSALS_ZERO');
@@ -316,6 +318,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         approvalBps = cfg.approvalBps;
         minSTokenBpsToSubmit = cfg.minSTokenBpsToSubmit;
         maxProposalAmountBps = cfg.maxProposalAmountBps;
+        minimumQuorumBps = cfg.minimumQuorumBps;
         maxRewardTokens = cfg.maxRewardTokens;
     }
 

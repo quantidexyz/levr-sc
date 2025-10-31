@@ -68,7 +68,8 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             quorumBps: 0, // No quorum requirement for this unit test
             approvalBps: 0, // No approval requirement for this unit test
             minSTokenBpsToSubmit: 0, // No minimum for this test
-            maxProposalAmountBps: 500, // 5% max,
+            maxProposalAmountBps: 500, // 5% max
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         (LevrFactory_v1 fac, LevrForwarder_v1 fwd, ) = deployFactoryWithDefaultClanker(
@@ -211,6 +212,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 500,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         (LevrFactory_v1 fac, , ) = deployFactoryWithDefaultClanker(cfg, address(this));

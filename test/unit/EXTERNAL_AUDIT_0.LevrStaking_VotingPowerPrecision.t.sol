@@ -37,6 +37,7 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50
         });
 

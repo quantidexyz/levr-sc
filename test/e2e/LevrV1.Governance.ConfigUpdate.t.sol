@@ -53,7 +53,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000, // 70% participation required
             approvalBps: 5100, // 51% approval required
             minSTokenBpsToSubmit: 100, // 1% of supply required to propose
-            maxProposalAmountBps: 1000, // 10% of supply max proposal amount,
+            maxProposalAmountBps: 1000, // 10% of supply max proposal amount
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
@@ -167,6 +168,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -232,6 +234,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -303,6 +306,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 7000, // INCREASED from 51% to 70%
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -354,6 +358,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -402,6 +407,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 3000, // INCREASED from 1% to 30%
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -470,6 +476,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -590,6 +597,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -813,6 +821,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);
@@ -864,6 +873,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
         vm.prank(factoryOwner);

@@ -467,10 +467,29 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // This two-tier system ensures:
         // 1. Quorum: Democratic participation (all stakers equal)
         // 2. Approval: Time-weighted influence (VP rewards long-term commitment)
-        uint256 totalSupply = proposal.totalSupplySnapshot;
-        if (totalSupply == 0) return false;
+        uint256 snapshotSupply = proposal.totalSupplySnapshot;
+        if (snapshotSupply == 0) return false;
 
-        uint256 requiredQuorum = (totalSupply * quorumBps) / 10_000;
+        // ADAPTIVE QUORUM: Use lower of snapshot vs current supply
+        // - If supply increased → use snapshot (anti-dilution protection)
+        // - If supply decreased → use current (anti-deadlock protection)
+        uint256 currentSupply = IERC20(stakedToken).totalSupply();
+        uint256 effectiveSupply = currentSupply < snapshotSupply ? currentSupply : snapshotSupply;
+
+        // Calculate percentage-based quorum from effective supply
+        uint256 percentageQuorum = (effectiveSupply * quorumBps) / 10_000;
+
+        // MINIMUM ABSOLUTE QUORUM: Prevent early governance capture
+        // Use SNAPSHOT supply for minimum (not current) to avoid breaking anti-dilution
+        // When supply increases: snapshot is used for both percentage and minimum
+        // When supply decreases: current is used for percentage, snapshot for minimum
+        uint16 minimumQuorumBps = ILevrFactory_v1(factory).minimumQuorumBps();
+        uint256 minimumAbsoluteQuorum = (snapshotSupply * minimumQuorumBps) / 10_000;
+
+        // Use whichever is higher: percentage quorum or minimum absolute quorum
+        uint256 requiredQuorum = percentageQuorum > minimumAbsoluteQuorum
+            ? percentageQuorum
+            : minimumAbsoluteQuorum;
 
         return proposal.totalBalanceVoted >= requiredQuorum;
     }

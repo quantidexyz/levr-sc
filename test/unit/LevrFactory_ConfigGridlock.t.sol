@@ -44,6 +44,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -116,6 +117,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 5 // Changed from 10 to 5
         });
 
@@ -157,6 +159,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -206,6 +209,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -240,6 +244,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 0 // Zero! Should be rejected
         });
 
@@ -276,6 +281,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -312,6 +318,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -356,6 +363,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 100, // 1% - proposal wants 10%!
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -408,6 +416,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 2000, // 20% - Alice only has 10%
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -470,6 +479,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 6000,
             minSTokenBpsToSubmit: 500,
             maxProposalAmountBps: 3000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 5
         });
 
@@ -500,6 +510,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -561,6 +572,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 1 // Only 1 non-whitelisted allowed
         });
 
@@ -612,6 +624,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 0, // No limit!
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -656,6 +669,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -704,6 +718,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 
@@ -740,6 +755,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 

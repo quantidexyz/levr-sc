@@ -47,6 +47,7 @@ contract LevrGovernor_StuckProcessTest is Test {
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 5000, // 50%
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 10
         });
 

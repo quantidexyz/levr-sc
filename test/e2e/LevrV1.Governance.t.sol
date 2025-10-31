@@ -62,6 +62,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
             approvalBps: 5100, // 51% approval required
             minSTokenBpsToSubmit: 100, // 1% of supply required to propose
             maxProposalAmountBps: 1000, // 10% of total supply allowed per proposal,
+            minimumQuorumBps: 25, // 0.25% minimum quorum
             maxRewardTokens: 50 // Max non-whitelisted reward tokens
         });
 
@@ -1063,8 +1064,9 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
     }
 
     function test_supplyInvariant_extremeSupplyDecrease() public {
-        // SCENARIO 5: Proposal created with 10 ether supply, then 90% decrease to 1 ether
-        // EXPECTED: Quorum uses snapshot (10 ether), so 70% = 7 ether minimum (likely fails)
+        // SCENARIO 5: Proposal created with 10 ether supply, then 70% decrease to 3 ether
+        // WITH ADAPTIVE QUORUM: Quorum adapts to current supply to prevent deadlock
+        // Adaptive quorum = 70% of current (3 ether) = 2.1 ether (remaining voters can pass)
 
         // Large initial stake
         _stakeFor(alice, 2 ether);
@@ -1081,19 +1083,19 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
         assertEq(prop.totalSupplySnapshot, 10 ether, 'Snapshot: 10 ether');
 
-        // Extreme unstaking (90% of supply leaves)
+        // Extreme unstaking (70% of supply leaves)
         vm.prank(bob);
         ILevrStaking_v1(staking).unstake(4 ether, bob);
         vm.prank(charlie);
         ILevrStaking_v1(staking).unstake(3 ether, charlie);
-        // Total: 3 ether (70% decrease)
+        // Remaining: 3 ether (alice 2, charlie 1)
 
         assertEq(IERC20(stakedToken).totalSupply(), 3 ether, 'Current supply: 3 ether');
 
         // Warp to voting window (users have been staking, accumulating VP)
         vm.warp(prop.votingStartsAt + 1);
 
-        // Remaining users vote (alice 2 ether, charlie 1 ether)
+        // Remaining users vote (alice 2 ether, charlie 1 ether = 100% participation!)
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
         vm.prank(charlie);
@@ -1103,14 +1105,16 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         vm.warp(prop.votingEndsAt + 1);
         prop = ILevrGovernor_v1(governor).getProposal(pid);
 
-        // Quorum: totalBalanceVoted (3) >= snapshot (10) * 70% = 7 ether ❌
-        // Only 30% of snapshot supply voted (3/10), which is below 70% quorum
-        assertFalse(prop.meetsQuorum, 'Quorum NOT met (3/10 = 30% of snapshot)');
+        // ADAPTIVE QUORUM: totalBalanceVoted (3) >= adaptive quorum (2.1 ether) ✅
+        // Adaptive quorum uses current supply (3 ether) because 3 < 10 (snapshot)
+        // Required = max(3 * 70%, 10 * 0.25%) = max(2.1, 0.025) = 2.1 ether
+        // All remaining stakers voted (100% participation of remaining supply)
+        assertTrue(prop.meetsQuorum, 'Quorum met with adaptive quorum (3 >= 2.1)');
         assertTrue(prop.meetsApproval, 'Approval met (100% yes)');
-        assertEq(uint256(prop.state), 3, 'Defeated due to quorum');
+        assertEq(uint256(prop.state), 2, 'Succeeded with adaptive quorum');
 
-        // This demonstrates that mass unstaking can make proposals unpassable
-        // even if all remaining stakers vote yes
+        // This demonstrates that adaptive quorum prevents mass unstaking deadlock
+        // Remaining stakers can pass proposals even after mass exodus
     }
 
     function test_supplyInvariant_multipleProposalsDifferentSnapshots() public {
