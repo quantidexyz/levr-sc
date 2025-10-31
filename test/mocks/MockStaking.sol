@@ -116,4 +116,16 @@ contract MockStaking is ILevrStaking_v1 {
     function escrowBalance(address) external pure override returns (uint256) {
         return 0;
     }
+
+    function whitelistToken(address) external override {}
+
+    function cleanupFinishedRewardToken(address) external override {}
+
+    function getWhitelistedTokens() external pure override returns (address[] memory) {
+        return new address[](0);
+    }
+
+    function isTokenWhitelisted(address) external pure override returns (bool) {
+        return false;
+    }
 }
