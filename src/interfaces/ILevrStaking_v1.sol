@@ -79,6 +79,9 @@ interface ILevrStaking_v1 {
     /// @notice Emitted when a token is added to the whitelist
     event TokenWhitelisted(address indexed token);
 
+    /// @notice Emitted when a token is removed from the whitelist
+    event TokenUnwhitelisted(address indexed token);
+
     // ============ State Variables ============
 
     /// @notice The underlying token being staked
@@ -96,15 +99,17 @@ interface ILevrStaking_v1 {
     // ============ Functions ============
 
     /// @notice Initialize staking module.
-    /// @param underlying The underlying token to stake
+    /// @param underlying The underlying token to stake (auto-whitelisted - not in array)
     /// @param stakedToken The staked token to mint/burn
     /// @param treasury The treasury address
     /// @param factory The Levr factory instance
+    /// @param initialWhitelistedTokens Initial whitelist (e.g., WETH - excludes underlying)
     function initialize(
         address underlying,
         address stakedToken,
         address treasury,
-        address factory
+        address factory,
+        address[] memory initialWhitelistedTokens
     ) external;
 
     /// @notice Stake underlying; mints staked token to msg.sender.
@@ -171,10 +176,20 @@ interface ILevrStaking_v1 {
 
     // ============ Admin Functions ============
 
-    /// @notice Add a token to the whitelist (exempt from MAX_REWARD_TOKENS)
+    /// @notice Add a token to the whitelist
     /// @dev Only token admin can call - useful for trusted tokens like WETH, USDC
-    /// @param token The token to whitelist
+    ///      CANNOT modify underlying token (always whitelisted).
+    ///      If token already exists, it MUST have no pending rewards (prevents state corruption).
+    /// @param token The token to whitelist (cannot be underlying)
     function whitelistToken(address token) external;
+
+    /// @notice Remove a token from the whitelist
+    /// @dev Only token admin can call. CANNOT unwhitelist underlying token.
+    ///      Token MUST have no pending rewards (availablePool and streamTotal both zero).
+    ///      Settles pool before checking to ensure accurate state.
+    ///      This prevents making rewards unclaimable.
+    /// @param token The token to unwhitelist (cannot be underlying)
+    function unwhitelistToken(address token) external;
 
     /// @notice Clean up finished reward tokens to free slots
     /// @dev Permissionless cleanup when token has no rewards remaining

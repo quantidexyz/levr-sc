@@ -70,7 +70,6 @@ contract DeployLevr is Script {
     uint16 constant DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT = 100; // 1%
     uint16 constant DEFAULT_MAX_PROPOSAL_AMOUNT_BPS = 500; // 5%
     uint16 constant DEFAULT_MINIMUM_QUORUM_BPS = 25; // 0.25% minimum quorum to prevent early capture
-    uint16 constant DEFAULT_MAX_REWARD_TOKENS = 10; // Max non-whitelisted reward tokens
 
     // Estimated gas costs for deployment (conservative estimates)
     uint256 constant ESTIMATED_FORWARDER_GAS = 500_000; // ~0.0005 ETH at 1 gwei
@@ -103,7 +102,6 @@ contract DeployLevr is Script {
         uint16 minSTokenBpsToSubmit;
         uint16 maxProposalAmountBps;
         uint16 minimumQuorumBps;
-        uint16 maxRewardTokens;
     }
 
     /**
@@ -118,6 +116,20 @@ contract DeployLevr is Script {
         if (chainId == 84532) return 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
         // Fallback for unsupported chains
         revert('Unsupported chain - no Clanker factory available');
+    }
+
+    /**
+     * @notice Get WETH address for the current chain
+     * @param chainId The chain ID to get WETH for
+     * @return The WETH address
+     */
+    function getWETH(uint256 chainId) internal pure returns (address) {
+        // Base mainnet (8453): 0x4200000000000000000000000000000000000006
+        if (chainId == 8453) return 0x4200000000000000000000000000000000000006;
+        // Base Sepolia (84532): 0x4200000000000000000000000000000000000006
+        if (chainId == 84532) return 0x4200000000000000000000000000000000000006;
+        // Fallback for unsupported chains
+        revert('Unsupported chain - no WETH available');
     }
 
     /**
@@ -160,9 +172,6 @@ contract DeployLevr is Script {
         params.minimumQuorumBps = vm.envExists('MINIMUM_QUORUM_BPS')
             ? uint16(vm.envUint('MINIMUM_QUORUM_BPS'))
             : DEFAULT_MINIMUM_QUORUM_BPS;
-        params.maxRewardTokens = vm.envExists('MAX_REWARD_TOKENS')
-            ? uint16(vm.envUint('MAX_REWARD_TOKENS'))
-            : DEFAULT_MAX_REWARD_TOKENS;
         params.clankerFactory = vm.envExists('CLANKER_FACTORY')
             ? vm.envAddress('CLANKER_FACTORY')
             : getClankerFactory(block.chainid);
@@ -259,8 +268,7 @@ contract DeployLevr is Script {
             approvalBps: params.approvalBps,
             minSTokenBpsToSubmit: params.minSTokenBpsToSubmit,
             maxProposalAmountBps: params.maxProposalAmountBps,
-            minimumQuorumBps: params.minimumQuorumBps,
-            maxRewardTokens: params.maxRewardTokens
+            minimumQuorumBps: params.minimumQuorumBps
         });
 
         console.log('=== DEPLOYMENT CONFIGURATION ===');
@@ -282,7 +290,6 @@ contract DeployLevr is Script {
         console.log('- Min sToken BPS to Submit:', config.minSTokenBpsToSubmit);
         console.log('- Max Proposal Amount BPS:', config.maxProposalAmountBps);
         console.log('- Minimum Quorum BPS:', config.minimumQuorumBps);
-        console.log('- Max Reward Tokens (non-whitelisted):', config.maxRewardTokens);
         console.log('');
 
         // =======================================================================
@@ -316,13 +323,22 @@ contract DeployLevr is Script {
         console.log('- Authorized Factory:', levrDeployer.authorizedFactory());
         console.log('');
 
-        // 4. Deploy the factory with forwarder and deployer logic
+        // 4. Build initial whitelist (WETH always included)
+        address weth = getWETH(block.chainid);
+        address[] memory initialWhitelist = new address[](1);
+        initialWhitelist[0] = weth;
+        console.log('Initial whitelist:');
+        console.log('- WETH:', weth);
+        console.log('');
+
+        // 5. Deploy the factory with forwarder, deployer logic, and initial whitelist
         console.log('Deploying LevrFactory_v1...');
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
             params.deployer,
             address(forwarder),
-            address(levrDeployer)
+            address(levrDeployer),
+            initialWhitelist
         );
         console.log('- Factory deployed at:', address(factory));
 
@@ -340,7 +356,7 @@ contract DeployLevr is Script {
         console.log('- Clanker factory trusted:', params.clankerFactory);
         console.log('');
 
-        // 5. Deploy the fee splitter deployer (creates per-project splitters)
+        // 6. Deploy the fee splitter deployer (creates per-project splitters)
         console.log('Deploying LevrFeeSplitterFactory_v1...');
         LevrFeeSplitterFactory_v1 feeSplitterFactory = new LevrFeeSplitterFactory_v1(
             address(factory),
@@ -389,7 +405,6 @@ contract DeployLevr is Script {
             factory.minimumQuorumBps(address(0)) == params.minimumQuorumBps,
             'Minimum quorum BPS mismatch'
         );
-        require(factory.maxRewardTokens(address(0)) == params.maxRewardTokens, 'Max reward tokens mismatch');
         require(
             factory.protocolTreasury() == params.protocolTreasury,
             'Protocol treasury mismatch'

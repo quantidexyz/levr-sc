@@ -31,9 +31,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 private _maxProposalAmountBps;
     uint16 private _minimumQuorumBps;
 
-    // Staking parameters
-    uint16 private _maxRewardTokens;
-
     mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
     address[] private _projectTokens; // Array of all registered project tokens
 
@@ -47,14 +44,24 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     // Verified projects config overrides
     mapping(address => ILevrFactory_v1.FactoryConfig) private _projectOverrideConfig; // clankerToken => override config
 
+    // Initial whitelist for new projects (e.g., WETH - underlying is auto-whitelisted separately)
+    address[] private _initialWhitelistedTokens;
+
     constructor(
         FactoryConfig memory cfg,
         address owner_,
         address trustedForwarder_,
-        address levrDeployer_
+        address levrDeployer_,
+        address[] memory initialWhitelistedTokens_
     ) Ownable(owner_) ERC2771Context(trustedForwarder_) {
         _updateConfig(cfg, address(0), true);
         levrDeployer = levrDeployer_;
+
+        // Store initial whitelist (will be passed to new projects)
+        for (uint256 i = 0; i < initialWhitelistedTokens_.length; i++) {
+            require(initialWhitelistedTokens_[i] != address(0), 'ZERO_ADDRESS_IN_WHITELIST');
+            _initialWhitelistedTokens.push(initialWhitelistedTokens_[i]);
+        }
     }
 
     /// @inheritdoc ILevrFactory_v1
@@ -128,13 +135,15 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         delete _preparedContracts[caller];
 
         // Deploy all contracts via delegatecall to deployer logic
+        // Pass initial whitelist (underlying is auto-whitelisted in staking.initialize)
         bytes memory data = abi.encodeWithSignature(
-            'deployProject(address,address,address,address,address)',
+            'deployProject(address,address,address,address,address,address[])',
             clankerToken,
             prepared.treasury,
             prepared.staking,
             address(this),
-            trustedForwarder()
+            trustedForwarder(),
+            _initialWhitelistedTokens
         );
 
         (bool success, bytes memory returnData) = levrDeployer.delegatecall(data);
@@ -219,8 +228,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             approvalBps: cfg.approvalBps,
             minSTokenBpsToSubmit: cfg.minSTokenBpsToSubmit,
             maxProposalAmountBps: cfg.maxProposalAmountBps,
-            minimumQuorumBps: cfg.minimumQuorumBps,
-            maxRewardTokens: cfg.maxRewardTokens
+            minimumQuorumBps: cfg.minimumQuorumBps
         });
 
         // Update project config (validate but skip protocol fee validation)
@@ -267,6 +275,25 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     /// @inheritdoc ILevrFactory_v1
     function isTrustedClankerFactory(address factory) external view override returns (bool) {
         return _isTrustedClankerFactory[factory];
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function updateInitialWhitelist(address[] calldata tokens) external override onlyOwner {
+        // Clear existing whitelist
+        delete _initialWhitelistedTokens;
+
+        // Set new whitelist
+        for (uint256 i = 0; i < tokens.length; i++) {
+            require(tokens[i] != address(0), 'ZERO_ADDRESS_IN_WHITELIST');
+            _initialWhitelistedTokens.push(tokens[i]);
+        }
+
+        emit InitialWhitelistUpdated(tokens);
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function getInitialWhitelist() external view override returns (address[] memory) {
+        return _initialWhitelistedTokens;
     }
 
     /// @inheritdoc ILevrFactory_v1
@@ -452,14 +479,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         return _minimumQuorumBps;
     }
 
-    /// @inheritdoc ILevrFactory_v1
-    function maxRewardTokens(address clankerToken) external view override returns (uint16) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].maxRewardTokens;
-        }
-        return _maxRewardTokens;
-    }
-
     /// @dev Get current factory config as a struct
     function _getCurrentFactoryConfig() private view returns (FactoryConfig memory) {
         return
@@ -474,8 +493,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
                 approvalBps: _approvalBps,
                 minSTokenBpsToSubmit: _minSTokenBpsToSubmit,
                 maxProposalAmountBps: _maxProposalAmountBps,
-                minimumQuorumBps: _minimumQuorumBps,
-                maxRewardTokens: _maxRewardTokens
+                minimumQuorumBps: _minimumQuorumBps
             });
     }
 
@@ -505,7 +523,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             _minSTokenBpsToSubmit = cfg.minSTokenBpsToSubmit;
             _maxProposalAmountBps = cfg.maxProposalAmountBps;
             _minimumQuorumBps = cfg.minimumQuorumBps;
-            _maxRewardTokens = cfg.maxRewardTokens;
         } else {
             // Update project override config (mapping)
             FactoryConfig storage target = _projectOverrideConfig[clankerToken];
@@ -520,7 +537,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             target.minSTokenBpsToSubmit = cfg.minSTokenBpsToSubmit;
             target.maxProposalAmountBps = cfg.maxProposalAmountBps;
             target.minimumQuorumBps = cfg.minimumQuorumBps;
-            target.maxRewardTokens = cfg.maxRewardTokens;
         }
     }
 
@@ -539,7 +555,6 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
         // Prevent zero values that disable functionality
         require(cfg.maxActiveProposals > 0, 'MAX_ACTIVE_PROPOSALS_ZERO');
-        require(cfg.maxRewardTokens > 0, 'MAX_REWARD_TOKENS_ZERO');
         require(cfg.proposalWindowSeconds > 0, 'PROPOSAL_WINDOW_ZERO');
         require(cfg.votingWindowSeconds > 0, 'VOTING_WINDOW_ZERO');
         require(cfg.streamWindowSeconds >= 1 days, 'STREAM_WINDOW_TOO_SHORT');

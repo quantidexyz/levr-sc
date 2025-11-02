@@ -28,7 +28,8 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
         address treasury_,
         address staking_,
         address factory_,
-        address trustedForwarder
+        address trustedForwarder,
+        address[] memory initialWhitelistedTokens
     ) external onlyAuthorized returns (ILevrFactory_v1.Project memory project) {
         project.treasury = treasury_;
         project.staking = staking_;
@@ -59,7 +60,8 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
             clankerToken,
             project.stakedToken,
             project.treasury,
-            factory_
+            factory_,
+            initialWhitelistedTokens
         );
 
         ILevrTreasury_v1(project.treasury).initialize(project.governor, clankerToken);

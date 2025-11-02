@@ -28,12 +28,14 @@ interface ILevrDeployer_v1 {
     /// @param staking_ Pre-deployed staking address (or address(0) to deploy new)
     /// @param factory_ The factory address (for initialization)
     /// @param trustedForwarder The ERC2771 forwarder address
+    /// @param initialWhitelistedTokens Initial whitelist for reward tokens (e.g., WETH - underlying is auto-whitelisted)
     /// @return project The deployed project contract addresses
     function deployProject(
         address clankerToken,
         address treasury_,
         address staking_,
         address factory_,
-        address trustedForwarder
+        address trustedForwarder,
+        address[] memory initialWhitelistedTokens
     ) external returns (ILevrFactory_v1.Project memory project);
 }

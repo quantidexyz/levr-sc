@@ -20,8 +20,6 @@ interface ILevrFactory_v1 {
         uint16 minSTokenBpsToSubmit; // Min % of sToken supply to submit (e.g., 100 = 1%)
         uint16 maxProposalAmountBps; // Max proposal amount as % of treasury (e.g., 500 = 5%)
         uint16 minimumQuorumBps; // Minimum quorum as % of current supply (e.g., 1000 = 10%) - prevents early capture
-        // Staking parameters
-        uint16 maxRewardTokens; // Max non-whitelisted reward tokens (e.g., 10)
     }
 
     /// @notice Project-specific configuration (subset of FactoryConfig, excludes protocolFeeBps).
@@ -36,8 +34,6 @@ interface ILevrFactory_v1 {
         uint16 minSTokenBpsToSubmit;
         uint16 maxProposalAmountBps;
         uint16 minimumQuorumBps;
-        // Staking parameters
-        uint16 maxRewardTokens;
     }
 
     /// @notice Project contract addresses.
@@ -89,6 +85,10 @@ interface ILevrFactory_v1 {
     /// @notice Emitted when a trusted Clanker factory is removed.
     /// @param factory Address of the Clanker factory removed
     event TrustedClankerFactoryRemoved(address indexed factory);
+
+    /// @notice Emitted when the factory's initial whitelist is updated.
+    /// @param tokens New initial whitelist array
+    event InitialWhitelistUpdated(address[] tokens);
 
     /// @notice Emitted when treasury and staking are prepared for deployment.
     /// @param deployer Address that deployed the contracts
@@ -181,6 +181,15 @@ interface ILevrFactory_v1 {
     /// @return Array of trusted Clanker factory addresses
     function getTrustedClankerFactories() external view returns (address[] memory);
 
+    /// @notice Update the factory's initial whitelist for new projects.
+    /// @dev Only callable by owner. Affects future project deployments only.
+    /// @param tokens Array of token addresses to set as initial whitelist
+    function updateInitialWhitelist(address[] calldata tokens) external;
+
+    /// @notice Get the factory's current initial whitelist.
+    /// @return Array of initially whitelisted token addresses for new projects
+    function getInitialWhitelist() external view returns (address[] memory);
+
     /// @notice Check if a factory is trusted.
     /// @param factory Address to check
     /// @return True if factory is trusted, false otherwise
@@ -268,10 +277,4 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Optional project token address (0x0 = default config)
     /// @return Minimum quorum BPS (project override if verified, otherwise default)
     function minimumQuorumBps(address clankerToken) external view returns (uint16);
-
-    // Staking config getters
-    /// @notice Maximum number of non-whitelisted reward tokens (e.g., 10).
-    /// @param clankerToken Optional project token address (0x0 = default config)
-    /// @return Max reward tokens (project override if verified, otherwise default)
-    function maxRewardTokens(address clankerToken) external view returns (uint16);
 }

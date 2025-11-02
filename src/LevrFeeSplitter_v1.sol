@@ -105,7 +105,10 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
         if (!_isSplitsConfigured()) revert SplitsNotConfigured();
 
+        // Enforce whitelist: only whitelisted tokens can be distributed
         address staking = getStakingAddress();
+        require(ILevrStaking_v1(staking).isTokenWhitelisted(rewardToken), 'TOKEN_NOT_WHITELISTED');
+
         bool sentToStaking = false;
 
         for (uint256 i = 0; i < _splits.length; i++) {
@@ -250,7 +253,10 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
         if (!_isSplitsConfigured()) revert SplitsNotConfigured();
 
+        // Enforce whitelist: only whitelisted tokens can be distributed
         address staking = getStakingAddress();
+        require(ILevrStaking_v1(staking).isTokenWhitelisted(rewardToken), 'TOKEN_NOT_WHITELISTED');
+
         bool sentToStaking = false;
 
         for (uint256 i = 0; i < _splits.length; i++) {

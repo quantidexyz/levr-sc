@@ -36,6 +36,20 @@ contract DeployLevrFactoryDevnet is Script {
     uint16 constant PROTOCOL_FEE_BPS = 50; // 0.5%
     uint32 constant STREAM_WINDOW_SECONDS = 259200; // 3 days
 
+    /**
+     * @notice Get WETH address for the current chain
+     * @param chainId The chain ID to get WETH for
+     * @return The WETH address
+     */
+    function getWETH(uint256 chainId) internal pure returns (address) {
+        // Base mainnet (8453): 0x4200000000000000000000000000000000000006
+        if (chainId == 8453) return 0x4200000000000000000000000000000000000006;
+        // Base Sepolia (84532): 0x4200000000000000000000000000000000000006
+        if (chainId == 84532) return 0x4200000000000000000000000000000000000006;
+        // Default for local devnet/anvil
+        return 0x4200000000000000000000000000000000000006;
+    }
+
     function run() external {
         uint256 privateKey = vm.envUint('PRIVATE_KEY');
         address deployer = vm.addr(privateKey);
@@ -65,8 +79,7 @@ contract DeployLevrFactoryDevnet is Script {
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 500, // 5%
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         console.log('Factory Configuration:');
@@ -79,7 +92,6 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('- Approval BPS:', config.approvalBps);
         console.log('- Min sToken BPS to Submit:', config.minSTokenBpsToSubmit);
         console.log('- Max Proposal Amount BPS:', config.maxProposalAmountBps);
-        console.log('- Max Reward Tokens (non-whitelisted):', config.maxRewardTokens);
         console.log('');
 
         vm.startBroadcast(privateKey);
@@ -102,12 +114,20 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('Deployer Logic deployed at:', address(levrDeployer));
         console.log('Authorized Factory:', levrDeployer.authorizedFactory());
 
-        // Deploy the factory with forwarder and deployer logic
+        // Build initial whitelist (WETH always included)
+        address weth = getWETH(block.chainid);
+        address[] memory initialWhitelist = new address[](1);
+        initialWhitelist[0] = weth;
+        console.log('Initial whitelist:');
+        console.log('- WETH:', weth);
+
+        // Deploy the factory with forwarder, deployer logic, and initial whitelist
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
             deployer,
             address(forwarder),
-            address(levrDeployer)
+            address(levrDeployer),
+            initialWhitelist
         );
 
         // Verify the factory was deployed at the predicted address
@@ -153,7 +173,6 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('approvalBps:', factory.approvalBps(address(0)));
         console.log('minSTokenBpsToSubmit:', factory.minSTokenBpsToSubmit(address(0)));
         console.log('maxProposalAmountBps:', factory.maxProposalAmountBps(address(0)));
-        console.log('maxRewardTokens:', factory.maxRewardTokens(address(0)));
         console.log('protocolTreasury:', factory.protocolTreasury());
         console.log('trustedForwarder:', factory.trustedForwarder());
 

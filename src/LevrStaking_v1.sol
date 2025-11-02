@@ -51,7 +51,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address underlying_,
         address stakedToken_,
         address treasury_,
-        address factory_
+        address factory_,
+        address[] memory initialWhitelistedTokens
     ) external {
         // Ensure initialization only happens once
         if (underlying != address(0)) revert AlreadyInitialized();
@@ -70,7 +71,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         treasury = treasury_;
         factory = factory_;
 
-        // Initialize underlying token with pool-based state
+        // Initialize underlying token with pool-based state (ALWAYS whitelisted - separate from array)
         _tokenState[underlying_] = ILevrStaking_v1.RewardTokenState({
             availablePool: 0,
             streamTotal: 0,
@@ -81,6 +82,29 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             streamEnd: 0
         });
         _rewardTokens.push(underlying_);
+
+        // Initialize additional whitelisted tokens from factory config (e.g., WETH)
+        for (uint256 i = 0; i < initialWhitelistedTokens.length; i++) {
+            address token = initialWhitelistedTokens[i];
+
+            // Skip if already initialized (underlying was already added)
+            if (token == underlying_ || _tokenState[token].exists) continue;
+
+            // Skip zero addresses
+            if (token == address(0)) continue;
+
+            // Initialize whitelisted token
+            _tokenState[token] = ILevrStaking_v1.RewardTokenState({
+                availablePool: 0,
+                streamTotal: 0,
+                lastUpdate: 0,
+                exists: true,
+                whitelisted: true,
+                streamStart: 0,
+                streamEnd: 0
+            });
+            _rewardTokens.push(token);
+        }
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -207,6 +231,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     function whitelistToken(address token) external nonReentrant {
         if (token == address(0)) revert ZeroAddress();
 
+        // CRITICAL: Cannot modify underlying token's whitelist status
+        require(token != underlying, 'CANNOT_MODIFY_UNDERLYING');
+
         // Only token admin can whitelist
         address tokenAdmin = IClankerToken(underlying).admin();
         require(_msgSender() == tokenAdmin, 'ONLY_TOKEN_ADMIN');
@@ -214,6 +241,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Cannot whitelist already whitelisted token
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         require(!tokenState.whitelisted, 'ALREADY_WHITELISTED');
+
+        // If token exists, verify it has no pending rewards (prevent state corruption)
+        if (tokenState.exists) {
+            require(
+                tokenState.availablePool == 0 && tokenState.streamTotal == 0,
+                'CANNOT_WHITELIST_WITH_PENDING_REWARDS'
+            );
+        }
 
         tokenState.whitelisted = true;
 
@@ -225,9 +260,47 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             tokenState.lastUpdate = 0;
             tokenState.streamStart = 0;
             tokenState.streamEnd = 0;
+            _rewardTokens.push(token);
         }
 
         emit ILevrStaking_v1.TokenWhitelisted(token);
+    }
+
+    /// @inheritdoc ILevrStaking_v1
+    function unwhitelistToken(address token) external nonReentrant {
+        if (token == address(0)) revert ZeroAddress();
+
+        // CRITICAL: CANNOT unwhitelist underlying token (permanent protection)
+        require(token != underlying, 'CANNOT_UNWHITELIST_UNDERLYING');
+
+        // Only token admin can unwhitelist
+        address tokenAdmin = IClankerToken(underlying).admin();
+        require(_msgSender() == tokenAdmin, 'ONLY_TOKEN_ADMIN');
+
+        // Token must exist and be whitelisted
+        ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
+        require(tokenState.exists, 'TOKEN_NOT_REGISTERED');
+        require(tokenState.whitelisted, 'NOT_WHITELISTED');
+
+        // CRITICAL: Cannot unwhitelist if token has pending rewards (would make them unclaimable)
+        require(
+            tokenState.availablePool == 0 && tokenState.streamTotal == 0,
+            'CANNOT_UNWHITELIST_WITH_PENDING_REWARDS'
+        );
+
+        // Settle the pool to ensure all rewards are accounted for before unwhitelisting
+        _settlePoolForToken(token);
+
+        // Verify again after settlement (in case streaming added to pool)
+        require(
+            tokenState.availablePool == 0 && tokenState.streamTotal == 0,
+            'CANNOT_UNWHITELIST_WITH_PENDING_REWARDS'
+        );
+
+        // Remove from whitelist (token state kept for historical tracking)
+        tokenState.whitelisted = false;
+
+        emit ILevrStaking_v1.TokenUnwhitelisted(token);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -441,32 +514,28 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address token
     ) internal returns (ILevrStaking_v1.RewardTokenState storage tokenState) {
         tokenState = _tokenState[token];
+
+        // If token doesn't exist, it must be whitelisted to be added
         if (!tokenState.exists) {
-            bool wasWhitelisted = tokenState.whitelisted;
-            if (!wasWhitelisted) {
-                // Enforce max reward tokens (whitelisted tokens exempt)
-                uint16 maxRewardTokens = ILevrFactory_v1(factory).maxRewardTokens(underlying);
+            // Only whitelisted tokens can be used as rewards
+            require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
 
-                uint256 nonWhitelistedCount = 0;
-                for (uint256 i = 0; i < _rewardTokens.length; i++) {
-                    if (!_tokenState[_rewardTokens[i]].whitelisted) {
-                        nonWhitelistedCount++;
-                    }
-                }
-                require(nonWhitelistedCount < maxRewardTokens, 'MAX_REWARD_TOKENS_REACHED');
-            }
-
+            // This should never happen (whitelisted implies exists from initialize or whitelistToken)
+            // But if somehow it does, we initialize it
             _tokenState[token] = ILevrStaking_v1.RewardTokenState({
                 availablePool: 0,
                 streamTotal: 0,
                 lastUpdate: 0,
                 exists: true,
-                whitelisted: wasWhitelisted,
+                whitelisted: true,
                 streamStart: 0,
                 streamEnd: 0
             });
             tokenState = _tokenState[token];
             _rewardTokens.push(token);
+        } else {
+            // Token exists, verify it's whitelisted
+            require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
         }
     }
 
