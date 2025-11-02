@@ -4,6 +4,137 @@ All notable changes to the Levr V1 protocol are documented here.
 
 ---
 
+## [1.5.0] - 2025-11-02 - Whitelist-Only Reward Token System
+
+**Status:** ✅ Complete - All 516 tests passing (465 unit + 51 E2E)
+
+### 🎯 Security Enhancement: Mandatory Reward Token Whitelisting
+
+#### Overview
+
+Replaced the optional `maxRewardTokens` limit with a mandatory whitelist-only system for reward tokens. All reward tokens (except the underlying token, which is auto-whitelisted) must be explicitly whitelisted by the token admin before they can be used for staking rewards or fee distribution.
+
+**What Changed:**
+
+- **Removed** `maxRewardTokens` configuration parameter from `FactoryConfig` and `ProjectConfig`
+- **Added** `updateInitialWhitelist(address[] tokens)` and `getInitialWhitelist()` to factory
+- **Added** `unwhitelistToken(address token)` to staking contract
+- **Enhanced** `whitelistToken` with state corruption prevention checks
+- **Protected** underlying token from being unwhitelisted (immutably whitelisted)
+- **Modified** `initialize()` to accept `address[] initialWhitelistedTokens` parameter
+- **Enforced** whitelist checks in all reward accrual and distribution paths
+- **Deployment** Factory initialized with WETH in initial whitelist for all chains
+
+**Why This Matters:**
+
+1. **Security:** Prevents unvetted tokens from being added as rewards
+2. **Control:** Project admins explicitly approve each reward token
+3. **Inheritance:** New projects inherit factory's initial whitelist (e.g., WETH)
+4. **Flexibility:** Projects can extend their whitelist beyond the initial set
+5. **Protection:** Cannot unwhitelist tokens with pending rewards (prevents fund loss)
+
+**Architecture:**
+
+```solidity
+// Factory stores initial whitelist (e.g., [WETH])
+address[] private _initialWhitelistedTokens;
+
+// Projects inherit on deployment
+function register(address clankerToken) external {
+    // ... deploy contracts ...
+    staking.initialize(
+        underlying,
+        stakedToken,
+        treasury,
+        factory,
+        _initialWhitelistedTokens  // Inherited + underlying (auto)
+    );
+}
+
+// Project admins can extend whitelist
+function whitelistToken(address token) external {
+    require(token != underlying, 'CANNOT_MODIFY_UNDERLYING');
+    require(_msgSender() == tokenAdmin, 'ONLY_TOKEN_ADMIN');
+    require(!tokenState.whitelisted, 'ALREADY_WHITELISTED');
+
+    // Prevent state corruption if token was previously used
+    if (tokenState.exists) {
+        require(
+            tokenState.availablePool == 0 && tokenState.streamTotal == 0,
+            'CANNOT_WHITELIST_WITH_PENDING_REWARDS'
+        );
+    }
+    // ... whitelist token ...
+}
+
+// Unwhitelisting protected
+function unwhitelistToken(address token) external {
+    require(token != underlying, 'CANNOT_UNWHITELIST_UNDERLYING');
+    require(_msgSender() == tokenAdmin, 'ONLY_TOKEN_ADMIN');
+
+    _settlePoolForToken(token);
+    require(
+        tokenState.availablePool == 0 && tokenState.streamTotal == 0,
+        'CANNOT_UNWHITELIST_WITH_PENDING_REWARDS'
+    );
+    // ... unwhitelist token ...
+}
+```
+
+**Security Protections:**
+
+1. **Underlying Immutability:** `CANNOT_MODIFY_UNDERLYING` prevents whitelisting/unwhitelisting underlying
+2. **State Integrity:** `CANNOT_WHITELIST_WITH_PENDING_REWARDS` prevents re-whitelisting with active rewards
+3. **Fund Protection:** `CANNOT_UNWHITELIST_WITH_PENDING_REWARDS` prevents unwhitelisting with claimable rewards
+4. **Access Control:** Only token admin can whitelist/unwhitelist tokens
+5. **Cleanup Safety:** Must unwhitelist before cleanup to prevent accidental removal
+
+**Files Modified:**
+
+- `src/interfaces/ILevrFactory_v1.sol` - Added whitelist management functions, removed `maxRewardTokens`
+- `src/LevrFactory_v1.sol` - Whitelist storage and passing to projects
+- `src/interfaces/ILevrDeployer_v1.sol` - Added `initialWhitelistedTokens` parameter
+- `src/LevrDeployer_v1.sol` - Pass whitelist to staking initialization
+- `src/interfaces/ILevrStaking_v1.sol` - Added `unwhitelistToken`, updated `initialize`
+- `src/LevrStaking_v1.sol` - Whitelist-only enforcement, state protection
+- `src/LevrFeeSplitter_v1.sol` - Added whitelist checks before distribution
+- `script/DeployLevr.s.sol` - Initialize factory with WETH whitelist
+- `script/DeployLevrFactoryDevnet.s.sol` - Initialize factory with WETH whitelist
+- `test/utils/LevrFactoryDeployHelper.sol` - Added `initializeStakingWithRewardTokens` helpers
+- `test/mocks/MockStaking.sol` - Updated to match new signatures
+- All test files - Updated to whitelist tokens before use
+
+**Test Coverage:**
+
+- ✅ 15 new whitelist system tests (`LevrWhitelist.t.sol`)
+  - Factory initial whitelist management
+  - Project inheritance of factory whitelist
+  - Underlying token protection
+  - Reward state corruption prevention
+  - Complete whitelist lifecycle
+  - Multi-project independent whitelists
+- ✅ All 465 unit tests passing (including new whitelist tests)
+- ✅ All 51 E2E tests updated and passing
+- ✅ Test helpers: `initializeStakingWithRewardTokens()`, `whitelistRewardToken()`
+
+**Migration Notes:**
+
+For existing deployments upgrading to this version:
+
+1. Factory owner must call `updateInitialWhitelist([WETH, ...])` with desired default tokens
+2. Existing projects with non-whitelisted reward tokens must whitelist them via `whitelistToken()`
+3. Tokens with pending rewards cannot be unwhitelisted until rewards are claimed
+4. Underlying token is automatically whitelisted and cannot be modified
+
+**Breaking Changes:**
+
+- ❌ `maxRewardTokens(address)` getter removed from factory
+- ❌ Cannot accrue rewards for non-whitelisted tokens (will revert with `TOKEN_NOT_WHITELISTED`)
+- ❌ Fee splitter will reject distribution of non-whitelisted tokens
+- ⚠️ All deployment scripts must initialize factory with `initialWhitelistedTokens` array
+
+---
+
 ## [1.4.0] - 2025-10-31 - Verified Projects Feature
 
 **Status:** ✅ Complete - All 487 tests passing (436 unit + 51 E2E)

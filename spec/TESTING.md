@@ -1,8 +1,8 @@
 # Testing Guide - Levr V1
 
 **Purpose:** Test utilities, strategies, and best practices  
-**Last Updated:** October 30, 2025 - Phase 1 Complete  
-**Test Coverage:** 459/459 passing (100%) ✅ **+42 tests** 🎉
+**Last Updated:** November 2, 2025 - Whitelist System Complete  
+**Test Coverage:** 516/516 passing (100%) ✅ **+57 tests** 🎉
 
 ---
 
@@ -149,6 +149,143 @@ function _generateFees(uint256 expectedAmount) internal returns (uint256) {
 - **Single swap:** ~150-200k gas
 - **4 swaps + swap-backs:** ~600-800k gas
 - **Batch operations:** Amortized across swaps
+
+---
+
+### LevrFactoryDeployHelper - Whitelist Test Utilities
+
+**Location:** `test/utils/LevrFactoryDeployHelper.sol`  
+**Purpose:** Helper functions for factory deployment and staking initialization with whitelisted reward tokens
+
+#### Features
+
+**1. Staking Initialization with Reward Tokens**
+
+The helper provides functions to initialize staking contracts with pre-whitelisted reward tokens, eliminating the need to manually whitelist common tokens (like WETH) in each test.
+
+**2. Dynamic Token Whitelisting**
+
+For tokens created during tests, use the `whitelistRewardToken` helper to ensure proper access control and validation.
+
+**3. Mock WETH Deployment**
+
+Automatically deploys a mock WETH contract at the hardcoded Base WETH address (`0x4200000000000000000000000000000000000006`) if not already present.
+
+#### Usage in Tests
+
+**Initialize Staking with Pre-Whitelisted Tokens:**
+
+```solidity
+// Initialize with multiple reward tokens already whitelisted
+address[] memory rewardTokens = new address[](2);
+rewardTokens[0] = address(weth);
+rewardTokens[1] = address(usdc);
+
+initializeStakingWithRewardTokens(
+    staking,
+    address(underlying),
+    address(stakedToken),
+    treasury,
+    address(factory),
+    rewardTokens  // These will be whitelisted during initialization
+);
+
+// Now WETH and USDC are ready to use without explicit whitelisting
+weth.mint(address(staking), 100 ether);
+staking.accrueRewards(address(weth));  // Works immediately
+```
+
+**Initialize with Single Reward Token (Convenience):**
+
+```solidity
+// For tests that only need one additional reward token
+initializeStakingWithRewardToken(
+    staking,
+    address(underlying),
+    address(stakedToken),
+    treasury,
+    address(factory),
+    address(weth)  // Single token to whitelist
+);
+```
+
+**Whitelist Dynamically Created Tokens:**
+
+```solidity
+// For tokens created within test functions
+MockERC20 newToken = new MockERC20('New Token', 'NEW');
+
+// Use helper to whitelist with proper access control
+whitelistRewardToken(
+    staking,
+    address(newToken),
+    tokenAdmin  // Address with admin permission
+);
+
+// Now the token can be used for rewards
+newToken.mint(address(staking), 50 ether);
+staking.accrueRewards(address(newToken));
+```
+
+**Important Notes:**
+
+1. **Underlying Token:** Always auto-whitelisted during `initialize()`, separate from the `rewardTokens` array
+2. **Factory Inheritance:** Projects deployed via factory inherit the factory's initial whitelist (e.g., WETH)
+3. **Test Organization:** Use `initializeStakingWithRewardTokens()` in `setUp()` for tokens used across multiple tests
+4. **Dynamic Tokens:** Use `whitelistRewardToken()` for tokens created within individual test functions
+
+#### Example Test Pattern
+
+**Recommended Pattern:**
+
+```solidity
+contract MyStakingTest is Test, LevrFactoryDeployHelper {
+    LevrStaking_v1 staking;
+    MockERC20 underlying;
+    MockERC20 weth;
+    MockERC20 usdc;
+
+    function setUp() public {
+        // Deploy common tokens
+        underlying = new MockERC20('Underlying', 'UND');
+        weth = new MockERC20('WETH', 'WETH');
+        usdc = new MockERC20('USDC', 'USDC');
+
+        // Deploy staking
+        staking = new LevrStaking_v1(address(0));
+        stakedToken = new LevrStakedToken_v1(...);
+
+        // Initialize with commonly used reward tokens
+        address[] memory rewardTokens = new address[](2);
+        rewardTokens[0] = address(weth);
+        rewardTokens[1] = address(usdc);
+
+        vm.prank(address(factory));
+        initializeStakingWithRewardTokens(
+            staking,
+            address(underlying),
+            address(stakedToken),
+            treasury,
+            address(factory),
+            rewardTokens
+        );
+
+        // WETH and USDC are now whitelisted for all tests
+    }
+
+    function test_dynamicToken() public {
+        // Create a test-specific token
+        MockERC20 dai = new MockERC20('DAI', 'DAI');
+
+        // Whitelist it
+        whitelistRewardToken(staking, address(dai), tokenAdmin);
+
+        // Use it
+        dai.mint(address(staking), 100 ether);
+        staking.accrueRewards(address(dai));
+    }
+}
+```
 
 ---
 

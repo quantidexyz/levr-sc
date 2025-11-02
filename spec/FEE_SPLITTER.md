@@ -193,6 +193,8 @@ function configureSplits(address clankerToken, SplitConfig[] calldata splits) ex
 ///      Supports multiple tokens (ETH, WETH, underlying, etc.)
 ///      ⚠️ IMPORTANT: Call once per (clankerToken, rewardToken) pair
 ///         Multiple calls for same pair will have no effect (second call finds 0 balance)
+///      ⚠️ WHITELIST REQUIREMENT (v1.5.0): Reward token must be whitelisted in staking contract
+///         Distribution will revert with TOKEN_NOT_WHITELISTED if token is not whitelisted
 /// @param clankerToken The Clanker token address (identifies the project)
 /// @param rewardToken The reward token to distribute (e.g., WETH, clankerToken itself)
 function distribute(address clankerToken, address rewardToken) external;
@@ -200,6 +202,8 @@ function distribute(address clankerToken, address rewardToken) external;
 /// @notice Batch distribute multiple reward tokens for a single project
 /// @dev More gas efficient than calling distribute() multiple times
 ///      Use this for multi-token fee distribution (e.g., WETH + Clanker token)
+///      ⚠️ WHITELIST REQUIREMENT (v1.5.0): All reward tokens must be whitelisted in staking
+///         Distribution will skip tokens that are not whitelisted (does not revert)
 /// @param clankerToken The Clanker token address (identifies the project)
 /// @param rewardTokens Array of reward tokens to distribute
 function distributeBatch(address clankerToken, address[] calldata rewardTokens) external;

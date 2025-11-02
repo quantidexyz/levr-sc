@@ -209,6 +209,99 @@ function quorumBps(address clankerToken) external view returns (uint16) {
 
 ## Staking Flows
 
+### Flow 2B: Reward Token Whitelisting (NEW - v1.5.0)
+
+**Actors:** Token Admin (owner of underlying/clanker token)
+
+**Steps:**
+
+**1. Initial Whitelist (Inherited from Factory):**
+
+- When project registers via factory, staking is initialized with:
+  - Underlying token (auto-whitelisted, immutable)
+  - Factory's initial whitelist (e.g., WETH)
+  - Projects inherit these tokens automatically
+
+**2. Project Admin Extends Whitelist:**
+
+```solidity
+// Admin whitelists a new reward token (e.g., USDC)
+factory.getProject(clankerToken).admin.whitelistToken(usdcAddress);
+```
+
+**Steps:**
+1. Token admin calls `staking.whitelistToken(newToken)`
+2. Staking validates:
+   - Caller is underlying token admin (`ONLY_TOKEN_ADMIN`)
+   - Token is not underlying (`CANNOT_MODIFY_UNDERLYING`)
+   - Token is not already whitelisted (`ALREADY_WHITELISTED`)
+   - If token was previously used and cleaned up:
+     - `availablePool == 0` and `streamTotal == 0` (`CANNOT_WHITELIST_WITH_PENDING_REWARDS`)
+3. Token state created/updated:
+   - `_tokenState[token].whitelisted = true`
+   - `_tokenState[token].exists = true`
+   - Added to `_rewardTokens` array if new
+4. Emits `TokenWhitelisted(token)` event
+
+**3. Admin Unwhitelists Token:**
+
+```solidity
+// Admin removes token from whitelist (must have no pending rewards)
+factory.getProject(clankerToken).admin.unwhitelistToken(daiAddress);
+```
+
+**Steps:**
+1. Token admin calls `staking.unwhitelistToken(token)`
+2. Staking validates:
+   - Caller is underlying token admin (`ONLY_TOKEN_ADMIN`)
+   - Token is not underlying (`CANNOT_UNWHITELIST_UNDERLYING`)
+   - Settles pool to current time
+   - `availablePool == 0` and `streamTotal == 0` (`CANNOT_UNWHITELIST_WITH_PENDING_REWARDS`)
+3. Token state updated:
+   - `_tokenState[token].whitelisted = false`
+   - Token remains in `_rewardTokens` array (for historical tracking)
+4. Emits `TokenUnwhitelisted(token)` event
+
+**State Changes:**
+
+- Factory: `_initialWhitelistedTokens` array (set once at deployment)
+- Staking: `_tokenState[token].whitelisted` (true/false per token)
+- Staking: `_rewardTokens` array (grows with new tokens, never shrinks)
+
+**Security Protections:**
+
+1. **Underlying Immutability:** Cannot whitelist/unwhitelist underlying token
+2. **Access Control:** Only token admin can manage whitelist
+3. **State Integrity:** Cannot re-whitelist token with pending rewards
+4. **Fund Protection:** Cannot unwhitelist token with claimable rewards
+5. **Cleanup Safety:** Must unwhitelist before cleanup
+
+**Edge Cases to Test:**
+
+- ✅ Tested: Cannot modify underlying token whitelist status
+- ✅ Tested: Cannot whitelist already whitelisted token
+- ✅ Tested: Cannot unwhitelist token with pending rewards
+- ✅ Tested: Cannot unwhitelist token with vested pool rewards
+- ✅ Tested: Can re-whitelist after cleanup (if no pending rewards)
+- ✅ Tested: Projects inherit factory's initial whitelist
+- ✅ Tested: Multiple projects have independent whitelists
+- ✅ Tested: Only token admin can whitelist/unwhitelist
+
+**Whitelist-Only Enforcement:**
+
+All reward accrual and distribution paths now enforce whitelist:
+
+```solidity
+// Staking: accrueRewards()
+require(tokenState.exists, 'TOKEN_NOT_WHITELISTED');
+require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
+
+// Fee Splitter: distribute() and _distributeSingle()
+require(ILevrStaking_v1(staking).isTokenWhitelisted(rewardToken), 'TOKEN_NOT_WHITELISTED');
+```
+
+---
+
 ### Flow 3: First-Time Staking
 
 **Actors:** User (any address with underlying tokens)
