@@ -15,6 +15,15 @@ via_ir = false
 optimizer = true
 optimizer_runs = 200
 
+# Coverage profile - Optimized for cloud coverage analysis
+# Usage: FOUNDRY_PROFILE=coverage forge coverage --match-path "test/unit/*.t.sol" --ir-minimum
+[profile.coverage]
+via_ir = false
+optimizer = true
+optimizer_runs = 200
+# Coverage-specific settings for cloud efficiency
+memory_limit = 4096
+
 [rpc_endpoints]
 anvil = "http://localhost:8545"
 optimism-sepolia = "https://lb.drpc.live/optimism-sepolia/${DRPC_API_KEY}"
