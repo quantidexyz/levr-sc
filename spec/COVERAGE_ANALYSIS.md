@@ -15,22 +15,80 @@
 
 ## 📋 Table of Contents
 
-1. [🚀 Quick Start Guide](#-quick-start-guide) - Start improving coverage today
-2. [Executive Summary](#executive-summary) - Current metrics and targets
-3. [Core Contracts Coverage Analysis](#core-contracts-coverage-analysis) - Detailed breakdown
-4. [Phase 1: Foundation Tests](#phase-1-quick-wins-estimated-15-branch-coverage) - RewardMath, StakedToken, Deployer (45%)
-5. [Phase 2: Core Contract Tests](#phase-2-core-contracts-estimated-25-branch-coverage) - Factory, Staking, Governor (70%)
-6. [Phase 3: Excellence Tests](#phase-3-achieving-excellence-estimated-20-branch-coverage) - Exotic edges, reentrancy (90%)
-7. [Phase 4: Perfection](#phase-4-perfection-estimated-10-branch-coverage) - Final 10% to 100%
-8. [Test File Organization](#test-file-organization-recommendations) - Structure and naming
-9. [Automated Coverage Tracking](#automated-coverage-tracking) - CI/CD integration
-10. [Branch Coverage Roadmap](#branch-coverage-roadmap-to-100) - Milestone plan
-11. [Quick Reference](#quick-reference-tests-to-write) - Immediate action items
-12. [Conclusion](#conclusion) - Path forward and next steps
+1. [⚠️ CRITICAL: Pre-Coverage Work](#️-critical-pre-coverage-work-required) - **READ THIS FIRST**
+2. [🚀 Quick Start Guide](#-quick-start-guide-after-pre-work) - Start improving coverage
+3. [Executive Summary](#executive-summary) - Current metrics and targets
+4. [Code Quality Issues](#-code-quality-issues-discovered-during-coverage-analysis) - **Dead code analysis**
+5. [Core Contracts Coverage Analysis](#core-contracts-coverage-analysis) - Detailed breakdown
+6. [Phase 1: Foundation Tests](#phase-1-quick-wins-estimated-15-branch-coverage) - RewardMath, StakedToken, Deployer (45%)
+7. [Phase 2: Core Contract Tests](#phase-2-core-contracts-estimated-25-branch-coverage) - Factory, Staking, Governor (70%)
+8. [Phase 3: Excellence Tests](#phase-3-achieving-excellence-estimated-20-branch-coverage) - Exotic edges, reentrancy (90%)
+9. [Phase 4: Perfection](#phase-4-perfection-estimated-10-branch-coverage) - Final 10% to 100%
+10. [Test Writing Best Practices](#test-writing-best-practices) - **How to verify code correctness**
+11. [Test File Organization](#test-file-organization-recommendations) - Structure and naming
+12. [Automated Coverage Tracking](#automated-coverage-tracking) - CI/CD integration
+13. [Branch Coverage Roadmap](#branch-coverage-roadmap-to-100) - Milestone plan
+14. [Quick Reference](#quick-reference-tests-to-write) - Immediate action items
+15. [Conclusion](#conclusion) - Path forward and next steps
 
 ---
 
-## 🚀 Quick Start Guide
+## ⚠️ CRITICAL: Pre-Coverage Work Required
+
+**🚨 STOP! Before improving coverage, fix code quality issues discovered during analysis.**
+
+### Issue Found: Dead Code in RewardMath.sol
+
+**Problem:** `calculateUnvested()` function (35 lines) is **unused and contains historical bugs**  
+**Impact:** 87.5% of uncovered branches in RewardMath are in dead code!  
+**Action Required:** Remove dead code FIRST, then improve coverage
+
+**Why This Matters:**
+
+- ❌ Testing dead buggy code = wasted effort
+- ❌ Low coverage metrics misleading (due to dead code)
+- ❌ Increases attack surface
+- ✅ Removing it instantly improves RewardMath coverage 12.50% → ~80%
+
+### Required Pre-Work (30 minutes)
+
+```bash
+# 1. Verify dead code
+cd /Users/anon/Desktop/mguleryuz/levr/packages/levr-sdk/contracts
+grep -r "calculateUnvested" src/ --include="*.sol" | grep -v "// "
+# Should only show definition, NO usage
+
+# 2. Review the dead code
+cat src/libraries/RewardMath.sol | sed -n '48,83p'
+
+# 3. Create backup and remove
+git add -A
+git commit -m "Pre-coverage: Backup before removing dead code"
+
+# Delete lines 48-83 (calculateUnvested function)
+# Use your editor to remove the function
+
+# 4. Verify tests still pass
+FOUNDRY_PROFILE=dev forge test --match-path "test/unit/*.t.sol" -vvv
+# Should still pass - function was unused!
+
+# 5. Re-run coverage
+FOUNDRY_PROFILE=dev forge coverage --match-path "test/unit/*.t.sol" --ir-minimum
+# Expected: RewardMath 12.50% → ~80% instantly!
+
+# 6. Commit the cleanup
+git add -A
+git commit -m "Remove dead code: calculateUnvested() (unused, had bugs)"
+
+# 7. Update HISTORICAL_FIXES.md
+# Document the removal and why
+```
+
+**After completing pre-work, proceed to Quick Start Guide below.**
+
+---
+
+## 🚀 Quick Start Guide (After Pre-Work)
 
 **Want to start improving coverage immediately?** Follow these steps:
 
@@ -41,20 +99,29 @@ cd /Users/anon/Desktop/mguleryuz/levr/packages/levr-sdk/contracts
 FOUNDRY_PROFILE=dev forge coverage --match-path "test/unit/*.t.sol" --ir-minimum
 ```
 
+**Expected After Dead Code Removal:**
+
+- RewardMath: ~80% branch coverage (up from 12.50%)
+- Overall: ~30.75% branch coverage (up from 29.11%)
+
 ### Step 2: Start with Highest Priority (Today)
 
 Create the RewardMath complete branch coverage test file:
 
 ```bash
-# Create new test file
-touch test/unit/RewardMath.CompleteBranchCoverage.t.sol
+# Create new test file (focus on 3 production functions only)
+touch test/unit/RewardMath.ProductionFunctions.t.sol
 
-# Copy the template from Phase 1 section below
+# Focus on:
+# - calculateVestedAmount (most complex)
+# - calculateProportionalClaim (simple)
+# - calculateCurrentPool (wrapper)
+
 # Run tests to verify
-FOUNDRY_PROFILE=dev forge test --match-path "test/unit/RewardMath.CompleteBranchCoverage.t.sol" -vvv
+FOUNDRY_PROFILE=dev forge test --match-path "test/unit/RewardMath.ProductionFunctions.t.sol" -vvv
 ```
 
-### Step 3: Follow the Roadmap
+### Step 3: Follow the Updated Roadmap
 
 1. **Week 1-2:** Foundation (RewardMath → LevrStakedToken → LevrDeployer → LevrTreasury)
 2. **Week 3-6:** Core Contracts (LevrFactory → LevrStaking → LevrGovernor)
@@ -70,14 +137,15 @@ FOUNDRY_PROFILE=dev forge coverage --match-path "test/unit/*.t.sol" --ir-minimum
 # Watch the branch coverage percentage increase!
 ```
 
-**Expected Progress:**
+**Expected Progress (After Dead Code Removal):**
 
-- Day 1: RewardMath 12.5% → 100% (+1.64% overall)
-- Week 1: 29% → 35% (+6% overall)
-- Week 2: 35% → 45% (+10% overall)
-- Month 1: 45% → 70% (+25% overall)
-- Month 2: 70% → 90% (+20% overall)
-- Month 3: 90% → 100% (+10% overall) 🎯
+- Day 0: Dead code removed → 30.75% baseline ✅
+- Day 1: RewardMath 80% → 100% (+0.47% overall)
+- Week 1: 30.75% → 37% (+6% overall)
+- Week 2: 37% → 47% (+10% overall)
+- Month 1: 47% → 72% (+25% overall)
+- Month 2: 72% → 92% (+20% overall)
+- Month 3: 92% → 100% (+8% overall) 🎯
 
 ---
 
@@ -381,27 +449,251 @@ Branches:   12.50% (1/8)    🔴 CRITICAL (WORST)
 Functions:  100.00% (4/4)   ✅ Perfect
 ```
 
+**🚨 CRITICAL FINDING: Dead Code with Historical Bugs**
+
 **Analysis:**
 
 - **7 untested branches** out of 8 total (WORST branch coverage)
 - Critical math library with complex edge cases
-- **Priority branches to test:**
-  - Division by zero protection (all functions)
-  - Overflow/underflow scenarios
-  - Zero input handling (accPerShare, totalStaked, duration, etc.)
-  - Extreme value combinations (max uint256, dust amounts)
-  - Precision loss scenarios
+- **⚠️ CONTAINS DEAD CODE:** `calculateUnvested()` is **not used in production**
 
-**Existing Coverage:**
+**Dead Code Investigation:**
 
-- ✅ 4 tests in `RewardMath.DivisionSafety.t.sol` (but limited)
+```solidity
+// RewardMath.sol lines 48-83
+function calculateUnvested(...) internal pure returns (uint256 unvested) {
+    // This function is NEVER called in production code!
+    // Historical context: Used in old version, had bugs, was replaced
+    // Current implementation uses streamTotal directly (LevrStaking_v1.sol:508)
+}
+```
+
+**Historical Bug (Fixed by Removal, Not by Fixing):**
+
+From `spec/external-2/CRITICAL_FINDINGS_POST_OCT29_CHANGES.md`:
+
+- **CRITICAL-NEW-1:** Function had bug in "stream still active" branch (line 77-82)
+- Bug caused 16.67% permanent fund loss when streams were paused mid-stream
+- **Resolution:** Code switched to using `streamTotal` directly instead of this function
+- **Status:** Function left in codebase but unused (dead code)
+
+**Current Usage Analysis:**
+
+```solidity
+// src/LevrStaking_v1.sol:508 (ACTUAL PRODUCTION CODE)
+function _creditRewards(address token, uint256 amount) internal {
+    // ...
+    _resetStreamForToken(token, amount + tokenState.streamTotal);
+    // Uses streamTotal directly ✅ - CORRECT, avoids the bug
+}
+```
+
+**Functions Actually Used:**
+
+- ✅ `calculateVestedAmount` - Used in `calculateCurrentPool` (line 118)
+- ✅ `calculateCurrentPool` - Used in `claimableRewards` (line 344)
+- ✅ `calculateProportionalClaim` - Used in `claimableRewards` (line 354)
+- ❌ `calculateUnvested` - **NEVER USED** (dead code)
+
+**Priority Actions:**
+
+1. **IMMEDIATE: Remove dead code** (Recommended)
+
+   ```solidity
+   // Delete lines 41-83 in RewardMath.sol
+   // Remove calculateUnvested() function entirely
+   ```
+
+2. **ALTERNATIVE: Fix the bug if intended for future use**
+
+   ```solidity
+   // Fix line 78-82 to use 'last' instead of assuming continuous vesting
+   // But since it's unused, removal is safer
+   ```
+
+3. **Test the remaining functions only**
+   - Focus on `calculateVestedAmount` (complex, heavily used)
+   - Focus on `calculateProportionalClaim` (simple, heavily used)
+   - Focus on `calculateCurrentPool` (wrapper function)
+
+**Updated Testing Strategy:**
+
+Since `calculateUnvested` is dead code:
+
+- **Option 1 (Recommended):** Remove function, test remaining 3 functions → easier to achieve 100% coverage
+- **Option 2:** Keep dead code, document bug, test anyway → complete coverage but testing buggy unused code
+- **Option 3:** Fix bug first, then test → safest if function might be used in future
 
 **Recommended Test Files:**
 
-- `RewardMath.BranchCoverage.t.sol` - Systematic branch testing
-- `RewardMath.ExtremeValues.t.sol` - Boundary and overflow tests
-- `RewardMath.ZeroHandling.t.sol` - All zero-value scenarios
-- `RewardMath.PrecisionEdges.t.sol` - Precision loss edge cases
+- `RewardMath.CompleteBranchCoverage.t.sol` - Test all 4 functions (document dead code)
+- `RewardMath.DeadCodeAnalysis.t.sol` - Test calculateUnvested's bug scenarios
+- `RewardMath.ProductionFunctions.t.sol` - Focus on 3 actually-used functions
+
+**Testing Priority for Production Functions:**
+
+1. **calculateVestedAmount** - Most complex, 6+ branches, heavily used
+2. **calculateCurrentPool** - Simple wrapper, inherits calculateVestedAmount coverage
+3. **calculateProportionalClaim** - Simple, 1 branch (zero check), heavily used
+
+---
+
+## 🔍 Code Quality Issues Discovered During Coverage Analysis
+
+### Critical Finding 1: Dead Code in RewardMath.sol
+
+**Function:** `calculateUnvested()` (lines 48-83)  
+**Status:** ⚠️ **DEAD CODE** - Not used anywhere in production  
+**Risk Level:** MEDIUM (increases attack surface, confusing for auditors)
+
+**Evidence:**
+
+```bash
+# Search production code for usage
+grep -r "calculateUnvested" src/ --include="*.sol"
+# Result: Only definition in RewardMath.sol, NO usage!
+```
+
+**Historical Context:**
+
+- Function was used in older version (pre-October 2025)
+- Had critical bug causing 16.67% fund loss (documented in CRITICAL-NEW-1)
+- Fixed by replacing with simpler approach using `streamTotal` directly
+- Function never removed, creating dead code
+
+**Current Production Code:**
+
+```solidity
+// src/LevrStaking_v1.sol:508 - What's ACTUALLY used
+function _creditRewards(address token, uint256 amount) internal {
+    _settlePoolForToken(token);
+    _resetStreamForToken(token, amount + tokenState.streamTotal);
+    // ✅ Uses streamTotal directly - bypasses calculateUnvested entirely
+}
+```
+
+**Impact on Coverage:**
+
+- Function has **~35 lines of dead code** (10.6% of RewardMath.sol)
+- Contains **~7-8 untested branches** (87.5% of uncovered branches!)
+- Low branch coverage (12.50%) is **primarily due to dead code**
+
+**Recommendations:**
+
+**Option 1: Remove Dead Code (STRONGLY RECOMMENDED)**
+
+```solidity
+// Delete lines 41-83 in src/libraries/RewardMath.sol
+// This will:
+// - Improve branch coverage from 12.50% to ~75-85% instantly
+// - Reduce attack surface
+// - Eliminate confusion for auditors
+// - Clean up codebase
+```
+
+**Option 2: Fix Historical Bug (If intended for future use)**
+
+```solidity
+// Fix the "stream still active" branch (lines 77-82)
+// Current buggy code:
+uint256 elapsed = current - start;  // ❌ Ignores 'last', assumes continuous vesting
+
+// Fixed code:
+uint64 effectiveTime = last < current ? last : current;
+uint256 elapsed = effectiveTime > start ? effectiveTime - start : 0;
+// ✅ Respects pause points
+```
+
+**Option 3: Keep and Document (NOT RECOMMENDED)**
+
+```solidity
+// Add comment warning about dead code and known bugs
+// Write tests documenting the bug
+// But this leaves buggy code in production repo
+```
+
+**Recommended Action:**
+
+```bash
+# 1. Remove dead code
+git diff src/libraries/RewardMath.sol # Review the function
+# Delete lines 41-83 (calculateUnvested function)
+
+# 2. Update tests
+# Remove calculateUnvested tests from RewardMath.CompleteBranchCoverage.t.sol
+
+# 3. Re-run coverage
+FOUNDRY_PROFILE=dev forge coverage --match-path "test/unit/*.t.sol" --ir-minimum
+
+# Expected result:
+# RewardMath branch coverage: 12.50% → 75-85% (instant improvement!)
+```
+
+**Impact on Coverage Roadmap:**
+
+After removing dead code:
+
+- **RewardMath.sol:** 12.50% → ~80% branch coverage (instant +67.5%)
+- **Overall:** 29.11% → ~30.75% branch coverage (instant +1.64%)
+- **Remaining work:** Test actual production functions only
+
+---
+
+### Critical Finding 2: Potential Additional Dead Code
+
+**Investigation Needed:**
+
+During coverage analysis, check for other unused functions:
+
+```bash
+# Find all public/external functions
+forge inspect LevrFactory_v1 methods
+forge inspect LevrStaking_v1 methods
+forge inspect LevrGovernor_v1 methods
+
+# Cross-reference with actual call sites
+# Look for functions defined but never called
+```
+
+**Red Flags for Dead Code:**
+
+- ✅ Function defined in contract
+- ❌ No calls in any src/ file
+- ❌ No external calls in integration tests
+- ⚠️ Only mentioned in old spec documents
+
+---
+
+### Code Quality Impact on Coverage
+
+**Before Addressing Dead Code:**
+
+- Overall branch coverage: 29.11%
+- RewardMath: 12.50% (worst offender)
+- Significant coverage gap from unused code
+
+**After Removing Dead Code:**
+
+- Overall branch coverage: ~30.75% (+1.64%)
+- RewardMath: ~80% (+67.5%)
+- More accurate coverage of actual production code
+
+**Key Insight:**
+
+**Coverage analysis reveals not just untested code, but also unnecessary code.** Dead code:
+
+1. ❌ Increases attack surface (more code = more potential bugs)
+2. ❌ Wastes gas on deployment (more bytecode)
+3. ❌ Confuses auditors (why is this here?)
+4. ❌ Makes coverage metrics misleading
+5. ❌ Creates maintenance burden
+
+**Best Practice:**
+
+✅ **Remove dead code immediately** before continuing coverage improvement
+✅ **Document removal in HISTORICAL_FIXES.md**
+✅ **Run coverage again to get accurate baseline**
+✅ **Then proceed with systematic branch coverage improvement**
 
 ---
 
@@ -1271,6 +1563,552 @@ test/unit/LevrTreasury.Final10Percent.t.sol
 test/unit/LevrForwarder.Final10Percent.t.sol
 test/unit/AllContracts.CompletelyExhausitve.t.sol
 ```
+
+---
+
+## Test Writing Best Practices
+
+### 🚨 Golden Rule: Never Make Tests Pass If Code Is Incorrect
+
+**Critical Principle:**
+
+> Tests should verify that code is CORRECT, not just that it executes.  
+> If you find a bug while writing tests, FIX THE BUG, don't write tests that pass despite the bug.
+
+---
+
+### Workflow for Writing Coverage Tests
+
+#### Step 1: Read and Understand the Code
+
+**Before writing ANY test:**
+
+```bash
+# 1. Read the function you're testing
+cat src/libraries/RewardMath.sol | sed -n '16,39p' # Example: calculateVestedAmount
+
+# 2. Understand the logic
+# - What is it supposed to do?
+# - What are the edge cases?
+# - What could go wrong?
+
+# 3. Check for obvious bugs
+# - Off-by-one errors
+# - Missing validation
+# - Incorrect calculations
+# - Unreachable code
+```
+
+#### Step 2: Verify Code is Actually Used
+
+**Before testing a function, verify it's not dead code:**
+
+```bash
+# Search for usage in production code
+grep -r "functionName" src/ --include="*.sol" | grep -v "^src/.*\.sol:.*function"
+
+# If you only see the definition and no calls → DEAD CODE!
+# Action: Document and recommend removal
+```
+
+#### Step 3: Analyze Each Branch
+
+**For each conditional in the code:**
+
+```solidity
+// Example from calculateVestedAmount
+if (end == 0 || start == 0) return (0, last);  // Branch 1
+if (to > end) to = end;                         // Branch 2
+if (to <= from) return (0, last);               // Branch 3
+if (total == 0) return (0, to);                 // Branch 4
+```
+
+**Ask for each branch:**
+
+1. ✅ Is this condition correct? (Logic check)
+2. ✅ Can this branch be reached? (Reachability check)
+3. ✅ What happens when this branch executes? (Behavior check)
+4. ✅ Are there any bugs in this branch? (Bug check)
+
+#### Step 4: Write Tests That Verify Correctness
+
+**Good Test (Verifies Correctness):**
+
+```solidity
+function test_calculateVestedAmount_halfway_vestsHalf() public pure {
+    uint256 total = 1000 ether;
+    uint64 start = 1000;
+    uint64 end = 2000;
+    uint64 last = 1000;
+    uint64 current = 1500; // Halfway
+
+    (uint256 vested, uint64 newLast) = RewardMath.calculateVestedAmount(
+        total, start, end, last, current
+    );
+
+    // VERIFY CORRECTNESS:
+    uint256 duration = end - start; // 1000
+    uint256 elapsed = current - last; // 500
+    uint256 expected = (total * elapsed) / duration; // 500 ether
+
+    assertEq(vested, expected, "Vesting should be linear");
+    assertEq(vested, 500 ether, "Halfway should vest exactly half");
+    assertEq(newLast, current, "Should update last to current");
+}
+```
+
+**Bad Test (Just Makes It Pass):**
+
+```solidity
+function test_someBranch() public pure {
+    // Call function
+    uint256 result = someFunction(input);
+
+    // Just check it returns something
+    assertTrue(result >= 0, "Returns a value");
+    // ❌ Doesn't verify CORRECTNESS
+    // ❌ Would pass even if function is buggy
+}
+```
+
+#### Step 5: Test Edge Cases and Invariants
+
+**For each function, test:**
+
+1. **Zero Values**
+
+   ```solidity
+   function test_functionName_zeroInput_handlesCorrectly() public {
+       // Test with amount = 0, address = 0, etc.
+       // Verify: Should revert OR return 0 (depending on spec)
+   }
+   ```
+
+2. **Maximum Values**
+
+   ```solidity
+   function test_functionName_maxValues_noOverflow() public {
+       // Test with type(uint256).max
+       // Verify: Should not overflow (Solidity 0.8.x auto-reverts)
+   }
+   ```
+
+3. **Boundary Conditions**
+
+   ```solidity
+   function test_functionName_atBoundary_correctBehavior() public {
+       // Test when current == end, current == start, etc.
+       // Verify: Inclusive/exclusive boundaries are correct
+   }
+   ```
+
+4. **Invariants**
+   ```solidity
+   function test_functionName_preservesInvariant() public {
+       // Test mathematical invariants
+       // Example: vested + unvested should always equal total
+       assertEq(vested + unvested, total, "Invariant broken!");
+   }
+   ```
+
+---
+
+### How to Handle Bugs Found During Testing
+
+#### Scenario 1: You Find a Bug
+
+**DO NOT make the test pass with buggy code!**
+
+```solidity
+// ❌ WRONG APPROACH
+function test_buggyFunction() public {
+    uint256 result = buggyFunction(10);
+    assertEq(result, 15, "Returns incorrect value");
+    // ^^^ This test PASSES but documents WRONG behavior!
+}
+
+// ✅ CORRECT APPROACH
+function test_buggyFunction_KNOWN_BUG() public {
+    // 1. Document the bug
+    uint256 result = buggyFunction(10);
+
+    // 2. Show what it SHOULD be
+    uint256 expected = 20; // Correct value
+    uint256 actual = result; // Buggy value (15)
+
+    // 3. Document the discrepancy
+    console.log("BUG FOUND: Expected %s, got %s", expected, actual);
+    console.log("Difference: %s (50% error)", expected - actual);
+
+    // 4. Fail the test OR mark it as documenting known bug
+    // Option A: vm.expectRevert() if it should revert
+    // Option B: Skip this test, fix the bug first
+    // Option C: Add TODO comment and file issue
+}
+```
+
+**Action Steps When You Find a Bug:**
+
+1. **Stop writing tests immediately**
+2. **Document the bug** in comments
+3. **Create a spec document**: `spec/BUG_FOUND_[DATE]_[CONTRACT]_[FUNCTION].md`
+4. **File the bug** properly:
+
+   ```markdown
+   # Bug Found During Coverage Testing
+
+   **Date:** November 2, 2025
+   **Contract:** RewardMath.sol
+   **Function:** calculateUnvested()
+   **Line:** 77-82
+   **Severity:** CRITICAL (fund loss)
+
+   ## The Bug
+
+   [Detailed explanation]
+
+   ## Proof of Concept Test
+
+   [Test that demonstrates the bug]
+
+   ## Recommended Fix
+
+   [Code changes needed]
+   ```
+
+5. **Fix the bug** OR **remove dead code**
+6. **THEN write tests** for the corrected code
+
+---
+
+#### Scenario 2: Dead Code
+
+**DO NOT spend time achieving 100% coverage on dead code!**
+
+```bash
+# When you find a function that's never called:
+
+# 1. Verify it's actually dead
+grep -r "functionName" src/ --include="*.sol"
+# If only definition appears → DEAD CODE
+
+# 2. Check git history for why it exists
+git log -p --all -S "functionName"
+
+# 3. Check spec for historical context
+grep -r "functionName" spec/
+
+# 4. Make a decision:
+#    a) Remove if truly unused → RECOMMENDED
+#    b) Fix bugs if intended for future → Only if planned
+#    c) Document as dead code → NOT RECOMMENDED
+
+# 5. Document in HISTORICAL_FIXES.md
+```
+
+**Dead Code Removal Template:**
+
+```markdown
+## Dead Code Removed: [FunctionName]
+
+**Date:** November 2, 2025
+**File:** src/libraries/RewardMath.sol
+**Lines Removed:** 48-83 (35 lines)
+
+### Why It Was Dead Code
+
+- Function defined but never called in production
+- Was replaced by simpler approach in October 2025
+- Left in codebase accidentally
+
+### Historical Context
+
+- Original purpose: Calculate unvested rewards for stream resets
+- Bug history: Had critical bug (16.67% fund loss)
+- Resolution: Replaced with direct streamTotal usage
+
+### Impact
+
+- Reduced attack surface (35 fewer lines)
+- Improved coverage metrics (RewardMath 12.50% → 80%)
+- Eliminated auditor confusion
+- Removed buggy code from codebase
+
+### Verification
+
+All tests still pass after removal - confirms it was unused.
+```
+
+---
+
+#### Scenario 3: Unreachable Code
+
+**When a branch can never be reached:**
+
+```solidity
+// Example from RewardMath
+uint256 duration = end - start;
+require(duration != 0, 'ZERO_DURATION');  // ← This line
+
+// But earlier in the function:
+if (to <= from) return (0, last);
+
+// When start == end:
+// - to gets clamped to end (which equals start)
+// - from gets set to start
+// - to <= from is TRUE, so function returns early
+// - require(duration != 0) is NEVER REACHED!
+```
+
+**Action:**
+
+1. **Document** that the require is unreachable
+2. **Decide** if it's defensive programming (keep) or should be removed
+3. **Test** to verify unreachability
+4. **Comment** in code: `// DEFENSIVE: Unreachable due to early return, but kept for safety`
+
+---
+
+### Verification Checklist for Each Test
+
+Before marking a test as complete, verify:
+
+- [ ] **Correctness**: Does the function behave correctly?
+- [ ] **Expected Values**: Are my assertions checking the RIGHT values?
+- [ ] **Edge Cases**: Have I tested boundaries and special cases?
+- [ ] **Error Conditions**: Do reverts happen for the RIGHT reasons?
+- [ ] **Invariants**: Are mathematical properties preserved?
+- [ ] **No False Positives**: Would this test catch actual bugs?
+- [ ] **Code Review**: Did I read the actual implementation code?
+- [ ] **Dead Code**: Is this function actually used in production?
+
+---
+
+### Examples of Good vs Bad Testing
+
+#### Example 1: Testing Division
+
+**❌ Bad Test (Just Checks It Runs):**
+
+```solidity
+function test_divide() public pure {
+    uint256 result = divide(10, 2);
+    assertTrue(result > 0, "Returns something");
+    // Would pass even if divide returns wrong answer!
+}
+```
+
+**✅ Good Test (Verifies Correctness):**
+
+```solidity
+function test_divide_correctCalculation() public pure {
+    uint256 result = divide(10, 2);
+    assertEq(result, 5, "10 / 2 should equal 5");
+
+    // Test multiple cases
+    assertEq(divide(100, 4), 25, "100 / 4 should equal 25");
+    assertEq(divide(7, 3), 2, "7 / 3 should equal 2 (rounds down)");
+}
+
+function test_divide_zeroDiv isor_reverts() public {
+    vm.expectRevert();
+    divide(10, 0);
+    // Verifies safety check exists
+}
+```
+
+#### Example 2: Testing Proportional Distribution
+
+**❌ Bad Test:**
+
+```solidity
+function test_distribute() public {
+    uint256 share = calculateShare(100, 1000, 500);
+    assertTrue(share <= 500, "Share is reasonable");
+    // ❌ Doesn't verify EXACT correctness
+}
+```
+
+**✅ Good Test:**
+
+```solidity
+function test_calculateShare_proportionalDistribution() public pure {
+    uint256 userBalance = 100 ether;  // User has 10%
+    uint256 totalStaked = 1000 ether;
+    uint256 pool = 500 ether;
+
+    uint256 share = calculateShare(userBalance, totalStaked, pool);
+
+    // VERIFY EXACT CORRECTNESS
+    uint256 expected = (pool * userBalance) / totalStaked;
+    assertEq(share, expected, "Should use correct formula");
+    assertEq(share, 50 ether, "10% of 500 should be 50");
+
+    // VERIFY INVARIANT
+    uint256 user2Balance = 900 ether; // Other user has 90%
+    uint256 share2 = calculateShare(user2Balance, totalStaked, pool);
+    assertEq(share + share2, pool, "Shares should sum to pool");
+    // ✅ Mathematical invariant verified!
+}
+```
+
+---
+
+### Code Audit Checklist While Testing
+
+For each function you test, check:
+
+**Security:**
+
+- [ ] Reentrancy protection where needed (external calls)
+- [ ] Access control (onlyOwner, onlyAdmin, etc.)
+- [ ] Input validation (zero address, zero amount, etc.)
+- [ ] Overflow/underflow protection (should auto-revert in 0.8.x)
+- [ ] Integer division rounding (always rounds down)
+
+**Logic:**
+
+- [ ] Math is correct (calculate expected values manually)
+- [ ] Edge cases handled (zero, max, boundaries)
+- [ ] State transitions valid (before/after checks)
+- [ ] Events emitted correctly
+- [ ] Return values accurate
+
+**Gas & Efficiency:**
+
+- [ ] No unbounded loops
+- [ ] Storage reads minimized
+- [ ] No redundant calculations
+
+**Dead Code:**
+
+- [ ] Function is actually called somewhere
+- [ ] All branches are reachable
+- [ ] No commented-out code blocks
+
+---
+
+### When You Find Issues
+
+**Priority Order:**
+
+1. **Critical Security Bugs** → Stop, file critical bug report, fix immediately
+2. **Fund Loss Bugs** → Stop, document, fix before continuing
+3. **Logic Errors** → Document, fix, then test corrected code
+4. **Dead Code** → Document, recommend removal
+5. **Gas Inefficiencies** → Document, mark as optimization opportunity
+6. **Style Issues** → Note but continue testing
+
+**Documentation Template:**
+
+Create `spec/COVERAGE_BUGS_FOUND.md`:
+
+```markdown
+# Bugs Found During Coverage Testing
+
+## [Date] - [Contract].[Function]
+
+**Severity:** CRITICAL/HIGH/MEDIUM/LOW
+**Status:** UNFIXED/FIXED/WONTFIX
+**Found By:** Coverage analysis on [date]
+
+### The Bug
+
+[Detailed description]
+
+### Proof of Concept
+
+[Test that demonstrates the bug]
+
+### Impact
+
+[What bad thing happens]
+
+### Recommended Fix
+
+[Code changes]
+
+### Resolution
+
+[What was actually done]
+```
+
+---
+
+### Real Example: calculateUnvested Bug
+
+**What Coverage Analysis Revealed:**
+
+1. **Low coverage** (12.50%) in RewardMath → Investigated why
+2. **Found dead code** (calculateUnvested) → Researched usage
+3. **Found historical bug** → Read spec documents
+4. **Found resolution** → Code was replaced, not fixed
+5. **Recommended action** → Remove dead code
+
+**Correct Response:**
+
+- ✅ Document finding in COVERAGE_ANALYSIS.md
+- ✅ Recommend removal before testing
+- ✅ Don't waste time achieving 100% coverage on dead buggy code
+- ✅ Focus on testing actual production functions
+
+**Incorrect Response:**
+
+- ❌ Write tests that make calculateUnvested pass
+- ❌ Achieve 100% coverage including dead code
+- ❌ Leave bug in codebase
+- ❌ Report "100% coverage" misleadingly
+
+---
+
+### Coverage vs Correctness
+
+**Remember:**
+
+| Metric               | What It Means          | What It Doesn't Mean        |
+| -------------------- | ---------------------- | --------------------------- |
+| 100% Line Coverage   | Every line executed    | ❌ Code is correct          |
+| 100% Branch Coverage | Every branch tested    | ❌ Logic is correct         |
+| All Tests Passing    | Code behaves as tested | ❌ Tests verify correctness |
+
+**The Goal:**
+
+> **100% branch coverage** of **correct, production code** with **tests that verify correctness**
+
+Not:
+
+> ~~100% coverage of buggy/dead code with tests that just make it pass~~
+
+---
+
+### Recommended Testing Mindset
+
+**Think like an attacker while writing tests:**
+
+1. **How can I break this function?**
+   - What inputs cause reverts?
+   - What inputs cause incorrect results?
+   - What sequences cause state corruption?
+
+2. **What did the developer forget?**
+   - Missing zero checks?
+   - Off-by-one errors?
+   - Integer overflow/underflow?
+   - Reentrancy vectors?
+
+3. **What assumptions are wrong?**
+   - Is this function ever called?
+   - Can these branches be reached?
+   - Are the comments accurate?
+   - Is the math correct?
+
+4. **How does this interact with other code?**
+   - Cross-contract calls
+   - State dependencies
+   - Timing assumptions
+   - Event emissions
+
+**If you find something wrong → Fix it, don't test it.**
 
 ---
 
