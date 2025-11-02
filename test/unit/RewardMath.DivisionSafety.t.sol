@@ -29,21 +29,6 @@ contract RewardMath_DivisionSafety_Test is Test {
         assertEq(newLast, current, 'New last should be current time');
     }
 
-    /// @notice Test calculateUnvested with protection
-    function test_calculateUnvested_correctlyCalculates() public {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 1000 + 7 days;
-        uint64 last = 1000;
-        uint64 current = 1000 + 1 days; // After 1 day
-
-        // Should not revert - has protection
-        uint256 unvested = RewardMath.calculateUnvested(total, start, end, last, current);
-
-        // Should return a valid result (non-negative, <= total)
-        assertLe(unvested, total, 'Unvested should not exceed total');
-    }
-
     /// @notice Test calculateProportionalClaim works correctly
     function test_calculateProportionalClaim_calculatesCorrectly() public {
         uint256 userBalance = 100 ether;

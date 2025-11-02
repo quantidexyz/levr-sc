@@ -38,50 +38,6 @@ library RewardMath {
         newLast = to;
     }
 
-    /// @notice Calculate unvested rewards from current stream
-    /// @param total Total amount to vest over the duration
-    /// @param start Stream start timestamp
-    /// @param end Stream end timestamp
-    /// @param last Last update timestamp
-    /// @param current Current timestamp
-    /// @return unvested Amount that hasn't vested yet
-    function calculateUnvested(
-        uint256 total,
-        uint64 start,
-        uint64 end,
-        uint64 last,
-        uint64 current
-    ) internal pure returns (uint256 unvested) {
-        // No active stream
-        if (end == 0 || start == 0) return 0;
-
-        // Stream hasn't started yet
-        if (current < start) return total;
-
-        uint256 duration = end - start;
-        require(duration != 0, 'ZERO_DURATION');
-
-        // If stream ended, check if it fully vested
-        if (current >= end) {
-            // If last update didn't reach end, calculate unvested
-            if (last < end) {
-                if (last <= start) {
-                    return 0; // Stream completely paused - rewards stay in pool
-                }
-                uint256 unvestedDuration = end - last;
-                return (total * unvestedDuration) / duration;
-            }
-            return 0; // Fully vested
-        }
-
-        // Stream still active - use last update time
-        uint64 effectiveTime = last < current ? last : current;
-        uint256 elapsed = effectiveTime > start ? effectiveTime - start : 0;
-        uint256 vested = (total * elapsed) / duration;
-
-        return total > vested ? total - vested : 0;
-    }
-
     /// @notice Calculate user's proportional share of pool
     /// @param userBalance User's staked token balance
     /// @param totalStaked Total staked token supply

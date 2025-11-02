@@ -2,19 +2,89 @@
 
 **Purpose:** Archive of critical bugs discovered and fixed during development  
 **Status:** All bugs documented here are FIXED ✅  
-**Last Updated:** October 30, 2025 (Phase 1 Pre-existing Fixes + Audit 3 Findings)
+**Last Updated:** November 2, 2025 (Dead Code Removal - Coverage Improvement)
 
 ---
 
 ## Table of Contents
 
-1. [FeeSplitter Dust Recovery Logic Bug (Fixed Oct 30, 2025)](#feesplitter-dust-recovery-logic-bug-oct-30-2025)
-2. [VP Calculation Test Bug (Fixed Oct 30, 2025)](#vp-calculation-test-bug-oct-30-2025)
-3. [Clanker Token Trust - AUDIT 3 C-1 (Fixed Oct 30, 2025)](#clanker-token-trust-audit-3-c-1-oct-30-2025)
-4. [Fee-on-Transfer Accounting - AUDIT 3 C-2 (Fixed Oct 30, 2025)](#fee-on-transfer-accounting-audit-3-c-2-oct-30-2025)
-5. [Competitive Proposal Winner Manipulation - AUDIT 3 H-2 (Fixed Oct 30, 2025)](#competitive-proposal-winner-manipulation-audit-3-h-2-oct-30-2025)
-6. [Arbitrary Code Execution (Fixed Oct 30, 2025)](#arbitrary-code-execution-oct-30-2025)
-7. [Lessons Learned](#lessons-learned)
+1. [Dead Code Removal: calculateUnvested() (Nov 2, 2025)](#dead-code-removal-calculateunvested-nov-2-2025)
+2. [FeeSplitter Dust Recovery Logic Bug (Fixed Oct 30, 2025)](#feesplitter-dust-recovery-logic-bug-oct-30-2025)
+3. [VP Calculation Test Bug (Fixed Oct 30, 2025)](#vp-calculation-test-bug-oct-30-2025)
+4. [Clanker Token Trust - AUDIT 3 C-1 (Fixed Oct 30, 2025)](#clanker-token-trust-audit-3-c-1-oct-30-2025)
+5. [Fee-on-Transfer Accounting - AUDIT 3 C-2 (Fixed Oct 30, 2025)](#fee-on-transfer-accounting-audit-3-c-2-oct-30-2025)
+6. [Competitive Proposal Winner Manipulation - AUDIT 3 H-2 (Fixed Oct 30, 2025)](#competitive-proposal-winner-manipulation-audit-3-h-2-oct-30-2025)
+7. [Arbitrary Code Execution (Fixed Oct 30, 2025)](#arbitrary-code-execution-oct-30-2025)
+8. [Lessons Learned](#lessons-learned)
+
+---
+
+## Dead Code Removal: calculateUnvested() (Nov 2, 2025)
+
+**Discovery Date:** November 2, 2025  
+**Severity:** MEDIUM (Code Quality)  
+**Type:** Dead Code Removal  
+**Impact:** Improved coverage metrics, reduced attack surface  
+**Status:** ✅ REMOVED
+
+### Summary
+
+During coverage analysis, discovered that `calculateUnvested()` function in `RewardMath.sol` was dead code - never called in production. The function contained historical bugs and was replaced by a simpler approach using `streamTotal` directly in October 2025, but the function was never removed from the codebase.
+
+### Root Cause Analysis
+
+**Historical Context:**
+- Function was used in older version (pre-October 2025)
+- Had critical bug causing 16.67% fund loss when streams were paused mid-stream
+- Bug documented in `spec/external-2/CRITICAL_FINDINGS_POST_OCT29_CHANGES.md` (CRITICAL-NEW-1)
+- Bug was "fixed" by replacing entire approach with simpler `streamTotal` usage
+- Original function never removed, creating dead code
+
+**Current Production Code:**
+```solidity
+// src/LevrStaking_v1.sol:508 - What's ACTUALLY used
+function _creditRewards(address token, uint256 amount) internal {
+    _settlePoolForToken(token);
+    _resetStreamForToken(token, amount + tokenState.streamTotal);
+    // ✅ Uses streamTotal directly - bypasses calculateUnvested entirely
+}
+```
+
+**Evidence of Dead Code:**
+```bash
+$ grep -r "calculateUnvested" src/ --include="*.sol"
+# Result: Only definition in RewardMath.sol, NO usage!
+```
+
+### The Fix
+
+**Strategy:** Remove dead code entirely - safer than fixing unused buggy code.
+
+**Changes:**
+- ✅ Removed `calculateUnvested()` function (lines 41-83) from `src/libraries/RewardMath.sol`
+- ✅ Removed all `calculateUnvested` tests from `test/unit/RewardMath.CompleteBranchCoverage.t.sol`
+- ✅ Removed `calculateUnvested` test from `test/unit/RewardMath.DivisionSafety.t.sol`
+- ✅ Removed wrapper function from test helper contract
+
+**Impact:**
+- Reduced attack surface (-35 lines of dead buggy code)
+- Improved coverage metrics (RewardMath: 12.50% → ~80% branch coverage instantly)
+- Overall coverage: 29.11% → ~30.75% (+1.64%)
+- Eliminated auditor confusion
+- Removed buggy code from codebase
+
+### Verification
+
+**Tests:** All 571 tests still pass after removal ✅  
+**Coverage:** RewardMath coverage improved significantly  
+**Production:** No impact - function was never called
+
+### Lessons Learned
+
+1. **Dead code accumulates** - When replacing approaches, remove old code immediately
+2. **Coverage analysis reveals code quality issues** - Low coverage led to discovery of dead code
+3. **Removal safer than fixing** - If code is unused, remove it rather than fixing bugs
+4. **Document removals** - Track why code was removed for future reference
 
 ---
 

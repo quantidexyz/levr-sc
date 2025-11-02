@@ -17,16 +17,6 @@ contract RewardMathWrapper {
     ) external pure returns (uint256 vested, uint64 newLast) {
         return RewardMath.calculateVestedAmount(total, start, end, last, current);
     }
-
-    function calculateUnvested(
-        uint256 total,
-        uint64 start,
-        uint64 end,
-        uint64 last,
-        uint64 current
-    ) external pure returns (uint256) {
-        return RewardMath.calculateUnvested(total, start, end, last, current);
-    }
 }
 
 /**
@@ -36,7 +26,6 @@ contract RewardMathWrapper {
  *
  * Function Signatures:
  * - calculateVestedAmount(total, start, end, last, current) -> (vested, newLast)
- * - calculateUnvested(total, start, end, last, current) -> unvested
  * - calculateProportionalClaim(userBalance, totalStaked, availablePool) -> claimable
  * - calculateCurrentPool(basePool, streamTotal, start, end, last, current) -> totalPool
  */
@@ -193,114 +182,6 @@ contract RewardMath_CompleteBranchCoverage_Test is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                        CALCULATE UNVESTED
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Branch: if (end == 0 || start == 0) return 0;
-    function test_calculateUnvested_zeroEndOrStart_returnsZero() public pure {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 2000;
-        uint64 last = 1500;
-        uint64 current = 1600;
-
-        // Test: end == 0
-        uint256 unvested1 = RewardMath.calculateUnvested(total, start, 0, last, current);
-        assertEq(unvested1, 0, 'Zero end should return 0');
-
-        // Test: start == 0
-        uint256 unvested2 = RewardMath.calculateUnvested(total, 0, end, last, current);
-        assertEq(unvested2, 0, 'Zero start should return 0');
-    }
-
-    /// @notice Branch: if (current < start) return total;
-    function test_calculateUnvested_currentBeforeStart_returnsTotal() public pure {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 2000;
-        uint64 last = 500;
-        uint64 current = 800; // Before start
-
-        uint256 unvested = RewardMath.calculateUnvested(total, start, end, last, current);
-        assertEq(unvested, total, 'Stream not started should return total');
-    }
-
-    /// @notice Branch: if (current >= end) with last < end and last <= start
-    function test_calculateUnvested_streamEndedLastBeforeStart_returnsZero() public pure {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 2000;
-        uint64 last = 500; // Before start (last <= start)
-        uint64 current = 2500; // After end
-
-        uint256 unvested = RewardMath.calculateUnvested(total, start, end, last, current);
-        // Stream completely paused - rewards stay in pool
-        assertEq(unvested, 0, 'Paused stream should return 0');
-    }
-
-    /// @notice Branch: if (current >= end) with last < end but last > start
-    function test_calculateUnvested_streamEndedLastMidStream_calculatesUnvested() public pure {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 2000;
-        uint64 last = 1500; // Mid-stream (last > start)
-        uint64 current = 2500; // After end
-
-        uint256 unvested = RewardMath.calculateUnvested(total, start, end, last, current);
-
-        // unvestedDuration = end - last = 2000 - 1500 = 500
-        // duration = end - start = 1000
-        // unvested = (1000 ether * 500) / 1000 = 500 ether
-        assertEq(unvested, 500 ether, 'Should calculate unvested for paused portion');
-    }
-
-    /// @notice Branch: if (current >= end) with last >= end
-    function test_calculateUnvested_streamEndedFullyVested_returnsZero() public pure {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 2000;
-        uint64 last = 2000; // At or after end
-        uint64 current = 2500;
-
-        uint256 unvested = RewardMath.calculateUnvested(total, start, end, last, current);
-        assertEq(unvested, 0, 'Fully vested stream should return 0');
-    }
-
-    /// @notice Branch: Stream still active (normal calculation)
-    function test_calculateUnvested_streamActive_calculatesCorrectly() public pure {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 2000;
-        uint64 last = 1500; // Mid-stream
-        uint64 current = 1800; // Still active
-
-        uint256 unvested = RewardMath.calculateUnvested(total, start, end, last, current);
-
-        // effectiveTime = last (1500)
-        // elapsed = 1500 - 1000 = 500
-        // vested = (1000 ether * 500) / 1000 = 500 ether
-        // unvested = 1000 - 500 = 500 ether
-        assertEq(unvested, 500 ether, 'Active stream should calculate unvested');
-    }
-
-    /// @notice Branch: effectiveTime calculation when last >= current
-    function test_calculateUnvested_lastAfterCurrent_usesCurrentAsEffective() public pure {
-        uint256 total = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 2000;
-        uint64 last = 1800; // After current
-        uint64 current = 1500;
-
-        uint256 unvested = RewardMath.calculateUnvested(total, start, end, last, current);
-
-        // effectiveTime = current (1500) since last > current
-        // elapsed = 1500 - 1000 = 500
-        // vested = (1000 ether * 500) / 1000 = 500 ether
-        // unvested = 500 ether
-        assertEq(unvested, 500 ether, 'Should use current when last > current');
-    }
-
-    /*//////////////////////////////////////////////////////////////
                     CALCULATE PROPORTIONAL CLAIM
     //////////////////////////////////////////////////////////////*/
 
@@ -453,10 +334,6 @@ contract RewardMath_CompleteBranchCoverage_Test is Test {
         (uint256 vested, ) = RewardMath.calculateVestedAmount(1, 0, 2, 0, 1);
         assertTrue(vested >= 0, 'Minimal vesting should not revert');
 
-        // calculateUnvested with minimal values
-        uint256 unvested = RewardMath.calculateUnvested(100, 0, 10, 5, 7);
-        assertTrue(unvested <= 100, 'Minimal unvested should work');
-
         // calculateProportionalClaim with minimal values
         uint256 claim = RewardMath.calculateProportionalClaim(1, 10, 100);
         assertEq(claim, 10, 'Minimal claim should work');
@@ -489,17 +366,5 @@ contract RewardMath_CompleteBranchCoverage_Test is Test {
         // This test documents that the early returns make it unreachable
         // NOTE: This branch is unreachable due to early returns
         // The function is safe by design - early returns prevent zero duration division
-    }
-
-    /// @notice Test require(duration != 0) in calculateUnvested
-    function test_RevertWhen_calculateUnvested_zeroDuration() public {
-        vm.expectRevert(bytes('ZERO_DURATION'));
-        wrapper.calculateUnvested(
-            1000 ether,
-            1000, // start
-            1000, // end (same as start, duration = 0)
-            1200,
-            1500
-        );
     }
 }
