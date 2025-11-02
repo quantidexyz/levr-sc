@@ -56,7 +56,13 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0), new address[](0));
+        factory = new LevrFactory_v1(
+            config,
+            address(this),
+            address(0),
+            address(0),
+            new address[](0)
+        );
 
         // Deploy contracts
         treasury = new LevrTreasury_v1(address(factory), address(0));
@@ -278,7 +284,9 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         console2.log('Re-accrued 50 ether new rewards');
 
         // 10. Wait for new stream to complete
-        (uint64 newStreamStart, uint64 newStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
+        (uint64 newStreamStart, uint64 newStreamEnd, ) = staking.getTokenStreamInfo(
+            address(underlying)
+        );
         console2.log('New stream start:', newStreamStart);
         console2.log('New stream end:', newStreamEnd);
         console2.log('Current time after accrue:', block.timestamp);
@@ -455,6 +463,10 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         MockERC20 token1 = new MockERC20('Token1', 'TK1');
         MockERC20 token2 = new MockERC20('Token2', 'TK2');
 
+        // Whitelist tokens before accruing rewards
+        staking.whitelistToken(address(token1));
+        staking.whitelistToken(address(token2));
+
         underlying.mint(address(staking), 500 ether);
         staking.accrueRewards(address(underlying));
 
@@ -547,28 +559,29 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // 2. Fill all slots (underlying + 9 more = 10 total)
+        // 2. Add multiple reward tokens (all must be whitelisted)
         MockERC20[] memory tokens = new MockERC20[](10);
         for (uint256 i = 0; i < 9; i++) {
             tokens[i] = new MockERC20(string(abi.encodePacked('Token', vm.toString(i))), 'TK');
+            staking.whitelistToken(address(tokens[i]));
             tokens[i].mint(address(staking), 10 ether);
             staking.accrueRewards(address(tokens[i]));
         }
 
         console2.log('9 tokens added (10 total with underlying)');
 
-        // 3. Try to add 2 more (11th should fail, underlying is whitelisted)
+        // 3. Add more tokens (no limit with whitelist-only system)
         MockERC20 extra1 = new MockERC20('Extra1', 'EX1');
+        staking.whitelistToken(address(extra1));
         extra1.mint(address(staking), 10 ether);
-        staking.accrueRewards(address(extra1)); // 10th succeeds
+        staking.accrueRewards(address(extra1));
 
         MockERC20 extra2 = new MockERC20('Extra2', 'EX2');
+        staking.whitelistToken(address(extra2));
         extra2.mint(address(staking), 10 ether);
+        staking.accrueRewards(address(extra2));
 
-        vm.expectRevert('MAX_REWARD_TOKENS_REACHED');
-        staking.accrueRewards(address(extra2)); // 11th fails
-
-        console2.log('Limit reached - 11th token rejected');
+        console2.log('Additional tokens added successfully');
 
         // 4. Wait for tokens[0] to finish streaming - claim AT end
         (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(tokens[0]));
@@ -581,16 +594,19 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         vm.prank(alice);
         staking.claimRewards(claimTokens, alice);
 
-        // 6. Cleanup finished token
+        // 6. Unwhitelist and cleanup finished token
+        staking.unwhitelistToken(address(tokens[0]));
         staking.cleanupFinishedRewardToken(address(tokens[0]));
 
         console2.log('Token 0 cleaned up - slot freed');
 
-        // 7. Now can add 11th token (because we cleaned up one)
+        // 7. Verify cleanup worked - can still accrue rewards for remaining tokens
+        // Note: With whitelist-only system, there's no token limit, but cleanup
+        // is still useful for removing finished tokens
         extra2.mint(address(staking), 10 ether);
         staking.accrueRewards(address(extra2));
 
-        console2.log('SUCCESS: Slot freed via cleanup, 11th token added');
+        console2.log('SUCCESS: Cleanup completed successfully, tokens continue to work');
     }
 
     /// @notice E2E: Complete recovery from multiple simultaneous issues
@@ -630,9 +646,10 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         assertEq(staking.totalStaked(), 0, 'Zero stakers');
         console2.log('Issue 2: All stakers exited');
 
-        // 4. Issue 3: Fill token slots
+        // 4. Issue 3: Add multiple reward tokens (must whitelist first)
         for (uint256 i = 0; i < 9; i++) {
             MockERC20 token = new MockERC20('TK', 'TK');
+            staking.whitelistToken(address(token));
             token.mint(address(staking), 10 ether);
             staking.accrueRewards(address(token));
         }
