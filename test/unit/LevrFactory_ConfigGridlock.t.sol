@@ -521,6 +521,10 @@ contract LevrFactory_ConfigGridlockTest is Test {
             staking.stake(1000 ether);
             vm.stopPrank();
 
+            // Whitelist reward token before using it
+            vm.prank(address(this)); // Test contract is admin of underlying
+            staking.whitelistToken(address(rewardToken));
+
             rewardToken.mint(address(staking), 100 ether);
             staking.accrueRewards(address(rewardToken));
 

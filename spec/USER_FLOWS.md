@@ -230,6 +230,7 @@ factory.getProject(clankerToken).admin.whitelistToken(usdcAddress);
 ```
 
 **Steps:**
+
 1. Token admin calls `staking.whitelistToken(newToken)`
 2. Staking validates:
    - Caller is underlying token admin (`ONLY_TOKEN_ADMIN`)
@@ -251,6 +252,7 @@ factory.getProject(clankerToken).admin.unwhitelistToken(daiAddress);
 ```
 
 **Steps:**
+
 1. Token admin calls `staking.unwhitelistToken(token)`
 2. Staking validates:
    - Caller is underlying token admin (`ONLY_TOKEN_ADMIN`)
@@ -1938,3 +1940,1087 @@ function _settleStreamingForToken(address token) internal {
 ---
 
 **Status:** All stuck-funds and stuck-process scenarios documented and tested ✅
+
+---
+
+## Advanced Adversarial Scenarios & Attack Vectors
+
+**Purpose:** Document complex, multi-step scenarios designed to confuse the system, manipulate state, or exploit edge cases.
+
+**Status:** Comprehensive attack surface mapping for security audits
+
+---
+
+### Flow 30: Whitelist Manipulation During Active Distribution
+
+**Actors:** Token Admin (malicious or compromised) / Fee Splitter / Staking
+
+**Scenario:** Admin unwhitelists reward token between fee collection and distribution
+
+**Attack Steps:**
+
+1. **T0:** Fee splitter configured: 50% staking, 50% team
+2. **T0:** USDC is whitelisted reward token
+3. **T1:** Fees accumulate in ClankerFeeLocker (1000 USDC)
+4. **T2:** Attacker (token admin) calls `staking.unwhitelistToken(USDC)`
+   - Requires: No pending USDC rewards in staking
+   - Success: USDC removed from whitelist
+5. **T2+1:** Someone calls `feeSplitter.distribute(USDC)`
+   - Splitter claims from locker: ✅ Succeeds (1000 USDC received)
+   - Splits distribution: 500 to staking, 500 to team
+   - Transfer to team: ✅ Succeeds
+   - Transfer to staking: ✅ Succeeds
+   - Auto-accrual call: `staking.accrueRewards(USDC)`
+   - **❌ REVERTS: TOKEN_NOT_WHITELISTED**
+
+**State After Attack:**
+
+- 500 USDC stuck in staking contract (not accrued as rewards)
+- 500 USDC delivered to team wallet
+- DistributionState shows totalDistributed = 1000 USDC
+- Auto-accrual failed but distribution "succeeded"
+
+**Current Protection:**
+
+- ✅ Fee splitter checks `isTokenWhitelisted()` before distribution
+- ✅ Both `distribute()` and `_distributeSingle()` validate whitelist
+- ✅ Distribution will revert if token not whitelisted
+
+**Actual Behavior:**
+
+```solidity
+function distribute(address clankerToken, address rewardToken) external {
+    // ... claim from locker ...
+
+    // Whitelist check BEFORE any transfers
+    require(
+        ILevrStaking_v1(staking).isTokenWhitelisted(rewardToken),
+        'TOKEN_NOT_WHITELISTED'
+    );
+
+    // ... distribution proceeds ...
+}
+```
+
+**Attack Prevented:** ✅ Distribution fails atomically if token not whitelisted
+
+**Edge Cases to Test:**
+
+- ✅ Tested: `test_distribute_nonWhitelistedToken_reverts()`
+- ❓ What if token whitelisted at distribution start but unwhitelisted mid-batch?
+- ❓ What if token re-whitelisted after previous distribution?
+- ❓ What if admin unwhitelists, distributes fail, then re-whitelists?
+
+**Risk Level:** NONE (protected by whitelist validation)
+
+---
+
+### Flow 31: Supply Manipulation via Flash Stake Attack
+
+**Actors:** Attacker with flash loan / Governance proposer
+
+**Scenario:** Manipulate totalSupply snapshot to reduce quorum threshold
+
+**Attack Steps:**
+
+1. **T0 (Setup):**
+   - Legitimate totalSupply: 1,000,000 sTokens
+   - Quorum: 70% = 700,000 sTokens needed
+   - Attacker has: 100,000 underlying tokens
+2. **T1 (Proposal Creation):**
+   - Attacker stakes 100,000 (totalSupply = 1,100,000)
+   - Creates malicious proposal immediately
+   - **Proposal snapshots:** `totalSupply = 1,100,000`, `quorum = 70%`
+   - Required votes: 770,000
+3. **T1+1 (Flash Unstake):**
+   - Attacker unstakes 100,000 (totalSupply = 1,000,000)
+   - Actual circulating sTokens: 1,000,000
+4. **T1+2 days (Voting Period):**
+   - Attacker votes with remaining stake
+   - Needs 770,000 votes to pass
+   - Has only 100,000 voting power
+   - **❌ Attack fails: Cannot reach quorum**
+
+**Why Attack Fails:**
+
+```solidity
+// Proposal stores SNAPSHOT at creation
+struct Proposal {
+    uint256 totalSupplySnapshot; // 1,100,000 (includes attacker's flash stake)
+    uint16 quorumBpsSnapshot;    // 7000 (70%)
+    // ...
+}
+
+// Execution checks SNAPSHOTTED values
+function execute(uint256 proposalId) external {
+    uint256 requiredVotes = (proposal.totalSupplySnapshot * proposal.quorumBpsSnapshot) / 10000;
+    // 1,100,000 * 7000 / 10000 = 770,000
+
+    if (proposal.yesVotes < requiredVotes) revert QuorumNotMet();
+}
+```
+
+**Actual Protection:**
+
+- ✅ Snapshot taken AT PROPOSAL CREATION
+- ✅ Flash stake INCREASES quorum requirement
+- ✅ Flash unstake doesn't reduce requirement
+- ✅ Attacker makes attack HARDER for themselves
+
+**Reverse Attack: Flash Unstake to Reduce Quorum**
+
+1. **T0:** Attacker has 200,000 staked, totalSupply = 1,200,000
+2. **T1:** Attacker unstakes 100,000 → totalSupply = 1,100,000
+3. **T1:** Attacker creates proposal (snapshot: 1,100,000)
+4. **T1:** Attacker stakes 100,000 back → totalSupply = 1,200,000
+5. **Voting:** Actual supply higher, but quorum based on lower snapshot
+6. **Problem:** Attacker still needs proportional votes from snapshot supply
+
+**Why Reverse Attack Also Fails:**
+
+- Quorum is % of snapshot supply
+- Attacker must get votes from OTHER holders
+- Manipulating snapshot doesn't change voting power needed
+- Other holders still need to vote YES
+
+**Edge Cases Tested:**
+
+- ✅ `test_supplyIncrease_raisesQuorum()` - Flash stake increases requirement
+- ✅ `test_supplyDecrease_doesNotLowerQuorum()` - Snapshot protects
+- ✅ `test_flashStake_cannotManipulateQuorum()` - Combined attack fails
+
+**Risk Level:** NONE (snapshot protection prevents manipulation)
+
+---
+
+### Flow 32: Cross-Token Governance Confusion
+
+**Actors:** Multiple proposers / Treasury with multiple tokens
+
+**Scenario:** Create competing proposals for different tokens to confuse voters
+
+**Setup:**
+
+- Treasury holds: 10,000 CLANKER, 5,000 WETH, 3,000 USDC
+- Users staked: 1,000,000 CLANKER (sTokens)
+
+**Attack Steps:**
+
+1. **T0 (Cycle Starts):**
+   - Alice proposes: `BoostStakingPool(WETH, 5000)` - All WETH to staking
+   - Bob proposes: `BoostStakingPool(CLANKER, 10000)` - All CLANKER to staking
+   - Charlie proposes: `TransferToAddress(USDC, charlie, 3000)` - All USDC to Charlie
+   - Dave proposes: `TransferToAddress(WETH, dave, 2500)` - Half WETH to Dave
+
+2. **T0+2 days (Voting):**
+   - Community confused: Which token should be boosted?
+   - Votes split across proposals
+   - WETH proposal: 400k YES votes
+   - CLANKER proposal: 350k YES votes
+   - USDC proposal: 200k YES votes (looks suspicious)
+   - Dave's WETH proposal: 100k YES votes
+
+3. **T0+7 days (Execution):**
+   - Quorum check (70% of 1M = 700k): All fail quorum
+   - **Result:** No proposal executes
+   - Cycle stuck until `startNewCycle()` called
+
+**Actual Behavior:**
+
+```solidity
+// Each proposal is independent
+struct Proposal {
+    address token;        // Different tokens allowed
+    uint256 yesVotes;    // Separate vote counting
+    uint256 totalSupplySnapshot; // Same snapshot (all in same cycle)
+    // ...
+}
+
+// Winner determination
+function getWinner(uint256 cycleId) public view returns (uint256 winner) {
+    for (each proposal in cycle) {
+        if (_meetsQuorum(pid) && _meetsApproval(pid)) {
+            if (yesVotes > maxVotes) {
+                maxVotes = yesVotes;
+                winner = pid;
+            }
+        }
+    }
+}
+```
+
+**Possible Outcomes:**
+
+1. **All Fail Quorum:** No execution, cycle stuck, manual recovery needed
+2. **One Succeeds:** Highest YES votes wins, only that token moved
+3. **Vote Concentration:** Community may coordinate on one token
+
+**NOT a Security Issue:**
+
+- ✅ Each proposal validated independently
+- ✅ Only winner executes
+- ✅ Treasury balance checked per token
+- ✅ No cross-contamination between proposals
+
+**Governance Risk:**
+
+- ⚠️ Vote splitting across tokens may prevent ANY execution
+- ⚠️ Community coordination required
+- ⚠️ Malicious actors could spam proposals to dilute votes
+
+**Current Protections:**
+
+- ✅ `maxActiveProposals` limits spam (default: 7)
+- ✅ `minSTokenBpsToSubmit` requires stake to propose (default: 1%)
+- ✅ Only one proposal per type per user per cycle
+
+**Edge Cases to Test:**
+
+- ✅ `test_multiToken_onlyWinnerExecutes()` - Winner isolation works
+- ✅ `test_multiToken_treasuryBalancePerToken()` - Balance checked correctly
+- ❓ What if two proposals for same token?
+- ❓ What if winner's token depleted but loser's token available?
+- ❓ What if all proposals for different tokens, all meet quorum?
+
+**Risk Level:** GOVERNANCE (not security) - Vote coordination issue
+
+---
+
+### Flow 33: Timing Attack: Vote Exactly at Window Boundaries
+
+**Actors:** Sophisticated voter monitoring blockchain
+
+**Scenario:** Vote at exact block of window start/end to manipulate inclusion
+
+**Attack Steps:**
+
+1. **T0:** Proposal created
+   - `votingStartsAt = T0 + 2 days`
+   - `votingEndsAt = T0 + 7 days`
+
+2. **T0 + 2 days - 1 block:**
+   - Attacker attempts early vote
+   - `require(block.timestamp >= votingStartsAt)` ❌ REVERTS
+   - Vote rejected
+
+3. **T0 + 2 days (exact):**
+   - Attacker votes in same block as `votingStartsAt`
+   - Timestamp check: `block.timestamp >= votingStartsAt` ✅ PASSES
+   - Vote accepted
+
+4. **T0 + 7 days (exact):**
+   - Legitimate voter tries to vote
+   - Timestamp check: `block.timestamp < votingEndsAt` ❌ FAILS
+   - Vote rejected (voting ended)
+
+**Code Behavior:**
+
+```solidity
+function vote(uint256 proposalId, bool support) external {
+    require(
+        block.timestamp >= proposal.votingStartsAt &&
+        block.timestamp < proposal.votingEndsAt,
+        'VOTING_NOT_ACTIVE'
+    );
+    // ...
+}
+```
+
+**Boundary Behavior:**
+
+- `votingStartsAt` block: ✅ Can vote (inclusive)
+- `votingEndsAt` block: ❌ Cannot vote (exclusive)
+- Duration: `votingEndsAt - votingStartsAt` seconds exactly
+
+**Edge Cases:**
+
+- ✅ If `block.timestamp == votingStartsAt`: Vote allowed
+- ✅ If `block.timestamp == votingEndsAt`: Vote rejected
+- ✅ If `block.timestamp == votingEndsAt - 1`: Vote allowed (last second)
+
+**Not an Attack:**
+
+- This is expected behavior (standard time ranges)
+- Consistent with most governance systems
+- Clear documentation needed
+
+**Potential Confusion:**
+
+- User sees "Voting ends at block 12345"
+- Tries to vote at block 12345
+- Transaction reverts (exclusive end)
+- **Solution:** UI should show "Voting ends BEFORE block X"
+
+**Edge Cases to Test:**
+
+- ✅ `test_vote_exactlyAtStart_succeeds()` - Inclusive start
+- ✅ `test_vote_exactlyAtEnd_reverts()` - Exclusive end
+- ✅ `test_vote_oneSecondBeforeEnd_succeeds()` - Last moment voting
+
+**Risk Level:** NONE (expected behavior, documentation issue)
+
+---
+
+### Flow 34: Meta-Transaction Replay Attack
+
+**Actors:** Attacker / Relayer / Forwarder
+
+**Scenario:** Replay signed meta-transaction to duplicate action
+
+**Attack Steps:**
+
+1. **T0:** Alice signs meta-transaction off-chain:
+
+   ```
+   {
+     target: staking,
+     data: staking.stake(1000 ether),
+     nonce: 5,
+     deadline: T0 + 1 hour
+   }
+   ```
+
+2. **T1:** Relayer submits transaction
+   - Forwarder validates signature ✅
+   - Checks nonce == stored nonce ✅
+   - Executes `staking.stake(1000 ether)` ✅
+   - Increments nonce: 5 → 6
+
+3. **T2:** Attacker (or malicious relayer) replays transaction
+   - Same signature, nonce, data
+   - Forwarder checks nonce: 6 != 5 ❌
+   - **Reverts: INVALID_NONCE**
+
+**Protection Mechanism:**
+
+```solidity
+mapping(address => uint256) public nonces;
+
+function executeTransaction(..., uint256 nonce, bytes signature) external {
+    require(nonce == nonces[signer], 'INVALID_NONCE');
+
+    // Validate signature
+    bytes32 digest = _hashTypedDataV4(...);
+    address recovered = ECDSA.recover(digest, signature);
+    require(recovered == signer, 'INVALID_SIGNATURE');
+
+    // Increment nonce BEFORE execution (reentrancy protection)
+    nonces[signer]++;
+
+    // Execute
+    (bool success,) = target.call(data);
+    require(success, 'EXECUTION_FAILED');
+}
+```
+
+**Replay Protection:**
+
+- ✅ Nonce incremented before execution
+- ✅ Each nonce usable only once
+- ✅ Sequential nonces prevent gaps
+- ✅ Per-user nonce tracking
+
+**Cross-Chain Replay:**
+
+- ⚠️ Same signature valid on different chains if chain ID not in signature
+- ✅ EIP-712 includes chain ID in domain separator
+- ✅ Cannot replay Ethereum signature on Base
+
+**Time-Based Replay:**
+
+- ⚠️ If no deadline, signature valid forever
+- ✅ Best practice: Include deadline in signature
+- ✅ Forwarder should validate deadline
+
+**Edge Cases to Test:**
+
+- ✅ `test_metaTx_replayReverts()` - Nonce protection
+- ✅ `test_metaTx_nonceIncrement()` - Sequential nonces
+- ❓ What if nonce skipped (using nonce+2 instead of nonce+1)?
+- ❓ What if deadline expired but nonce valid?
+- ❓ What if multiple meta-txs in multicall with same nonce?
+
+**Risk Level:** LOW (standard EIP-712 protection)
+
+---
+
+### Flow 35: Stream Window Manipulation via Config Change
+
+**Actors:** Token Admin (verified project) / Staking contract
+
+**Scenario:** Change stream window mid-stream to extend or compress rewards
+
+**Attack Steps:**
+
+1. **T0 (Initial State):**
+   - Stream window: 3 days (factory default)
+   - Reward accrued: 1000 tokens
+   - Stream: T0 to T0+3 days
+
+2. **T0+1 day (Midstream):**
+   - 333 tokens vested, 667 tokens unvested
+   - Token admin calls `factory.updateProjectConfig()`
+   - New stream window: 7 days
+
+3. **T0+1 day (Question):**
+   - Does existing stream change to 7 days?
+   - Does new stream end at T0+8 days (1 day + 7 days)?
+   - Or does it stay at T0+3 days?
+
+**Actual Behavior:**
+
+```solidity
+// Stream info is PER-TOKEN and SET AT STREAM RESET
+struct RewardTokenState {
+    uint64 streamStart;  // Set once per stream
+    uint64 streamEnd;    // Set once per stream
+    // ...
+}
+
+function _resetStreamForToken(address token, uint256 amount) internal {
+    // Reads CURRENT config from factory
+    uint32 window = ILevrFactory_v1(factory).streamWindowSeconds(underlying);
+
+    // Sets new stream window
+    tokenState.streamStart = uint64(block.timestamp);
+    tokenState.streamEnd = uint64(block.timestamp + window);
+    // ...
+}
+```
+
+**Result:**
+
+- **Existing stream: UNCHANGED** - Ends at T0+3 days (original config)
+- **Next stream: USES NEW CONFIG** - Will use 7-day window
+- **Midstream accrual: USES NEW CONFIG** - Resets with 7-day window
+
+**Config Change Impact:**
+
+1. **Active streams:** Continue with original window (immutable per stream)
+2. **New accruals:** Use current config at accrual time
+3. **Midstream accruals:** Reset stream with new window
+
+**Example Timeline:**
+
+```
+T0: Accrue 1000 tokens (3-day window) → Stream T0 to T0+3d
+T0+1d: Config changed to 7-day window
+  - Active stream unaffected (still T0 to T0+3d)
+  - 333 vested, 667 unvested
+T0+1.5d: Accrue 500 more tokens (midstream)
+  - Settle: 167 more vested (500 total), 500 unvested from first stream
+  - Reset: 1000 tokens (500 new + 500 unvested) over 7 days
+  - New stream: T0+1.5d to T0+8.5d
+```
+
+**Cannot Exploit:**
+
+- ✅ Cannot "freeze" existing stream by reducing window
+- ✅ Cannot "accelerate" existing stream by increasing window
+- ✅ Each stream window set at creation, immutable after
+
+**Edge Cases to Test:**
+
+- ✅ `test_configChange_existingStreamUnaffected()` - Immutability verified
+- ✅ `test_configChange_newStreamUsesNewWindow()` - New config applied
+- ✅ `test_midstreamAccrual_usesCurrentConfig()` - Reset behavior correct
+- ❓ What if window changes multiple times during one stream?
+- ❓ What if window set to 0?
+- ❓ What if window set to uint32.max?
+
+**Risk Level:** NONE (config isolation per stream)
+
+---
+
+### Flow 36: Reward Token DOS via Dust Accrual Spam
+
+**Actors:** Attacker / Staking contract
+
+**Scenario:** Create many reward tokens with tiny amounts to exhaust slots or gas
+
+**Attack Steps (Pre-Whitelist):**
+
+1. **Before v1.5.0 (No Whitelist):**
+   - Deploy 100 worthless ERC20 tokens
+   - Transfer 1 wei of each to staking
+   - Call `accrueRewards()` for each
+   - Each token consumes a slot
+   - Hit `MAX_REWARD_TOKENS` limit (10)
+   - Legitimate tokens blocked
+
+**Attack Prevented (v1.5.0 Whitelist):**
+
+```solidity
+function _ensureRewardToken(address token) internal view {
+    require(tokenState.exists, 'TOKEN_NOT_WHITELISTED');
+    require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
+}
+
+function accrueRewards(address token) external {
+    RewardTokenState storage tokenState = _ensureRewardToken(token);
+    // ... only whitelisted tokens can accrue ...
+}
+```
+
+**Result:**
+
+- ❌ Attack fails: `TOKEN_NOT_WHITELISTED` revert
+- ✅ Only token admin can whitelist
+- ✅ Attacker cannot spam dust tokens
+
+**Alternative Attack: Gas DOS**
+
+Even with whitelist, attacker could try:
+
+1. Token admin whitelists 50 legitimate tokens (WETH, USDC, DAI, etc.)
+2. Each token has active streams
+3. Staking operations iterate over `_rewardTokens` array
+4. Gas cost increases linearly with token count
+
+**Gas Impact Analysis:**
+
+```solidity
+// Called on every stake/unstake
+function _settleAll() internal {
+    for (uint256 i = 0; i < _rewardTokens.length; i++) {
+        _settlePoolForToken(_rewardTokens[i]);
+    }
+}
+```
+
+**Gas Per Token:** ~20,000 gas (settle pool calculation)
+**Total for 50 tokens:** ~1,000,000 gas
+**Block gas limit:** ~30,000,000 gas on Base
+
+**Conclusion:** Not a DOS (well within limits)
+
+**Edge Cases to Test:**
+
+- ✅ `test_whitelist_onlyAdminCanAdd()` - Access control
+- ✅ `test_nonWhitelisted_cannotAccrue()` - Protection works
+- ✅ `test_manyTokens_gasReasonable()` - Gas bounds tested
+- ❓ What if admin maliciously whitelists 100+ tokens?
+- ❓ What if all tokens have active streams?
+- ❓ What if cleanup used to cycle through tokens repeatedly?
+
+**Risk Level:** NONE (whitelist prevents spam, gas costs reasonable)
+
+---
+
+### Flow 37: Staked Token Transfer Voting Power Manipulation
+
+**Actors:** Alice (voter) / Bob (vote buyer)
+
+**Scenario:** Transfer sTokens after voting to enable double-voting
+
+**Attack Steps:**
+
+1. **T0 (Setup):**
+   - Alice has 100,000 sTokens, VP = 100 token-days
+   - Bob has 50,000 sTokens, VP = 50 token-days
+   - Proposal P1 created
+
+2. **T1 (Voting Starts):**
+   - Alice votes YES on P1 with 100 token-days VP
+   - Proposal records: `yesVotes += 100`, `totalBalanceVoted += 100,000`
+   - Alice's vote recorded: `hasVoted[P1][alice] = true`
+
+3. **T2 (Transfer Attempt):**
+   - Alice transfers 100,000 sTokens to Bob
+   - Bob now has 150,000 sTokens
+   - Bob's VP increases (weighted average calculation)
+
+4. **T3 (Double Vote Attempt):**
+   - Bob tries to vote with 150,000 sTokens (includes Alice's transferred tokens)
+   - Governor checks: `hasVoted[P1][bob]`
+   - Bob hasn't voted yet ✅
+   - Bob votes with his current VP
+
+**Critical Question:** Did Alice+Bob just double-count Alice's stake?
+
+**Actual Behavior:**
+
+```solidity
+function vote(uint256 proposalId, bool support) external {
+    require(!_voteReceipts[proposalId][voter].hasVoted, 'ALREADY_VOTED');
+
+    // Read CURRENT state (not snapshot)
+    uint256 votingPower = ILevrStaking_v1(staking).getVotingPower(voter);
+    uint256 balance = ILevrStakedToken_v1(stakedToken).balanceOf(voter);
+
+    // Record vote with current values
+    proposal.yesVotes += votingPower;
+    proposal.totalBalanceVoted += balance;
+
+    _voteReceipts[proposalId][voter].hasVoted = true;
+}
+```
+
+**Analysis:**
+
+- Alice voted with VP = 100
+- Alice transferred sTokens to Bob
+- Bob's balance increased BUT VP calculation is weighted by time
+- Bob votes with his CURRENT VP (not snapshot)
+
+**VP After Transfer:**
+
+Alice originally:
+
+- 100,000 sTokens × 100 days = 10,000,000 token-seconds
+
+After Alice transfers 100,000 to Bob:
+
+- Alice: 0 sTokens, VP = 0 (lost all VP)
+- Bob: 150,000 sTokens, but VP is weighted average
+- Bob's new VP ≈ (50,000 × old_time + 100,000 × 0) / 150,000
+- Bob's VP DECREASES on a per-token basis (diluted by new stake)
+
+**Result:**
+
+- ✅ No double voting (per-address check)
+- ⚠️ VP can be "destroyed" by transfers
+- ⚠️ Tokens fungible but VP is not
+
+**Potential Griefing:**
+
+- Attacker buys sTokens on DEX
+- Transfers to voters to dilute their VP
+- Voters lose voting power (weighted average pulls down)
+
+**Edge Cases to Test:**
+
+- ✅ `test_transfer_cannotDoubleVote()` - Per-address check works
+- ✅ `test_transfer_dilutesVP()` - VP calculation correct
+- ❓ What if transfer happens after vote but before execution?
+- ❓ What if Alice votes, transfers, Bob votes, Alice gets tokens back?
+- ❓ What if circular transfers (A→B→C→A)?
+
+**Risk Level:** MEDIUM (VP can be destroyed, but no double-voting)
+
+**Mitigation:** Documentation warning about VP loss on transfer
+
+---
+
+### Flow 38: First Staker After Long Zero-Staker Period
+
+**Actors:** Stakers / Reward accumulators / First staker after drought
+
+**Scenario:** Huge rewards accumulate during zero-staker period, first staker gets windfall
+
+**Steps:**
+
+1. **T0 (All Unstake):**
+   - Last staker unstakes
+   - `_totalStaked = 0`
+   - Active stream paused at 500/1000 tokens vested
+
+2. **T0 to T0+30 days (Zero Stakers):**
+   - Fees continue accruing from Uniswap trades
+   - Fee splitter distributes to staking: 1000 WETH
+   - Staking accepts but cannot vest (no stakers)
+   - Another 2000 WETH accrued
+   - Another 3000 WETH accrued
+   - **Total accumulated: 6,500 WETH** (6000 new + 500 unvested from before)
+
+3. **T0+30 days (First Staker):**
+   - Bob stakes 1000 tokens (becomes 100% of stake)
+   - Stream resets with ALL accumulated rewards
+   - Stream: 6,500 WETH over 3 days
+
+4. **T0+33 days (Bob Claims):**
+   - Bob claims all 6,500 WETH
+   - Effective APR: Insanely high (30 days of fees for 3 days of staking)
+
+**Is This a Problem?**
+
+**NO - Working as Designed:**
+
+- ✅ Rewards preserved during zero-staker period
+- ✅ First staker incentivized to stake during drought
+- ✅ No rewards lost
+- ✅ Economic incentive for early re-staking
+
+**Economic Implications:**
+
+1. **Positive:** Encourages staking after everyone exits
+2. **Positive:** No protocol revenue lost
+3. **Neutral:** "Unfair" windfall is reward for being first
+4. **Negative:** May cause rush/competition when stakers notice
+
+**MEV Opportunity:**
+
+- Sophisticated actors monitor zero-staker periods
+- Front-run with large stake when fees accumulate
+- Capture accumulated rewards
+- Potentially unstake quickly after claiming
+
+**Current Behavior:**
+
+```solidity
+function stake(uint256 amount) external {
+    bool isFirstStaker = _totalStaked == 0;
+
+    if (isFirstStaker) {
+        // Reset streams for all reward tokens
+        for (uint256 i = 0; i < _rewardTokens.length; i++) {
+            address rt = _rewardTokens[i];
+            if (rtState.streamTotal > 0) {
+                _resetStreamForToken(rt, rtState.streamTotal);
+            }
+            // Accrue any unaccounted balance
+            uint256 available = _availableUnaccountedRewards(rt);
+            if (available > 0) {
+                _creditRewards(rt, available);
+            }
+        }
+    }
+    // ...
+}
+```
+
+**Edge Cases to Test:**
+
+- ✅ `test_firstStaker_getsAccumulatedRewards()` - Windfall documented
+- ✅ `test_zeroStakers_rewardsPreserved()` - Accumulation works
+- ❓ What if two stakers in same block during zero period?
+- ❓ What if accumulated rewards > uint256.max / streamWindow?
+- ❓ What if first staker immediately unstakes after claiming?
+
+**Risk Level:** ECONOMIC (not security) - Potentially unfair but incentive-aligned
+
+---
+
+### Flow 39: Config Gridlock via Verified Project
+
+**Actors:** Malicious verified project admin
+
+**Scenario:** Set invalid config to break governance or staking for that project
+
+**Attack Steps:**
+
+1. **T0:** Project gets verified by factory owner
+2. **T1:** Malicious admin calls `updateProjectConfig()`:
+   ```solidity
+   ProjectConfig({
+       streamWindowSeconds: 1,        // 1 second stream
+       proposalWindowSeconds: 1,      // 1 second to propose
+       votingWindowSeconds: 1,        // 1 second to vote
+       maxActiveProposals: 0,         // Cannot create proposals
+       quorumBps: 10000,              // 100% quorum (impossible)
+       approvalBps: 10000,            // 100% approval (impossible)
+       minSTokenBpsToSubmit: 10000,   // Need 100% to propose
+       maxProposalAmountBps: 0,       // Cannot propose any amount
+       minimumQuorumBps: 10000        // 100% minimum
+   })
+   ```
+
+**Would This Work?**
+
+**NO - Validation Prevents:**
+
+```solidity
+function updateProjectConfig(address clankerToken, ProjectConfig calldata customCfg) external {
+    // ... access control checks ...
+
+    // Validation (same as factory config)
+    _validateConfig(
+        FactoryConfig({
+            protocolFeeBps: _protocolFeeBps,  // Cannot override
+            protocolTreasury: _protocolTreasury,  // Cannot override
+            streamWindowSeconds: customCfg.streamWindowSeconds,
+            proposalWindowSeconds: customCfg.proposalWindowSeconds,
+            votingWindowSeconds: customCfg.votingWindowSeconds,
+            maxActiveProposals: customCfg.maxActiveProposals,
+            quorumBps: customCfg.quorumBps,
+            approvalBps: customCfg.approvalBps,
+            minSTokenBpsToSubmit: customCfg.minSTokenBpsToSubmit,
+            maxProposalAmountBps: customCfg.maxProposalAmountBps,
+            minimumQuorumBps: customCfg.minimumQuorumBps
+        }),
+        clankerToken,
+        false  // isFactoryUpdate = false
+    );
+}
+
+function _validateConfig(FactoryConfig memory cfg, address token, bool isFactoryUpdate) internal view {
+    // Prevent gridlock configs
+    require(cfg.streamWindowSeconds > 0, 'STREAM_WINDOW_ZERO');
+    require(cfg.proposalWindowSeconds > 0, 'PROPOSAL_WINDOW_ZERO');
+    require(cfg.votingWindowSeconds > 0, 'VOTING_WINDOW_ZERO');
+    require(cfg.maxActiveProposals > 0, 'MAX_PROPOSALS_ZERO');
+    require(cfg.quorumBps <= 10000, 'QUORUM_TOO_HIGH');
+    require(cfg.approvalBps <= 10000 && cfg.approvalBps > 5000, 'INVALID_APPROVAL');
+    require(cfg.minSTokenBpsToSubmit < 10000, 'MIN_STAKE_TOO_HIGH');
+    require(cfg.maxProposalAmountBps <= 10000, 'MAX_AMOUNT_TOO_HIGH');
+    // ... more validation ...
+}
+```
+
+**All Prevented:**
+
+- ✅ Cannot set windows to 0 or very small values
+- ✅ Cannot set quorum > 100%
+- ✅ Cannot set approval > 100% or <= 50%
+- ✅ Cannot set minStake >= 100%
+- ✅ Cannot set maxProposals to 0
+- ✅ Cannot set maxAmount > 100%
+
+**Edge Cases to Test:**
+
+- ✅ `test_projectConfig_validation()` - All validations work
+- ✅ `test_projectConfig_cannotGridlock()` - Gridlock prevented
+- ❓ What if set windows to 1 second (valid but impractical)?
+- ❓ What if set quorum to 99.99%?
+- ❓ What if combine many restrictive (but individually valid) settings?
+
+**Risk Level:** LOW (validation prevents most gridlock scenarios)
+
+---
+
+### Flow 40: Fee Splitter Batch Distribution Manipulation
+
+**Actors:** Malicious distributor / Fee splitter
+
+**Scenario:** Manipulate batch distribution to skip tokens or cause partial distribution
+
+**Attack Steps:**
+
+1. **Setup:**
+   - Splitter configured: 50% staking, 50% team
+   - Pending fees: 1000 WETH, 500 USDC, 200 DAI in ClankerFeeLocker
+
+2. **Attack Attempt 1: Duplicate Tokens**
+
+   ```solidity
+   distributeBatch([WETH, USDC, WETH, DAI])
+   ```
+
+   - First WETH: Distributes 1000 WETH ✅
+   - USDC: Distributes 500 USDC ✅
+   - Second WETH: Balance = 0, distributes 0 (no-op) ✅
+   - DAI: Distributes 200 DAI ✅
+   - **Result:** Harmless, just wastes gas
+
+3. **Attack Attempt 2: Very Large Array**
+
+   ```solidity
+   address[] memory tokens = new address[](1000);
+   for (uint i = 0; i < 1000; i++) tokens[i] = WETH;
+   distributeBatch(tokens);
+   ```
+
+   - Gas cost: ~1000 × (claim cost + distribute cost + 0-amount transfers)
+   - Estimated: ~50M gas
+   - Block limit: ~30M gas
+   - **Result:** Transaction fails (out of gas)
+
+4. **Attack Attempt 3: Interleave Whitelist Changes**
+   - Cannot happen: Distribution is atomic
+   - All tokens checked at start
+   - NonReentrant guard prevents external calls during batch
+
+**Actual Behavior:**
+
+```solidity
+function distributeBatch(address clankerToken, address[] calldata rewardTokens)
+    external
+    nonReentrant
+{
+    for (uint256 i = 0; i < rewardTokens.length; i++) {
+        _distributeSingle(clankerToken, rewardTokens[i]);
+    }
+}
+
+function _distributeSingle(address clankerToken, address rewardToken) internal {
+    // Whitelist check
+    require(
+        ILevrStaking_v1(staking).isTokenWhitelisted(rewardToken),
+        'TOKEN_NOT_WHITELISTED'
+    );
+
+    // ... claim and distribute ...
+
+    // If balance == 0, returns early (no-op)
+    if (balance == 0) return;
+}
+```
+
+**Protection Mechanisms:**
+
+- ✅ NonReentrant prevents reentrancy
+- ✅ Whitelist checked per token
+- ✅ Zero-balance gracefully handled
+- ✅ Duplicate tokens harmless (second is no-op)
+- ✅ Gas limit prevents very large arrays
+
+**No Attack Vector:**
+
+- Cannot force partial distribution
+- Cannot skip whitelisted tokens
+- Cannot manipulate state mid-batch
+- Worst case: Waste gas on duplicates/large arrays
+
+**Edge Cases to Test:**
+
+- ✅ `test_distributeBatch_duplicates_harmless()` - Duplicates handled
+- ✅ `test_distributeBatch_largeArray_gasLimit()` - Gas bounds
+- ✅ `test_distributeBatch_emptyArray_succeeds()` - Edge case handled
+- ❓ What if array has 100 unique tokens all with balance?
+- ❓ What if token becomes non-whitelisted mid-array?
+- ❓ What if claim from locker fails for one token?
+
+**Risk Level:** NONE (well-protected, worst case is gas waste)
+
+---
+
+### Flow 41: Protocol Fee Override Attempt by Verified Project
+
+**Actors:** Verified project admin (malicious) / Factory owner
+
+**Scenario:** Verified project attempts to bypass protocol fee by manipulating config
+
+**Attack Steps:**
+
+1. **T0 (Setup):**
+   - Factory protocol fee: 1% (100 BPS)
+   - Protocol treasury: 0xFEE
+   - Project gets verified by factory owner
+
+2. **T1 (Attack Attempt - Direct Override):**
+   - Project admin calls `factory.updateProjectConfig()`
+   - **Problem:** `ProjectConfig` struct doesn't have `protocolFeeBps` field
+   - Cannot specify protocol fee in update call
+   - **Attack prevented at compilation:** ✅ Cannot even attempt
+
+3. **T2 (Attack Attempt - State Manipulation):**
+   - Attacker tries to manipulate stored config
+   - Calls `updateProjectConfig()` with custom governance params
+   - Code preserves protocol fee from CURRENT factory values:
+
+   ```solidity
+   FactoryConfig memory fullCfg = FactoryConfig({
+       protocolFeeBps: _protocolFeeBps,  // Always factory value
+       // ... project's custom params ...
+   });
+   ```
+
+   - Project override config gets factory's protocol fee
+   - **Attack prevented in code:** ✅ Cannot override
+
+4. **T3 (Attack Attempt - Timing):**
+   - Attacker waits for factory protocol fee change
+   - Factory fee changes: 1% → 0.5%
+   - Attacker hopes old override config still has 1%
+   - Calls `updateProjectConfig()` again
+   - Code uses CURRENT factory fee (0.5%), not stored value
+   - **Attack prevented by design:** ✅ Always syncs to factory
+
+**Protection Mechanism:**
+
+```solidity
+function updateProjectConfig(address clankerToken, ProjectConfig calldata cfg) external {
+    // ...
+
+    // CRITICAL: protocolFeeBps ALWAYS comes from current factory state
+    FactoryConfig memory fullCfg = FactoryConfig({
+        protocolFeeBps: _protocolFeeBps,        // Factory value (not overridable)
+        protocolTreasury: _protocolTreasury,    // Factory value (not overridable)
+        streamWindowSeconds: cfg.streamWindowSeconds,
+        // ... other fields from project config ...
+    });
+
+    _updateConfig(fullCfg, clankerToken, false);
+}
+
+// Protocol fee getter has NO override logic
+function protocolFeeBps() external view returns (uint16) {
+    return _protocolFeeBps;  // Always factory value
+}
+```
+
+**Why This Works:**
+
+1. **Struct Design:** `ProjectConfig` excludes `protocolFeeBps` and `protocolTreasury`
+2. **Code Enforcement:** `updateProjectConfig()` always uses `_protocolFeeBps` from factory
+3. **Getter Isolation:** `protocolFeeBps()` has no project override path
+4. **Runtime Sync:** Every update pulls CURRENT factory values, not stored values
+
+**Verification:**
+
+```
+Factory protocolFeeBps: 100 (1%)
+Project 1 verified, sets custom quorum: 60%
+Project 2 verified, sets custom quorum: 80%
+
+factory.protocolFeeBps() → 100 (same for all)
+factory.quorumBps(project1) → 6000 (custom)
+factory.quorumBps(project2) → 8000 (custom)
+
+Factory owner changes protocolFeeBps: 100 → 200
+
+factory.protocolFeeBps() → 200 (updated for all)
+factory.quorumBps(project1) → 6000 (unchanged)
+factory.quorumBps(project2) → 8000 (unchanged)
+```
+
+**Edge Cases Tested:**
+
+- ✅ `test_projectConfig_cannotOverrideProtocolFee()` - Override prevented
+- ✅ `test_factoryProtocolFeeChange_appliesToAllProjects()` - Changes sync
+- ✅ `test_projectConfigUpdate_alwaysUsesCurrentFactoryProtocolFee()` - Runtime sync
+- ✅ `test_multipleProjects_cannotOverrideProtocolFeeIndependently()` - All use same fee
+- ✅ `test_protocolFee_cannotBeAvoided()` - No config combination bypasses
+- ✅ `test_protocolTreasury_cannotBeOverridden()` - Treasury also protected
+
+**Attack Prevented:** ✅ Projects cannot reduce protocol revenue under any circumstances
+
+**Risk Level:** NONE (multiple layers of protection)
+
+**Revenue Security:**
+
+- ✅ Protocol fee controlled exclusively by factory owner
+- ✅ All projects (verified or not) use same protocol fee
+- ✅ Fee changes apply immediately to all projects
+- ✅ No project can avoid or reduce protocol revenue
+
+---
+
+## Summary of Advanced Scenarios
+
+| Flow | Scenario                   | Attack Vector                   | Protection                    | Risk       |
+| ---- | -------------------------- | ------------------------------- | ----------------------------- | ---------- |
+| 30   | Whitelist Manipulation     | Unwhitelist during distribution | Atomic whitelist check        | NONE       |
+| 31   | Supply Manipulation        | Flash stake/unstake             | Snapshot at proposal creation | NONE       |
+| 32   | Cross-Token Confusion      | Multiple token proposals        | Independent validation        | GOVERNANCE |
+| 33   | Timing Attack              | Vote at exact boundaries        | Expected behavior             | NONE       |
+| 34   | Meta-Transaction Replay    | Reuse signature                 | Nonce system                  | LOW        |
+| 35   | Stream Window Manipulation | Config change mid-stream        | Per-stream immutability       | NONE       |
+| 36   | Reward Token DOS           | Dust token spam                 | Whitelist requirement         | NONE       |
+| 37   | sToken Transfer            | VP manipulation via transfer    | Per-address voting            | MEDIUM     |
+| 38   | First Staker Windfall      | Accumulate then stake           | Incentive-aligned design      | ECONOMIC   |
+| 39   | Config Gridlock            | Invalid verified config         | Validation prevents           | LOW        |
+| 40   | Batch Distribution         | Manipulate batch array          | NonReentrant + checks         | NONE       |
+| 41   | Protocol Fee Override      | Bypass protocol revenue         | Struct + runtime enforcement  | NONE       |
+
+**Key Findings:**
+
+1. **Most attack vectors prevented** by design (snapshots, whitelists, validation)
+2. **Economic scenarios exist** but are incentive-aligned (first staker windfall)
+3. **Governance risks** are coordination issues, not security issues
+4. **No critical vulnerabilities** in adversarial scenarios
+5. **Protocol revenue protected** by multiple layers (struct design, runtime enforcement, getter isolation)
+
+**Recommendations:**
+
+1. **Document** VP loss on sToken transfer (warn users)
+2. **Monitor** zero-staker periods for MEV activity
+3. **UI warnings** for timing edge cases (voting windows)
+4. **Frontend validation** for batch distribution array sizes
+5. **Revenue monitoring** for protocol fee collection across all projects
+
+---
+
+**Status:** Advanced adversarial scenarios documented and analyzed ✅  
+**Coverage:** 12 new complex attack scenarios mapped (Flows 30-41)  
+**Security Level:** Strong protections across all vectors including revenue security

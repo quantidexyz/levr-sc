@@ -6,7 +6,7 @@ All notable changes to the Levr V1 protocol are documented here.
 
 ## [1.5.0] - 2025-11-02 - Whitelist-Only Reward Token System
 
-**Status:** ✅ Complete - All 516 tests passing (465 unit + 51 E2E)
+**Status:** ✅ Complete - All 531 tests passing (480 unit + 51 E2E)
 
 ### 🎯 Security Enhancement: Mandatory Reward Token Whitelisting
 
@@ -24,6 +24,8 @@ Replaced the optional `maxRewardTokens` limit with a mandatory whitelist-only sy
 - **Modified** `initialize()` to accept `address[] initialWhitelistedTokens` parameter
 - **Enforced** whitelist checks in all reward accrual and distribution paths
 - **Deployment** Factory initialized with WETH in initial whitelist for all chains
+- **CRITICAL:** Protocol fee override protection - projects always use current factory `protocolFeeBps`
+- **Consistency:** Stream window validation changed from `>= 1 day` to `> 0` (matches other windows)
 
 **Why This Matters:**
 
@@ -88,6 +90,7 @@ function unwhitelistToken(address token) external {
 3. **Fund Protection:** `CANNOT_UNWHITELIST_WITH_PENDING_REWARDS` prevents unwhitelisting with claimable rewards
 4. **Access Control:** Only token admin can whitelist/unwhitelist tokens
 5. **Cleanup Safety:** Must unwhitelist before cleanup to prevent accidental removal
+6. **Revenue Security:** Projects cannot override `protocolFeeBps` or `protocolTreasury` (factory-controlled)
 
 **Files Modified:**
 
@@ -113,7 +116,13 @@ function unwhitelistToken(address token) external {
   - Reward state corruption prevention
   - Complete whitelist lifecycle
   - Multi-project independent whitelists
-- ✅ All 465 unit tests passing (including new whitelist tests)
+- ✅ 15 new verified project tests (`LevrFactory_VerifiedProjects.t.sol`)
+  - Protocol fee override protection (CRITICAL)
+  - Protocol treasury override protection
+  - Factory fee changes sync to all projects
+  - Multi-project protocol fee independence
+  - Config validation and gridlock prevention
+- ✅ All 480 unit tests passing (30 new + 450 updated)
 - ✅ All 51 E2E tests updated and passing
 - ✅ Test helpers: `initializeStakingWithRewardTokens()`, `whitelistRewardToken()`
 

@@ -216,11 +216,12 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         }
 
         // Convert ProjectConfig to FactoryConfig, preserving non-overridable fields
-        FactoryConfig storage existingCfg = _projectOverrideConfig[clankerToken];
+        // CRITICAL: protocolFeeBps and protocolTreasury MUST always match factory values
+        // Projects cannot override these fields - they are protocol-level settings
         FactoryConfig memory fullCfg = FactoryConfig({
-            protocolFeeBps: existingCfg.protocolFeeBps, // Preserve (not overridable)
+            protocolFeeBps: _protocolFeeBps, // ALWAYS use current factory value (not overridable)
             streamWindowSeconds: cfg.streamWindowSeconds,
-            protocolTreasury: existingCfg.protocolTreasury, // Preserve (not overridable)
+            protocolTreasury: _protocolTreasury, // ALWAYS use current factory value (not overridable)
             proposalWindowSeconds: cfg.proposalWindowSeconds,
             votingWindowSeconds: cfg.votingWindowSeconds,
             maxActiveProposals: cfg.maxActiveProposals,
@@ -557,7 +558,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         require(cfg.maxActiveProposals > 0, 'MAX_ACTIVE_PROPOSALS_ZERO');
         require(cfg.proposalWindowSeconds > 0, 'PROPOSAL_WINDOW_ZERO');
         require(cfg.votingWindowSeconds > 0, 'VOTING_WINDOW_ZERO');
-        require(cfg.streamWindowSeconds >= 1 days, 'STREAM_WINDOW_TOO_SHORT');
+        require(cfg.streamWindowSeconds > 0, 'STREAM_WINDOW_ZERO');
     }
 
     /// @dev Override trustedForwarder to satisfy both ILevrFactory_v1 and ERC2771Context
