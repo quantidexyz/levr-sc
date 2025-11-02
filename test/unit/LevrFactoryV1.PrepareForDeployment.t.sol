@@ -7,7 +7,9 @@ import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
+import {ILevrTreasury_v1} from '../../src/interfaces/ILevrTreasury_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
@@ -372,5 +374,101 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         for (uint256 i = 0; i < 3; i++) {
             assertEq(projects[i].clankerToken, tokens[i], 'Order should match registration order');
         }
+    }
+
+    // ============ Missing Edge Cases from USER_FLOWS.md Flow 1-2 ============
+
+    function test_initialize_calledTwiceOnTreasury_reverts() public {
+        // Prepare and register to get treasury address
+        factory.prepareForDeployment();
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+        ILevrFactory_v1.Project memory project = factory.register(address(clankerToken));
+
+        LevrTreasury_v1 treasury = LevrTreasury_v1(payable(project.treasury));
+        address governor = project.governor;
+
+        // Try to initialize treasury again - should revert
+        vm.expectRevert(ILevrTreasury_v1.AlreadyInitialized.selector);
+        treasury.initialize(governor, address(clankerToken));
+    }
+
+    function test_initialize_calledTwiceOnStaking_reverts() public {
+        // Prepare and register to get staking address
+        factory.prepareForDeployment();
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+        ILevrFactory_v1.Project memory project = factory.register(address(clankerToken));
+
+        LevrStaking_v1 staking = LevrStaking_v1(project.staking);
+        address[] memory emptyRewardTokens = new address[](0);
+
+        // Try to initialize staking again - should revert
+        vm.expectRevert(ILevrStaking_v1.AlreadyInitialized.selector);
+        staking.initialize(
+            address(clankerToken),
+            project.stakedToken,
+            project.treasury,
+            address(factory),
+            emptyRewardTokens
+        );
+    }
+
+    function test_register_calledTwiceForSameToken_reverts() public {
+        // Prepare and register first time
+        factory.prepareForDeployment();
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+        factory.register(address(clankerToken));
+
+        // Try to register same token again - should revert
+        factory.prepareForDeployment();
+        vm.expectRevert('ALREADY_REGISTERED');
+        factory.register(address(clankerToken));
+    }
+
+    function test_preparedContracts_usedForMultipleTokens_fails() public {
+        // Prepare contracts once
+        (address treasury, address staking) = factory.prepareForDeployment();
+
+        // Register first token - this will delete prepared contracts
+        MockERC20 token1 = new MockERC20('Token1', 'TK1');
+        factory.register(address(token1));
+
+        // Try to register second token with same prepared contracts
+        // Since prepared contracts were deleted, register will fail during deploy
+        MockERC20 token2 = new MockERC20('Token2', 'TK2');
+        vm.expectRevert('DEPLOY_FAILED');
+        factory.register(address(token2));
+    }
+
+    function test_preparedContracts_usedByDifferentCaller_reverts() public {
+        // Setup: Prepare contracts as one caller
+        address caller1 = address(0x1111);
+        address caller2 = address(0x2222);
+
+        // Caller1 prepares contracts (stored under caller1's address)
+        vm.prank(caller1);
+        factory.prepareForDeployment();
+
+        // Create token where caller2 is the admin
+        vm.prank(caller2);
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+
+        // Caller2 tries to register - should fail because:
+        // 1. Caller2 is token admin (can call register)
+        // 2. But prepared contracts are stored under caller1's address
+        // 3. Register looks up _preparedContracts[caller2] which is empty/zero
+        // 4. Deploy will fail with zero addresses
+        vm.prank(caller2);
+        vm.expectRevert('DEPLOY_FAILED'); // Will fail because prepared contracts are for caller1, not caller2
+        factory.register(address(clankerToken));
+    }
+
+    function test_deployer_withZeroAddresses_validatesAndReverts() public {
+        // Create token
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+
+        // Try to register without preparing - prepared contracts will be zero addresses
+        // This should fail during deployer initialization
+        vm.expectRevert('DEPLOY_FAILED');
+        factory.register(address(clankerToken));
     }
 }

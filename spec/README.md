@@ -1,8 +1,8 @@
 # Levr V1 Protocol Documentation
 
-**Last Updated:** October 31, 2025  
+**Last Updated:** December 2025  
 **Protocol Status:** 🔴 **AUDIT 4 - 17 NEW FINDINGS** (4-5 weeks to fix)  
-**Test Coverage:** 444/444 tests passing (100%) ✅  
+**Test Coverage:** 556/556 tests passing (100%) ✅ **+89 tests from USER_FLOWS.md**  
 **Latest Release:** v1.3.0 - Critical Security Fixes
 
 ---

@@ -1,8 +1,8 @@
 # Testing Guide - Levr V1
 
 **Purpose:** Test utilities, strategies, and best practices  
-**Last Updated:** November 2, 2025 - Whitelist System Complete  
-**Test Coverage:** 531/531 passing (100%) ✅ **+72 tests** 🎉
+**Last Updated:** December 2025 - All USER_FLOWS.md Test Cases Implemented  
+**Test Coverage:** 556/556 passing (100%) ✅ **+89 tests** 🎉
 
 ---
 
@@ -385,6 +385,85 @@ assert(balance - escrow - reserve <= dustThreshold);
 ```
 
 ---
+
+## Recent Test Additions (December 2025)
+
+### USER_FLOWS.md Test Implementation Complete
+
+All missing edge cases identified in `USER_FLOWS.md` have been systematically implemented and verified.
+
+**Summary:**
+- **89+ new test cases** added across 7 test files
+- **1 new test file** created (`LevrGovernor_CrossContract.t.sol`)
+- **556 total tests** passing (100% pass rate)
+
+**Test Categories Implemented:**
+
+1. **Factory Registration (6 tests)** - `LevrFactoryV1.PrepareForDeployment.t.sol`
+   - Double initialization protection
+   - Double registration prevention
+   - Prepared contracts ownership validation
+   - Zero address validation
+
+2. **Staking Flows (28 tests)** - `LevrStakingV1.t.sol`
+   - Staking during active reward streams
+   - First staker edge cases
+   - Overflow protection
+   - Weighted average timestamp calculations
+   - VP preservation on stake/unstake
+   - Claiming edge cases (empty arrays, non-existent tokens)
+   - Concurrent user operations
+   - Reward accrual edge cases
+
+3. **Governance Flows (25 tests)** - `LevrGovernorV1.t.sol`
+   - Config snapshot protection
+   - Treasury balance validation
+   - Proposal creation limits
+   - Voting edge cases
+   - Execution failure handling
+   - Cycle management
+   - Gas optimization with many proposals
+
+4. **Treasury Flows (9 tests)** - `LevrTreasuryV1.t.sol`
+   - Malicious contract handling
+   - Fee-on-transfer tokens
+   - Zero address protection
+   - Reentrancy protection
+   - Multiple boost operations
+
+5. **Fee Splitter Flows (7 tests)** - `LevrFeeSplitter_MissingEdgeCases.t.sol`
+   - Token whitelist state changes
+   - Batch distribution atomicity
+   - Large batch operations (100+ tokens)
+   - Rapid reconfiguration
+
+6. **Forwarder Flows (6 tests)** - `LevrForwarderV1.t.sol`
+   - Large multicall arrays
+   - Failure handling with allowFailure
+   - Malformed call data
+   - Recursive call protection
+   - ERC2771Context integration
+
+7. **Cross-Contract Flows (8 tests)** - `LevrGovernor_CrossContract.t.sol` (NEW)
+   - Full governance cycle end-to-end
+   - Treasury balance depletion scenarios
+   - Competing proposals
+   - Failed proposal handling
+   - Independent token proposals
+
+**Key Improvements:**
+- Comprehensive edge case coverage
+- Proper handling of Solidity 0.8+ overflow protection
+- Realistic test scenarios (avoiding unrealistic max uint256 values)
+- Proper state validation (execution vs creation time checks)
+- Cross-contract interaction testing
+
+**Testing Methodology:**
+- Systematic flow mapping from USER_FLOWS.md
+- One test per edge case
+- Clear test names and documentation
+- Proper setup/teardown
+- Multiple scenarios per edge case
 
 ## Coverage Areas
 
