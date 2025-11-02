@@ -37,8 +37,7 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         // Deploy forwarder
@@ -49,7 +48,8 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
             config,
             address(this),
             address(forwarder),
-            address(0)
+            address(0),
+            new address[](0)
         );
 
         // Deploy underlying token
@@ -71,7 +71,8 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
             address(underlying),
             address(stakedToken),
             address(factory),
-            address(factory)
+            address(factory),
+            new address[](0)
         );
 
         // Mint underlying tokens

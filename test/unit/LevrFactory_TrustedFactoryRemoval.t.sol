@@ -89,8 +89,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25,
-            maxRewardTokens: 10
+            minimumQuorumBps: 25
         });
 
         // Predict factory address
@@ -98,7 +97,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
         address predictedFactory = vm.computeCreateAddress(address(this), nonce + 1);
 
         deployer = new LevrDeployer_v1(predictedFactory);
-        factory = new LevrFactory_v1(config, owner, address(forwarder), address(deployer));
+        factory = new LevrFactory_v1(config, owner, address(forwarder), address(deployer), new address[](0));
 
         // Deploy mock Clanker factory
         clankerFactory = new MockClankerFactory();

@@ -45,8 +45,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
             approvalBps: 5100,
             minSTokenBpsToSubmit: 0, // No minimum for testing
             maxProposalAmountBps: 10000, // 100% for testing,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (

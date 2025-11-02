@@ -40,11 +40,16 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
+        factory = new LevrFactory_v1(
+            config,
+            address(this),
+            address(0),
+            address(0),
+            new address[](0)
+        );
 
         underlying = new MockERC20('Underlying', 'UND');
         weth = new MockERC20('Wrapped Ether', 'WETH');
@@ -59,12 +64,18 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
             address(staking)
         );
 
+        // Initialize staking with reward tokens already whitelisted
+        address[] memory rewardTokens = new address[](2);
+        rewardTokens[0] = address(weth);
+        rewardTokens[1] = address(usdc);
+
         vm.prank(address(factory));
         staking.initialize(
             address(underlying),
             address(stakedToken),
             address(this),
-            address(factory)
+            address(factory),
+            rewardTokens
         );
 
         // Setup users with tokens
@@ -86,7 +97,9 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         weth.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(weth));
 
-        (uint64 firstStreamStart, uint64 firstStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
+        (uint64 firstStreamStart, uint64 firstStreamEnd, ) = staking.getTokenStreamInfo(
+            address(underlying)
+        );
         console.log('First stream: start =', firstStreamStart, ', end =', firstStreamEnd);
 
         // T=1 day: 333 ether should be vested for WETH
@@ -101,7 +114,9 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         underlying.mint(address(staking), 500 ether);
         staking.accrueRewards(address(underlying));
 
-        (uint64 secondStreamStart, uint64 secondStreamEnd, ) = staking.getTokenStreamInfo(address(underlying));
+        (uint64 secondStreamStart, uint64 secondStreamEnd, ) = staking.getTokenStreamInfo(
+            address(underlying)
+        );
         console.log('Second stream: start =', secondStreamStart, ', end =', secondStreamEnd);
 
         // CRITICAL: Verify window was reset
@@ -344,19 +359,19 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         // POOL-BASED: Claim timing affects distribution
         uint256 totalWeth = aliceWeth + bobWeth;
         uint256 totalUnderlying = aliceUnderlying + bobUnderlying;
-        
+
         // Alice claims first, gets 50% of each pool
         // Bob claims second, gets 50% of REMAINING pool
         // Result: Alice gets more due to claim timing (expected behavior)
         assertGt(aliceWeth, bobWeth, 'Alice claims first, gets more');
         assertGt(aliceUnderlying, bobUnderlying, 'Alice claims first, gets more');
-        
+
         // Both should receive something
         assertGt(aliceWeth, 0, 'Alice gets WETH');
         assertGt(bobWeth, 0, 'Bob gets WETH');
         assertGt(aliceUnderlying, 0, 'Alice gets underlying');
         assertGt(bobUnderlying, 0, 'Bob gets underlying');
-        
+
         // Total claimed should be reasonable (some may remain in pool due to claim timing)
         assertGt(totalWeth, 1000 ether, 'Significant WETH distributed');
         assertGt(totalUnderlying, 500 ether, 'Significant underlying distributed');

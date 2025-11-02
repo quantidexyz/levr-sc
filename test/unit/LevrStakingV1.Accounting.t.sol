@@ -7,10 +7,11 @@ import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 /// @title Levr Staking V1 Accounting Tests
 /// @notice Comprehensive accounting tests covering all edge cases and bug scenarios
-contract LevrStakingV1_Accounting is Test {
+contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
     MockERC20 internal underlying;
     MockERC20 internal weth;
     LevrStakedToken_v1 internal sToken;
@@ -24,16 +25,18 @@ contract LevrStakingV1_Accounting is Test {
         weth = new MockERC20('WETH', 'WETH');
         staking = new LevrStaking_v1(address(0));
         sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
-        staking.initialize(address(underlying), address(sToken), address(0xBEEF), address(this));
+        
+        // Initialize staking with WETH already whitelisted
+        address[] memory rewardTokens = new address[](1);
+        rewardTokens[0] = address(weth);
+        initializeStakingWithRewardTokens(staking, address(underlying), address(sToken), address(0xBEEF), address(this), rewardTokens);
+        
         underlying.mint(alice, 1_000_000 ether);
         weth.mint(address(this), 1_000_000 ether);
     }
 
     function streamWindowSeconds(address) external pure returns (uint32) {
         return 7 days;
-    }
-    function maxRewardTokens(address) external pure returns (uint16) {
-        return 50;
     }
     function getClankerMetadata(
         address

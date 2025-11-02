@@ -62,8 +62,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
             approvalBps: 5100, // 51% approval required
             minSTokenBpsToSubmit: 100, // 1% of supply required to propose
             maxProposalAmountBps: 1000, // 10% of total supply allowed per proposal,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (factory, forwarder, levrDeployer) = deployFactory(cfg, address(this), CLANKER_FACTORY);

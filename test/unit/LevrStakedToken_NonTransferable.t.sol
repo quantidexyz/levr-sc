@@ -34,18 +34,17 @@ contract LevrStakedToken_NonTransferableTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), address(0), address(0), new address[](0));
         underlying = new MockERC20('Underlying', 'UND');
 
         staking = new LevrStaking_v1(address(0));
         stakedToken = new LevrStakedToken_v1('Staked', 'sUND', 18, address(underlying), address(staking));
 
         vm.prank(address(factory));
-        staking.initialize(address(underlying), address(stakedToken), address(this), address(factory));
+        staking.initialize(address(underlying), address(stakedToken), address(this), address(factory), new address[](0));
 
         underlying.mint(alice, 10000 ether);
         underlying.mint(bob, 10000 ether);

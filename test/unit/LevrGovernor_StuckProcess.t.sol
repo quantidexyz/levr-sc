@@ -47,15 +47,15 @@ contract LevrGovernor_StuckProcessTest is Test {
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 5000, // 50%
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory = new LevrFactory_v1(
             config,
             address(this),
             address(0),
-            address(0)
+            address(0),
+            new address[](0)
         );
 
         // Deploy contracts
@@ -86,7 +86,8 @@ contract LevrGovernor_StuckProcessTest is Test {
             address(underlying),
             address(sToken),
             address(treasury),
-            address(factory)
+            address(factory),
+            new address[](0)
         );
 
         // Fund treasury
@@ -183,7 +184,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         // Proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
         // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid1);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pid1).executed, 'Proposal should be executed');
 
@@ -260,7 +261,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         // Proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
         // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         governor.execute(pid);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
@@ -503,7 +504,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         // WETH proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
         // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
         governor.execute(pidWeth);
-        
+
         // Verify marked as executed
         assertTrue(governor.getProposal(pidWeth).executed, 'WETH proposal should be executed');
 

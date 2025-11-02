@@ -51,8 +51,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 5000, // 50%
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));

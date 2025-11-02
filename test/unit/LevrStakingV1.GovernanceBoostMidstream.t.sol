@@ -37,11 +37,10 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), address(0), address(0), new address[](0));
         underlying = new MockERC20('Underlying Token', 'UND');
 
         // Deploy treasury, staking, staked token
@@ -61,7 +60,8 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
             address(underlying),
             address(stakedToken),
             address(treasury),
-            address(factory)
+            address(factory),
+            new address[](0)
         );
 
         vm.prank(address(factory));

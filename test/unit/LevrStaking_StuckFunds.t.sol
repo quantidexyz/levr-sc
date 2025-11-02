@@ -43,9 +43,6 @@ contract LevrStaking_StuckFundsTest is Test {
         return 3 days;
     }
 
-    function maxRewardTokens(address) external pure returns (uint16) {
-        return 10;
-    }
 
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
@@ -59,7 +56,7 @@ contract LevrStaking_StuckFundsTest is Test {
             address(staking)
         );
 
-        staking.initialize(address(underlying), address(sToken), treasury, address(this));
+        staking.initialize(address(underlying), address(sToken), treasury, address(this), new address[](0));
     }
 
     // ============ Flow 22: Escrow Balance Mismatch Tests ============
@@ -423,8 +420,8 @@ contract LevrStaking_StuckFundsTest is Test {
     // ============ Flow 25: Reward Token Slot Exhaustion Tests ============
 
     /// @notice Test that MAX_REWARD_TOKENS limit is enforced
-    function test_maxRewardTokens_limitEnforced() public {
-        console2.log('\n=== Flow 25: Max Reward Tokens Limit ===');
+    function test_nonWhitelistedToken_rejected() public {
+        console2.log('\n=== Flow 25: Non-Whitelisted Tokens Rejected ===');
 
         // Setup: Alice stakes
         underlying.mint(alice, 1000 ether);
@@ -433,35 +430,20 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Note: underlying is whitelisted (doesn't count toward limit of 10)
-        // So we can add 10 non-whitelisted tokens
-        MockERC20[] memory tokens = new MockERC20[](12);
-        for (uint256 i = 0; i < 12; i++) {
-            tokens[i] = new MockERC20(
-                string(abi.encodePacked('Token', vm.toString(i))),
-                string(abi.encodePacked('TK', vm.toString(i)))
-            );
-            tokens[i].mint(address(staking), 10 ether);
+        // Try to accrue rewards for a non-whitelisted token
+        MockERC20 nonWhitelisted = new MockERC20('NonWhitelisted', 'NWL');
+        nonWhitelisted.mint(address(staking), 100 ether);
 
-            if (i < 10) {
-                // First 10 should succeed (limit is 10 non-whitelisted)
-                staking.accrueRewards(address(tokens[i]));
-                console2.log('Added non-whitelisted token', i + 1, '/ 10');
-            } else {
-                // 11th should fail (exceeds limit of 10 non-whitelisted)
-                vm.expectRevert('MAX_REWARD_TOKENS_REACHED');
-                staking.accrueRewards(address(tokens[i]));
-                console2.log('Token', i + 1, 'rejected (limit reached)');
-                break;
-            }
-        }
+        // Should revert because token is not whitelisted
+        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        staking.accrueRewards(address(nonWhitelisted));
 
-        console2.log('SUCCESS: MAX_REWARD_TOKENS limit enforced');
+        console2.log('SUCCESS: Non-whitelisted token rejected');
     }
 
-    /// @notice Test that whitelisted tokens don't count toward limit
-    function test_whitelistToken_doesNotCountTowardLimit() public {
-        console2.log('\n=== Flow 25: Whitelist Exemption ===');
+    /// @notice Test that whitelisted tokens work correctly
+    function test_whitelistToken_allowsRewardAccrual() public {
+        console2.log('\n=== Flow 25: Whitelisted Token Reward Accrual ===');
 
         // Setup
         underlying.mint(alice, 1000 ether);
@@ -474,21 +456,21 @@ contract LevrStaking_StuckFundsTest is Test {
         MockERC20 whitelisted = new MockERC20('Whitelisted', 'WL');
         staking.whitelistToken(address(whitelisted));
 
-        // Add 10 regular tokens
-        for (uint256 i = 0; i < 10; i++) {
-            MockERC20 token = new MockERC20(
-                string(abi.encodePacked('Token', vm.toString(i))),
-                string(abi.encodePacked('TK', vm.toString(i)))
-            );
-            token.mint(address(staking), 10 ether);
-            staking.accrueRewards(address(token));
-        }
+        // Verify it's whitelisted
+        assertTrue(staking.isTokenWhitelisted(address(whitelisted)), 'Token should be whitelisted');
 
-        // Whitelist token should still be usable
-        whitelisted.mint(address(staking), 10 ether);
+        // Accrue rewards for whitelisted token - should succeed
+        whitelisted.mint(address(staking), 100 ether);
         staking.accrueRewards(address(whitelisted));
 
-        console2.log('SUCCESS: Whitelisted token does not count toward limit');
+        // Wait for rewards to start vesting
+        vm.warp(block.timestamp + 1 days);
+
+        // Verify rewards were accrued
+        uint256 claimable = staking.claimableRewards(alice, address(whitelisted));
+        assertGt(claimable, 0, 'Should have claimable rewards');
+
+        console2.log('SUCCESS: Whitelisted token allows reward accrual');
     }
 
     /// @notice Test cleanup of finished reward tokens
@@ -502,8 +484,9 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Add a reward token
+        // Add a reward token (whitelist first)
         MockERC20 dustToken = new MockERC20('Dust', 'DST');
+        staking.whitelistToken(address(dustToken));
         dustToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(dustToken));
 
@@ -521,7 +504,10 @@ contract LevrStaking_StuckFundsTest is Test {
         vm.prank(alice);
         staking.unstake(1000 ether, alice);
 
-        // Now cleanup should work (reserve = 0 after claim)
+        // Unwhitelist the token first (cleanup requires non-whitelisted)
+        staking.unwhitelistToken(address(dustToken));
+
+        // Now cleanup should work (reserve = 0 after claim and unwhitelisted)
         staking.cleanupFinishedRewardToken(address(dustToken));
 
         console2.log('SUCCESS: Finished token cleaned up, slot freed');
@@ -542,11 +528,13 @@ contract LevrStaking_StuckFundsTest is Test {
 
         // Add token1 (small, will be claimed quickly)
         MockERC20 token1 = new MockERC20('Token1', 'TK1');
+        staking.whitelistToken(address(token1));
         token1.mint(address(staking), 100 ether);
         staking.accrueRewards(address(token1));
 
         // Add token2 (large, keeps stream active)
         MockERC20 token2 = new MockERC20('Token2', 'TK2');
+        staking.whitelistToken(address(token2));
         token2.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(token2));
 
@@ -559,7 +547,10 @@ contract LevrStaking_StuckFundsTest is Test {
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
 
-        // Cleanup token1 even though global stream is at end/active
+        // Unwhitelist token1 first (cleanup requires non-whitelisted)
+        staking.unwhitelistToken(address(token1));
+
+        // Cleanup token1 even though token2 stream is still active
         staking.cleanupFinishedRewardToken(address(token1));
 
         console2.log('SUCCESS: Cleanup works when token has no rewards (pool=0, stream=0)');

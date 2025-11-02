@@ -43,15 +43,15 @@ contract LevrStakingV1AprSpikeTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory = new LevrFactory_v1(
             config,
             address(this),
             address(0),
-            address(0)
+            address(0),
+            new address[](0)
         );
 
         // Deploy tokens
@@ -70,8 +70,17 @@ contract LevrStakingV1AprSpikeTest is Test {
 
         // Initialize staking only (stakedToken is immutable)
         // Must call from factory address
+        // Initialize with WETH already whitelisted
+        address[] memory rewardTokens = new address[](1);
+        rewardTokens[0] = address(weth);
         vm.prank(address(factory));
-        staking.initialize(address(underlying), address(stakedToken), treasury, address(factory));
+        staking.initialize(
+            address(underlying),
+            address(stakedToken),
+            treasury,
+            address(factory),
+            rewardTokens
+        );
 
         // Setup alice with initial stake
         underlying.mint(alice, INITIAL_STAKE);
@@ -301,7 +310,8 @@ contract LevrStakingV1AprSpikeTest is Test {
             address(underlying),
             address(newStakedToken),
             treasury,
-            address(factory)
+            address(factory),
+            new address[](0)
         );
 
         // Stake only 100K tokens instead of 10M
@@ -356,7 +366,8 @@ contract LevrStakingV1AprSpikeTest is Test {
             address(underlying),
             address(newStakedToken),
             treasury,
-            address(factory)
+            address(factory),
+            new address[](0)
         );
 
         // Stake exactly the amount needed for 125% APR

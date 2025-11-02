@@ -42,15 +42,15 @@ contract DeployLevrFeeSplitterTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory = new LevrFactory_v1(
             config,
             deployer,
             address(forwarder),
-            address(levrDeployer)
+            address(levrDeployer),
+            new address[](0)
         );
     }
 

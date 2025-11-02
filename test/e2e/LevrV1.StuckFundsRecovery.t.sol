@@ -53,11 +53,10 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
+        factory = new LevrFactory_v1(config, address(this), address(0), address(0), new address[](0));
 
         // Deploy contracts
         treasury = new LevrTreasury_v1(address(factory), address(0));
@@ -82,7 +81,8 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             address(underlying),
             address(sToken),
             address(treasury),
-            address(factory)
+            address(factory),
+            new address[](0)
         );
 
         // Fund treasury

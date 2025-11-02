@@ -105,6 +105,9 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
 
         // Deploy fee splitter for our token (use wrapper address - it has admin() function)
         splitter = LevrFeeSplitter_v1(factory.deploy(address(clankerToken)));
+
+        // Whitelist rewardToken in mock staking (required for whitelist-only system)
+        staking.whitelistToken(address(rewardToken));
     }
 
     // ============================================================================
@@ -646,6 +649,7 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         address[] memory tokens = new address[](100);
         for (uint256 i = 0; i < 100; i++) {
             MockRewardToken token = new MockRewardToken();
+            staking.whitelistToken(address(token));
             tokens[i] = address(token);
 
             // Send 10 ether to first 10 tokens
@@ -777,6 +781,8 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         MockRewardToken token1 = rewardToken;
         MockRewardToken token2 = new MockRewardToken();
         MockRewardToken token3 = new MockRewardToken();
+        staking.whitelistToken(address(token2));
+        staking.whitelistToken(address(token3));
 
         // Send tokens to splitter
         token1.transfer(address(splitter), 100 ether);
@@ -1313,6 +1319,9 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
         MockStaking newStaking = new MockStaking();
         console2.log('New staking created:', address(newStaking));
 
+        // Whitelist rewardToken in new staking (required for whitelist-only system)
+        newStaking.whitelistToken(address(rewardToken));
+
         // Update factory to return new staking address
         MockERC20 clankerERC20Update = clankerToken.token();
         mockFactory.setProject(address(clankerERC20Update), address(newStaking), address(lpLocker));
@@ -1371,6 +1380,7 @@ contract LevrFeeSplitter_MissingEdgeCases_Test is Test {
 
         // Create new token that was NEVER distributed
         MockRewardToken newToken = new MockRewardToken();
+        staking.whitelistToken(address(newToken));
         newToken.transfer(address(splitter), 1000 ether);
 
         console2.log(

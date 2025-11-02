@@ -6,8 +6,9 @@ import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
-contract LevrStakingV1_UnitTest is Test {
+contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
     MockERC20 internal underlying;
     LevrStakedToken_v1 internal sToken;
     LevrStaking_v1 internal staking;
@@ -34,10 +35,6 @@ contract LevrStakingV1_UnitTest is Test {
         return 3 days; // Default stream window for tests
     }
 
-    function maxRewardTokens(address) external pure returns (uint16) {
-        return 50; // Default max reward tokens for tests
-    }
-
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         // Pass address(0) for forwarder since we're not testing meta-transactions here
@@ -49,7 +46,8 @@ contract LevrStakingV1_UnitTest is Test {
             address(underlying),
             address(staking)
         );
-        staking.initialize(address(underlying), address(sToken), treasury, address(this)); // Pass test contract as factory for test
+        // Initialize with empty reward tokens array (tokens created dynamically in tests)
+        initializeStakingWithRewardTokens(staking, address(underlying), address(sToken), treasury, address(this), new address[](0));
 
         underlying.mint(address(this), 1_000_000 ether);
     }
@@ -680,6 +678,7 @@ contract LevrStakingV1_UnitTest is Test {
 
         // Create separate reward token
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 5_000 ether);
 
         // Step 1: Transfer tokens to staking contract
@@ -720,6 +719,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 10_000 ether);
 
         // Initial funding: Transfer 3,000 tokens + accrue
@@ -773,6 +773,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 20_000 ether);
 
         // First accrual: 6,000 tokens
@@ -832,6 +833,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 10_000 ether);
 
         // First accrual: 3,000 tokens
@@ -875,6 +877,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 5_000 ether);
 
         // Transfer without accruing
@@ -904,6 +907,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 10_000 ether);
 
         // Initial: 6,000 tokens
@@ -949,6 +953,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 10_000 ether);
 
         // Initial: 6,000 tokens
@@ -994,6 +999,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 10_000 ether);
 
         // Initial: 4,000 tokens
@@ -1039,6 +1045,7 @@ contract LevrStakingV1_UnitTest is Test {
         staking.stake(1_000 ether);
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 20_000 ether);
 
         // Initial: 2,000 tokens
@@ -1082,6 +1089,8 @@ contract LevrStakingV1_UnitTest is Test {
 
         MockERC20 rewardToken1 = new MockERC20('Reward1', 'RWD1');
         MockERC20 rewardToken2 = new MockERC20('Reward2', 'RWD2');
+        whitelistRewardToken(staking, address(rewardToken1), address(this));
+        whitelistRewardToken(staking, address(rewardToken2), address(this));
 
         rewardToken1.mint(address(this), 10_000 ether);
         rewardToken2.mint(address(this), 10_000 ether);
@@ -1156,6 +1165,7 @@ contract LevrStakingV1_UnitTest is Test {
 
         // Create massive reward: 1 billion tokens
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 1_000_000_000 ether);
 
         // Accrue the massive reward
@@ -1277,6 +1287,7 @@ contract LevrStakingV1_UnitTest is Test {
                 string(abi.encodePacked('Token', i)),
                 string(abi.encodePacked('TKN', i))
             );
+            whitelistRewardToken(staking, address(rewardToken), address(this));
             rewardToken.mint(address(this), 1000 ether);
             rewardToken.transfer(address(staking), 100 ether);
             staking.accrueRewards(address(rewardToken));
@@ -1300,6 +1311,7 @@ contract LevrStakingV1_UnitTest is Test {
         // Our contract should handle this gracefully
 
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
         rewardToken.mint(address(this), 1000 ether);
 
         // Accrue rewards BEFORE anyone stakes (totalStaked = 0)

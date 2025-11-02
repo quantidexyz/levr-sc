@@ -56,6 +56,10 @@ contract LevrFeeSplitterV1Test is Test {
             address(factory),
             address(forwarder)
         );
+
+        // Whitelist rewardToken and clanker token in mock staking (required for whitelist-only system)
+        staking.whitelistToken(address(rewardToken));
+        staking.whitelistToken(address(clankerERC20));
     }
 
     // ============ Split Configuration Tests (6 tests) ============
@@ -253,6 +257,7 @@ contract LevrFeeSplitterV1Test is Test {
 
     function test_distributeBatch_multipleTokens() public {
         MockRewardToken token2 = new MockRewardToken();
+        staking.whitelistToken(address(token2));
 
         ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
         splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: alice, bps: 5000});
@@ -286,6 +291,7 @@ contract LevrFeeSplitterV1Test is Test {
     function test_distributeBatch_bothReceiversGetBothTokens() public {
         // Setup: Create wrapped ETH token to simulate real scenario
         MockRewardToken wrappedETH = new MockRewardToken();
+        staking.whitelistToken(address(wrappedETH));
 
         // Configure splits: 60% staking, 40% deployer (tokenAdmin)
         ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
@@ -371,6 +377,7 @@ contract LevrFeeSplitterV1Test is Test {
     function test_distribute_multipleTokensSequentially_bothReceiversGetBothTokens() public {
         // Create wrapped ETH token
         MockRewardToken wrappedETH = new MockRewardToken();
+        staking.whitelistToken(address(wrappedETH));
 
         // Configure splits: 70% staking, 30% deployer
         ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);

@@ -46,6 +46,12 @@ contract LevrStakingFeeOnTransferTest is Test, LevrFactoryDeployHelper {
         feeToken.approve(address(staking), type(uint256).max);
     }
 
+    /// @notice Helper function to whitelist a dynamically created reward token
+    function _whitelistRewardToken(address token) internal {
+        vm.prank(address(this)); // Test contract is admin of feeToken
+        staking.whitelistToken(token);
+    }
+
     /// @notice Test 1: Stake with fee token - receives correct amount
     function test_stakeWithFee_receivesCorrectAmount() public {
         console2.log('\n=== C-2 Test 1: Stake With Fee Token ===');
@@ -159,6 +165,7 @@ contract LevrStakingFeeOnTransferTest is Test, LevrFactoryDeployHelper {
 
         // Accrue some rewards (using normal token, not fee token)
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        _whitelistRewardToken(address(rewardToken));
         rewardToken.mint(address(staking), 10 ether);
         staking.accrueRewards(address(rewardToken));
 

@@ -52,8 +52,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             approvalBps: 0, // No governance requirements for staking tests
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         (factory, forwarder, levrDeployer) = deployFactory(
             cfg,

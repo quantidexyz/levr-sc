@@ -10,10 +10,16 @@ import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
  */
 contract MockStaking is ILevrStaking_v1 {
     bool public shouldRevertOnAccrue;
+    mapping(address => bool) public whitelistedTokens;
 
     /// @notice Configure whether accrueRewards should revert
     function setShouldRevertOnAccrue(bool _shouldRevert) external {
         shouldRevertOnAccrue = _shouldRevert;
+    }
+
+    /// @notice Whitelist a token for testing
+    function whitelistToken(address token) external override {
+        whitelistedTokens[token] = true;
     }
 
     /// @notice Mock accrueRewards - can be configured to revert for testing
@@ -83,15 +89,15 @@ contract MockStaking is ILevrStaking_v1 {
         return 0;
     }
 
-    function initialize(address, address, address, address) external override {}
+    function initialize(address, address, address, address, address[] memory) external override {}
+
+    function unwhitelistToken(address) external override {}
 
     function streamWindowSeconds() external pure override returns (uint32) {
         return 0;
     }
 
-    function getTokenStreamInfo(
-        address
-    ) external pure override returns (uint64, uint64, uint256) {
+    function getTokenStreamInfo(address) external pure override returns (uint64, uint64, uint256) {
         return (0, 0, 0);
     }
 
@@ -115,15 +121,13 @@ contract MockStaking is ILevrStaking_v1 {
         return 0;
     }
 
-    function whitelistToken(address) external override {}
-
     function cleanupFinishedRewardToken(address) external override {}
 
     function getWhitelistedTokens() external pure override returns (address[] memory) {
         return new address[](0);
     }
 
-    function isTokenWhitelisted(address) external pure override returns (bool) {
-        return false;
+    function isTokenWhitelisted(address token) external view override returns (bool) {
+        return whitelistedTokens[token];
     }
 }

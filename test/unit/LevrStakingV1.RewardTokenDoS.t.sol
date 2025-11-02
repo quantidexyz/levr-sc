@@ -29,7 +29,13 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
             address(underlying),
             address(staking)
         );
-        staking.initialize(address(underlying), address(sToken), treasury, address(this));
+        staking.initialize(
+            address(underlying),
+            address(sToken),
+            treasury,
+            address(this),
+            new address[](0)
+        );
 
         underlying.mint(address(this), 10_000 ether);
         rewardToken.mint(address(this), 10_000 ether);
@@ -37,10 +43,6 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
 
     function streamWindowSeconds(address) external pure returns (uint32) {
         return 7 days;
-    }
-
-    function maxRewardTokens(address) external pure returns (uint16) {
-        return 50;
     }
 
     function getClankerMetadata(
@@ -57,6 +59,9 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
 
     /// @notice MEDIUM-2: Test that dust amounts are rejected
     function test_creditRewards_rejectsDustAmounts() public {
+        // Whitelist reward token first
+        staking.whitelistToken(address(rewardToken));
+
         // Stake to enable reward accrual
         underlying.approve(address(staking), 100 ether);
         staking.stake(100 ether);
@@ -72,6 +77,9 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
 
     /// @notice MEDIUM-2: Test that minimum amount is accepted
     function test_creditRewards_acceptsMinimumAmount() public {
+        // Whitelist reward token first
+        staking.whitelistToken(address(rewardToken));
+
         // Stake to enable reward accrual
         underlying.approve(address(staking), 100 ether);
         staking.stake(100 ether);
@@ -86,6 +94,9 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
 
     /// @notice MEDIUM-2: Test that legitimate amounts are accepted
     function test_creditRewards_acceptsLegitimateAmounts() public {
+        // Whitelist reward token first
+        staking.whitelistToken(address(rewardToken));
+
         // Stake to enable reward accrual
         underlying.approve(address(staking), 100 ether);
         staking.stake(100 ether);
@@ -109,18 +120,17 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
         underlying.approve(address(staking), 100 ether);
         staking.stake(100 ether);
 
-        // Max 50 reward token slots available
-        uint16 maxSlots = 50;
-
-        // Attacker tries to fill 50 slots with dust (1e14 each)
-        // First, skip the underlying token (slot 0)
-        for (uint256 i = 1; i < maxSlots; i++) {
+        // Test first 5 tokens (enough to demonstrate the protection)
+        for (uint256 i = 0; i < 5; i++) {
             // Create a dust token
             MockERC20 dustToken = new MockERC20('Dust', 'DUST');
             dustToken.mint(address(this), 1e14);
             dustToken.transfer(address(staking), 1e14);
 
-            // Try to accrueFromTreasury with dust - should revert
+            // Whitelist the token (attacker could do this as token admin)
+            staking.whitelistToken(address(dustToken));
+
+            // Try to accrueFromTreasury with dust - should revert with REWARD_TOO_SMALL
             vm.expectRevert('REWARD_TOO_SMALL');
             staking.accrueFromTreasury(address(dustToken), 1e14, false);
         }
@@ -129,6 +139,9 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
         MockERC20 legit = new MockERC20('Legit', 'LEG');
         legit.mint(address(this), 1000 ether);
         legit.transfer(address(staking), 1000 ether);
+
+        // Whitelist and accrue legitimate token
+        staking.whitelistToken(address(legit));
         staking.accrueFromTreasury(address(legit), 1000 ether, false);
     }
 }

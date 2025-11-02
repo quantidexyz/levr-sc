@@ -46,12 +46,11 @@ contract LevrAderynFindingsTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         
         // Deploy factory and deployer
-        factory = new LevrFactory_v1(config, address(this), trustedForwarder, address(0));
+        factory = new LevrFactory_v1(config, address(this), trustedForwarder, address(0), new address[](0));
         deployer = new LevrDeployer_v1(address(factory));
         
         // Deploy mock token

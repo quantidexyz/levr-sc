@@ -512,31 +512,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     function _ensureRewardToken(
         address token
-    ) internal returns (ILevrStaking_v1.RewardTokenState storage tokenState) {
+    ) internal view returns (ILevrStaking_v1.RewardTokenState storage tokenState) {
         tokenState = _tokenState[token];
 
-        // If token doesn't exist, it must be whitelisted to be added
-        if (!tokenState.exists) {
-            // Only whitelisted tokens can be used as rewards
-            require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
+        // Token MUST already exist (via initialize() or whitelistToken())
+        require(tokenState.exists, 'TOKEN_NOT_WHITELISTED');
 
-            // This should never happen (whitelisted implies exists from initialize or whitelistToken)
-            // But if somehow it does, we initialize it
-            _tokenState[token] = ILevrStaking_v1.RewardTokenState({
-                availablePool: 0,
-                streamTotal: 0,
-                lastUpdate: 0,
-                exists: true,
-                whitelisted: true,
-                streamStart: 0,
-                streamEnd: 0
-            });
-            tokenState = _tokenState[token];
-            _rewardTokens.push(token);
-        } else {
-            // Token exists, verify it's whitelisted
-            require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
-        }
+        // Token MUST be whitelisted
+        require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
     }
 
     /// @notice Internal helper to remove token from array

@@ -50,8 +50,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 5000, // 50%
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
@@ -66,6 +65,13 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Fund treasury
         underlying.mint(address(treasury), 100_000 ether);
+    }
+
+    /// @notice Helper function to whitelist a dynamically created reward token
+    /// @dev Caller must ensure no ongoing prank before calling this
+    function _whitelistRewardToken(address token) internal {
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.whitelistToken(token);
     }
 
     // ============================================================================
@@ -226,6 +232,9 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         MockERC20 reward = new MockERC20('Reward', 'RWD');
         reward.mint(address(staking), 1000 ether);
         vm.stopPrank();
+        
+        // Whitelist after stopping prank
+        _whitelistRewardToken(address(reward));
 
         staking.accrueRewards(address(reward));
 
@@ -380,8 +389,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 0,
             minSTokenBpsToSubmit: 0,
             maxProposalAmountBps: 10000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (
@@ -403,6 +411,8 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Accrue rewards with 1 day window
         MockERC20 reward = new MockERC20('Reward', 'RWD');
+        vm.prank(address(this)); // Test contract is admin of token
+        LevrStaking_v1(proj.staking).whitelistToken(address(reward));
         reward.mint(address(proj.staking), 1000 ether);
         LevrStaking_v1(proj.staking).accrueRewards(address(reward));
 
@@ -529,8 +539,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 2000, // 20% now!
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newCfg);
@@ -645,6 +654,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Accrue massive rewards
         MockERC20 reward = new MockERC20('Reward', 'RWD');
+        _whitelistRewardToken(address(reward));
         reward.mint(address(staking), 1_000_000 ether);
         staking.accrueRewards(address(reward));
 
@@ -705,6 +715,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Accrue 1 billion tokens
         MockERC20 reward = new MockERC20('Reward', 'RWD');
+        _whitelistRewardToken(address(reward));
         reward.mint(address(staking), 1_000_000_000 ether);
         staking.accrueRewards(address(reward));
 
@@ -824,6 +835,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Accrue rewards anyway
         MockERC20 reward = new MockERC20('Reward', 'RWD');
+        _whitelistRewardToken(address(reward));
         reward.mint(address(staking), 1000 ether);
         staking.accrueRewards(address(reward));
 

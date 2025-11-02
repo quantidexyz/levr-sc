@@ -49,8 +49,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 5100, // 51%
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 5000, // 50%
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
@@ -305,8 +304,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
             approvalBps: 7000, // Changed from 5100 to 7000 (70%)
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10 // Max non-whitelisted reward tokens
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newCfg);

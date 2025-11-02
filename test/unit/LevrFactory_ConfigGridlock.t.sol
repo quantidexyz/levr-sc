@@ -44,11 +44,16 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0));
+        factory = new LevrFactory_v1(
+            config,
+            address(this),
+            address(0),
+            address(0),
+            new address[](0)
+        );
 
         // Deploy contracts
         treasury = new LevrTreasury_v1(address(factory), address(0));
@@ -71,7 +76,8 @@ contract LevrFactory_ConfigGridlockTest is Test {
             address(underlying),
             address(sToken),
             address(treasury),
-            address(factory)
+            address(factory),
+            new address[](0)
         );
 
         // Fund treasury
@@ -92,6 +98,9 @@ contract LevrFactory_ConfigGridlockTest is Test {
         vm.stopPrank();
 
         // Add reward token and let it finish
+        // Whitelist reward token first (required for whitelist-only system)
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.whitelistToken(address(rewardToken));
         rewardToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(rewardToken));
 
@@ -117,11 +126,14 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 5 // Changed from 10 to 5
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
+
+        // Unwhitelist the token first (cleanup requires non-whitelisted)
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.unwhitelistToken(address(rewardToken));
 
         // Cleanup should still work (doesn't check maxRewardTokens)
         staking.cleanupFinishedRewardToken(address(rewardToken));
@@ -159,8 +171,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
@@ -209,8 +220,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         // FIX: Now validation prevents this
@@ -221,9 +231,9 @@ contract LevrFactory_ConfigGridlockTest is Test {
         console2.log('FIX CONFIRMED: Gridlock scenario prevented');
     }
 
-    /// @notice Test that maxRewardTokens = 0 causes gridlock
-    function test_config_maxRewardTokensZero_breaksStaking() public {
-        console2.log('\n=== MaxRewardTokens = 0 Breaks Staking ===');
+    /// @notice Test that non-whitelisted tokens cannot accrue rewards (whitelist-only system)
+    function test_config_whitelistOnly_preventsNonWhitelistedTokens() public {
+        console2.log('\n=== Whitelist-Only System Prevents Non-Whitelisted Tokens ===');
 
         // Setup
         underlying.mint(alice, 1000 ether);
@@ -232,28 +242,20 @@ contract LevrFactory_ConfigGridlockTest is Test {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Change to maxRewardTokens = 0 (blocks all non-whitelisted tokens)
-        ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
-            streamWindowSeconds: 3 days,
-            protocolTreasury: address(0xFEE),
-            proposalWindowSeconds: 2 days,
-            votingWindowSeconds: 5 days,
-            maxActiveProposals: 7,
-            quorumBps: 7000,
-            approvalBps: 5100,
-            minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 0 // Zero! Should be rejected
-        });
+        // Try to accrue rewards with non-whitelisted token
+        rewardToken.mint(address(staking), 100 ether);
+        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        staking.accrueRewards(address(rewardToken));
 
-        // FIX: Validation prevents this
-        vm.expectRevert('MAX_REWARD_TOKENS_ZERO');
-        factory.updateConfig(newConfig);
+        // Whitelist the token
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.whitelistToken(address(rewardToken));
 
-        console2.log('SUCCESS: maxRewardTokens = 0 now rejected by validation');
-        console2.log('FIX CONFIRMED: Staking freeze prevented');
+        // Now it should work
+        staking.accrueRewards(address(rewardToken));
+
+        console2.log('SUCCESS: Whitelist-only system prevents non-whitelisted tokens');
+        console2.log('CONFIRMED: Only whitelisted tokens can accrue rewards');
     }
 
     /// @notice Test that zero window seconds doesn't break cycle creation
@@ -281,8 +283,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         // FIX: Validation prevents this
@@ -318,8 +319,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         // FIX: Validation prevents this
@@ -363,8 +363,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 100, // 1% - proposal wants 10%!
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
@@ -416,8 +415,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 2000, // 20% - Alice only has 10%
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
@@ -479,8 +477,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 6000,
             minSTokenBpsToSubmit: 500,
             maxProposalAmountBps: 3000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 5
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
@@ -510,8 +507,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         // This might revert if there's a minimum validation
@@ -545,9 +541,9 @@ contract LevrFactory_ConfigGridlockTest is Test {
 
     // ============ Whitelist + Config Interaction Tests ============
 
-    /// @notice Test that whitelisting still works after config changes
-    function test_config_maxTokensChange_doesNotAffectWhitelist() public {
-        console2.log('\n=== Whitelist Unaffected by maxRewardTokens Change ===');
+    /// @notice Test that whitelisted tokens can always accrue rewards regardless of config changes
+    function test_config_whitelistedTokensAlwaysWork() public {
+        console2.log('\n=== Whitelisted Tokens Always Work ===');
 
         // Setup
         underlying.mint(alice, 1000 ether);
@@ -558,9 +554,10 @@ contract LevrFactory_ConfigGridlockTest is Test {
 
         // Whitelist a token
         MockERC20 weth = new MockERC20('WETH', 'WETH');
+        vm.prank(address(this)); // Test contract is admin of underlying
         staking.whitelistToken(address(weth));
 
-        // Change maxRewardTokens to 1 (very restrictive)
+        // Change factory config (should not affect whitelisted tokens)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 100,
             streamWindowSeconds: 3 days,
@@ -572,8 +569,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 1 // Only 1 non-whitelisted allowed
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
@@ -582,21 +578,15 @@ contract LevrFactory_ConfigGridlockTest is Test {
         weth.mint(address(staking), 10 ether);
         staking.accrueRewards(address(weth));
 
-        console2.log('SUCCESS: Whitelisted tokens bypass maxRewardTokens limit');
+        console2.log('SUCCESS: Whitelisted tokens work regardless of config changes');
 
-        // Add 1 non-whitelisted token (should work)
+        // Non-whitelisted tokens should fail
         MockERC20 token1 = new MockERC20('T1', 'T1');
         token1.mint(address(staking), 10 ether);
+        vm.expectRevert('TOKEN_NOT_WHITELISTED');
         staking.accrueRewards(address(token1));
 
-        // Try to add 2nd non-whitelisted (should fail)
-        MockERC20 token2 = new MockERC20('T2', 'T2');
-        token2.mint(address(staking), 10 ether);
-
-        vm.expectRevert('MAX_REWARD_TOKENS_REACHED');
-        staking.accrueRewards(address(token2));
-
-        console2.log('CONFIRMED: Limit enforced, whitelist still works');
+        console2.log('CONFIRMED: Only whitelisted tokens can accrue rewards');
     }
 
     /// @notice Test that maxProposalAmountBps = 0 doesn't break existing logic
@@ -624,8 +614,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 0, // No limit!
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
@@ -669,8 +658,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         factory.updateConfig(newConfig);
@@ -718,8 +706,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         // FIX: Validation prevents this
@@ -755,8 +742,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
-            minimumQuorumBps: 25, // 0.25% minimum quorum
-            maxRewardTokens: 10
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         // FIX: Validation prevents this

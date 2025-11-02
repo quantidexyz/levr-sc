@@ -63,6 +63,12 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         weth.mint(address(treasury), 1000 ether);
         usdc.mint(address(treasury), 1000 ether);
         revertingToken.mint(address(treasury), 1000 ether);
+
+        // Whitelist commonly used tokens in setUp (underlying is auto-whitelisted)
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.whitelistToken(address(weth));
+        staking.whitelistToken(address(usdc));
+        staking.whitelistToken(address(revertingToken));
     }
 
     // ============================================================================
@@ -164,6 +170,12 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         console2.log('RESULT: Normal execution works correctly');
     }
 
+    /// @notice Helper function to whitelist a dynamically created reward token
+    function _whitelistRewardToken(address token) internal {
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.whitelistToken(token);
+    }
+
     // ============================================================================
     // STAKING MAX_REWARD_TOKENS TESTS
     // ============================================================================
@@ -172,12 +184,14 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
     function test_staking_maxRewardTokens_limitEnforced() public {
         console2.log('\n=== STAKING: MAX_REWARD_TOKENS Limit Enforced ===');
 
-        // Create and add 50 different reward tokens (max allowed, excluding underlying)
+        // Add multiple reward tokens (whitelist-only system - no limit)
         for (uint256 i = 0; i < 10; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
             );
+
+            _whitelistRewardToken(address(token));
 
             // Send tokens to staking
             token.mint(address(staking), 100 ether);
@@ -187,15 +201,15 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
             console2.log('Added token', i + 1);
         }
 
-        console2.log('Successfully added 50 non-underlying tokens');
+        console2.log('Successfully added 10 whitelisted tokens');
 
-        // Try to add 51st token - should revert
-        MockERC20 token51 = new MockERC20('Token51', 'TKN51');
-        token51.mint(address(staking), 100 ether);
+        // Try to add 11th token without whitelisting - should revert
+        MockERC20 token11 = new MockERC20('Token11', 'TKN11');
+        token11.mint(address(staking), 100 ether);
 
-        vm.expectRevert('MAX_REWARD_TOKENS_REACHED');
-        staking.accrueRewards(address(token51));
-        console2.log('RESULT: 51st token rejected as expected');
+        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        staking.accrueRewards(address(token11));
+        console2.log('RESULT: Non-whitelisted token rejected as expected');
     }
 
     /// @notice Test that whitelisted tokens (including underlying) don't count toward limit
@@ -209,22 +223,21 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         );
         console2.log('Underlying token whitelisted by default');
 
-        // Token admin whitelists WETH
-        vm.prank(deployer); // deployer is the initial admin
-        staking.whitelistToken(address(weth));
+        // WETH already whitelisted in setUp
         assertTrue(staking.isTokenWhitelisted(address(weth)), 'WETH should be whitelisted');
-        console2.log('WETH whitelisted by token admin');
+        console2.log('WETH whitelisted in setUp');
 
-        // Add 50 non-whitelisted tokens
+        // Add 10 whitelisted tokens (must whitelist before accruing)
         for (uint256 i = 0; i < 10; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
             );
+            _whitelistRewardToken(address(token));
             token.mint(address(staking), 100 ether);
             staking.accrueRewards(address(token));
         }
-        console2.log('Added 50 non-whitelisted tokens');
+        console2.log('Added 10 whitelisted tokens');
 
         // Accrue underlying token - should still work (whitelisted)
         underlying.mint(address(staking), 100 ether);
@@ -243,17 +256,23 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
     function test_staking_whitelistToken_onlyTokenAdmin() public {
         console2.log('\n=== STAKING: Whitelist Only Token Admin ===');
 
+        // Create a new token that's not whitelisted yet
+        MockERC20 newToken = new MockERC20('New Token', 'NEW');
+
         // Non-admin cannot whitelist
         vm.prank(alice);
         vm.expectRevert('ONLY_TOKEN_ADMIN');
-        staking.whitelistToken(address(usdc));
+        staking.whitelistToken(address(newToken));
         console2.log('Non-admin blocked from whitelisting');
 
         // Token admin can whitelist
         vm.prank(deployer); // deployer is token admin
-        staking.whitelistToken(address(usdc));
-        assertTrue(staking.isTokenWhitelisted(address(usdc)), 'USDC should be whitelisted');
-        console2.log('Token admin successfully whitelisted USDC');
+        staking.whitelistToken(address(newToken));
+        assertTrue(
+            staking.isTokenWhitelisted(address(newToken)),
+            'New token should be whitelisted'
+        );
+        console2.log('Token admin successfully whitelisted new token');
 
         console2.log('RESULT: Only token admin can whitelist tokens');
     }
@@ -262,14 +281,17 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
     function test_staking_whitelistToken_noDuplicates() public {
         console2.log('\n=== STAKING: Cannot Whitelist Duplicate ===');
 
+        // Create a new token that's not whitelisted yet
+        MockERC20 newToken = new MockERC20('New Token', 'NEW');
+
         vm.startPrank(deployer);
 
         // Whitelist once
-        staking.whitelistToken(address(usdc));
+        staking.whitelistToken(address(newToken));
 
         // Try again - should revert
         vm.expectRevert('ALREADY_WHITELISTED');
-        staking.whitelistToken(address(usdc));
+        staking.whitelistToken(address(newToken));
 
         vm.stopPrank();
         console2.log('RESULT: Duplicate whitelisting prevented');
@@ -285,6 +307,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
 
         // Add a test token
         MockERC20 testToken = new MockERC20('Test', 'TST');
+        _whitelistRewardToken(address(testToken));
         testToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(testToken));
         console2.log('Token added and accrued');
@@ -301,11 +324,16 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         staking.claimRewards(tokens, alice);
         console2.log('All rewards claimed');
 
+        // Unwhitelist before cleanup (required)
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.unwhitelistToken(address(testToken));
+
         // Cleanup should work
         staking.cleanupFinishedRewardToken(address(testToken));
         console2.log('RESULT: Token cleaned up successfully');
 
-        // Verify token can be re-added
+        // Verify token can be re-added (must whitelist again after cleanup)
+        _whitelistRewardToken(address(testToken));
         testToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(testToken));
         console2.log('Token re-added after cleanup');
@@ -325,11 +353,19 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         console2.log('\n=== STAKING: Cannot Cleanup With Pending Rewards ===');
 
         MockERC20 testToken = new MockERC20('Test', 'TST');
+        _whitelistRewardToken(address(testToken));
         testToken.mint(address(staking), 100 ether);
         staking.accrueRewards(address(testToken));
 
         // Don't claim rewards - pool/stream > 0
-        vm.expectRevert('REWARDS_STILL_PENDING');
+        // Try to cleanup directly (should fail because token is whitelisted and has pending rewards)
+        // First need to unwhitelist, but that will also fail with pending rewards
+        vm.prank(address(this)); // Test contract is admin of underlying
+        vm.expectRevert('CANNOT_UNWHITELIST_WITH_PENDING_REWARDS');
+        staking.unwhitelistToken(address(testToken));
+        
+        // Also try cleanup directly - should fail because whitelisted
+        vm.expectRevert('CANNOT_REMOVE_WHITELISTED');
         staking.cleanupFinishedRewardToken(address(testToken));
         console2.log('RESULT: Cleanup blocked when rewards pending (even during active stream)');
     }
@@ -348,6 +384,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
             );
+            _whitelistRewardToken(address(token));
             token.mint(address(staking), 100 ether);
             staking.accrueRewards(address(token));
         }
@@ -410,24 +447,25 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
     function test_integration_cleanupAndReAdd() public {
         console2.log('\n=== INTEGRATION: Cleanup and Re-add Token ===');
 
-        // Fill to max tokens and track them (10 total, 1 is underlying)
+        // Add tokens and track them (must whitelist first)
         address[] memory tokens = new address[](10);
         for (uint256 i = 0; i < 10; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked('Token', vm.toString(i))),
                 string(abi.encodePacked('TKN', vm.toString(i)))
             );
+            _whitelistRewardToken(address(token));
             token.mint(address(staking), 100 ether);
             staking.accrueRewards(address(token));
             tokens[i] = address(token);
         }
 
-        // Try to add 11th - fails
+        // Try to add 11th without whitelisting - fails
         MockERC20 newToken = new MockERC20('New', 'NEW');
         newToken.mint(address(staking), 100 ether);
-        vm.expectRevert('MAX_REWARD_TOKENS_REACHED');
+        vm.expectRevert('TOKEN_NOT_WHITELISTED');
         staking.accrueRewards(address(newToken));
-        console2.log('Slots full - new token rejected');
+        console2.log('Non-whitelisted token rejected');
 
         // Cleanup first token (need to fast forward and claim)
         address firstToken = tokens[0];
@@ -437,10 +475,14 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         claimTokens[0] = firstToken;
         vm.prank(alice);
         staking.claimRewards(claimTokens, alice);
+        // Unwhitelist before cleanup (required)
+        vm.prank(address(this)); // Test contract is admin of underlying
+        staking.unwhitelistToken(firstToken);
         staking.cleanupFinishedRewardToken(firstToken);
         console2.log('First token cleaned up');
 
-        // Now can add new token
+        // Now can add new token (must whitelist first)
+        _whitelistRewardToken(address(newToken));
         staking.accrueRewards(address(newToken));
         console2.log('RESULT: New token added after cleanup');
     }
