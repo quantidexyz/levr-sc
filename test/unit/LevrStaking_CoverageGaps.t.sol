@@ -29,23 +29,16 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     event TokenUnwhitelisted(address indexed token);
     event RewardTokenRemoved(address indexed token);
     event RewardsAccrued(address indexed token, uint256 amount, uint256 totalPool);
-    event RewardsClaimed(address indexed user, address indexed to, address indexed token, uint256 amount);
+    event RewardsClaimed(
+        address indexed user,
+        address indexed to,
+        address indexed token,
+        uint256 amount
+    );
 
     // Mock factory functions for testing
     function clankerFactory() external pure returns (address) {
         return address(0);
-    }
-
-    function getClankerMetadata(
-        address /* clankerToken */
-    ) external pure returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0),
-                lpLocker: address(0),
-                hook: address(0),
-                exists: false
-            });
     }
 
     function streamWindowSeconds(address) external pure returns (uint32) {
@@ -133,13 +126,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
-        newStaking.initialize(
-            address(underlying),
-            address(0),
-            treasury,
-            factory,
-            new address[](0)
-        );
+        newStaking.initialize(address(underlying), address(0), treasury, factory, new address[](0));
     }
 
     function test_initialize_zeroAddressTreasury_reverts() public {
@@ -424,10 +411,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         staking.cleanupFinishedRewardToken(address(rewardToken));
 
         // Verify token is removed
-        assertFalse(
-            staking.isTokenWhitelisted(address(rewardToken)),
-            'Should not be whitelisted'
-        );
+        assertFalse(staking.isTokenWhitelisted(address(rewardToken)), 'Should not be whitelisted');
     }
 
     // ============================================================================
