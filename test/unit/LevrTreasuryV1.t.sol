@@ -166,7 +166,7 @@ contract MaliciousReceiver {
     
     // ERC20 transfer will call this if contract implements transfer hook
     // For testing, we'll make the contract revert on any interaction
-    function transfer(address, uint256) external returns (bool) {
+    function transfer(address, uint256) external view returns (bool) {
         if (shouldRevert) {
             revert('Malicious revert');
         }

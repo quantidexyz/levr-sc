@@ -394,7 +394,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
 
         vm.startPrank(bob);
         factory.prepareForDeployment();
-        ILevrFactory_v1.Project memory project2 = factory.register(address(token2));
+        ILevrFactory_v1.Project memory _project2 = factory.register(address(token2));
         vm.stopPrank();
 
         console2.log('Registered project from factory 2');

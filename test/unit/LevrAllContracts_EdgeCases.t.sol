@@ -359,7 +359,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Propose exactly at max (should succeed)
         vm.prank(alice);
-        uint256 pid = governor.proposeBoost(address(underlying), maxAmount);
+        uint256 _pid = governor.proposeBoost(address(underlying), maxAmount);
         console2.log('Proposal at exact max: SUCCESS');
 
         // Wait for new cycle
@@ -394,8 +394,8 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         (
             LevrFactory_v1 fac,
-            LevrForwarder_v1 fwd,
-            LevrDeployer_v1 dep
+            LevrForwarder_v1 _fwd,
+            LevrDeployer_v1 _dep
         ) = deployFactoryWithDefaultClanker(cfg, address(this));
 
         MockERC20 token = new MockERC20('Test', 'TST');
@@ -622,7 +622,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
     // ============================================================================
 
     /// @notice Dust accumulation from fee splitting
-    function test_precision_feeSplitDust() public {
+    function test_precision_feeSplitDust() public pure {
         console2.log('\n=== Fee Split Rounding Dust ===');
 
         // Scenario: 3 receivers with 33.33% each (can't be exact with bps)

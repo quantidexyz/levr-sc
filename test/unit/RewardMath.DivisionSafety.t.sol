@@ -9,7 +9,7 @@ import {RewardMath} from '../../src/libraries/RewardMath.sol';
 /// @dev Verifies defense-in-depth against division by zero
 contract RewardMath_DivisionSafety_Test is Test {
     /// @notice Test calculateVestedAmount succeeds with valid duration
-    function test_calculateVestedAmount_succeedsWithValidDuration() public {
+    function test_calculateVestedAmount_succeedsWithValidDuration() public pure {
         uint256 total = 1000 ether;
         uint64 start = 1000;
         uint64 end = 1000 + 7 days;
@@ -30,7 +30,7 @@ contract RewardMath_DivisionSafety_Test is Test {
     }
 
     /// @notice Test calculateProportionalClaim works correctly
-    function test_calculateProportionalClaim_calculatesCorrectly() public {
+    function test_calculateProportionalClaim_calculatesCorrectly() public pure {
         uint256 userBalance = 100 ether;
         uint256 totalStaked = 1000 ether;
         uint256 availablePool = 500 ether;
@@ -47,7 +47,7 @@ contract RewardMath_DivisionSafety_Test is Test {
     }
 
     /// @notice Test calculateCurrentPool includes vested amount
-    function test_calculateCurrentPool_includesVested() public {
+    function test_calculateCurrentPool_includesVested() public pure {
         uint256 basePool = 100 ether;
         uint256 streamTotal = 1000 ether;
         uint64 start = 1000;

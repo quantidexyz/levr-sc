@@ -465,7 +465,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 
     /// @notice PaymentSplitter: Safe transfer with SafeERC20
     /// @dev Fee splitter uses SafeERC20 for safe transfers
-    function test_feeSplitter_distributionFailureSafe() public {
+    function test_feeSplitter_distributionFailureSafe() public pure {
         console2.log('\n=== FEE SPLITTER: SafeERC20 Protection Test ===');
 
         // The fee splitter uses SafeERC20.safeTransfer which provides:

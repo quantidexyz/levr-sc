@@ -121,7 +121,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         assertEq(proj.stakedToken, project.stakedToken, 'Project stakedToken registered');
     }
 
-    function test_getProjects_empty() public {
+    function test_getProjects_empty() public view {
         // Call getProjects with no registered projects
         (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(0, 10);
 
@@ -426,7 +426,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
 
     function test_preparedContracts_usedForMultipleTokens_fails() public {
         // Prepare contracts once
-        (address treasury, address staking) = factory.prepareForDeployment();
+        (address _treasury, address _staking) = factory.prepareForDeployment();
 
         // Register first token - this will delete prepared contracts
         MockERC20 token1 = new MockERC20('Token1', 'TK1');
@@ -527,7 +527,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         // Register project
         factory.prepareForDeployment();
         MockERC20 token = new MockERC20('Token', 'TKN');
-        ILevrFactory_v1.Project memory project = factory.register(address(token));
+        ILevrFactory_v1.Project memory _project = factory.register(address(token));
 
         // Verify project
         vm.prank(address(this)); // Owner
@@ -543,7 +543,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         // Register and verify project
         factory.prepareForDeployment();
         MockERC20 token = new MockERC20('Token', 'TKN');
-        ILevrFactory_v1.Project memory project = factory.register(address(token));
+        ILevrFactory_v1.Project memory _project = factory.register(address(token));
 
         vm.prank(address(this));
         factory.verifyProject(address(token));
@@ -561,7 +561,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         // Register and verify project first
         factory.prepareForDeployment();
         MockERC20 token = new MockERC20('Token', 'TKN');
-        ILevrFactory_v1.Project memory project = factory.register(address(token));
+        ILevrFactory_v1.Project memory _project = factory.register(address(token));
 
         vm.prank(address(this));
         factory.verifyProject(address(token));
@@ -655,7 +655,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
                 string(abi.encodePacked('Token', i)),
                 string(abi.encodePacked('TK', i))
             );
-            ILevrFactory_v1.Project memory project = factory.register(address(token));
+            ILevrFactory_v1.Project memory _project = factory.register(address(token));
 
             vm.prank(address(this));
             factory.verifyProject(address(token));

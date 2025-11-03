@@ -168,7 +168,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
     // ============ LevrGovernor_v1 Conditional Branches ============
 
     /// Lines 62-66: cycleId initialization
-    function test_governor_001_initialCycleState() public {
+    function test_governor_001_initialCycleState() public view {
         uint256 cycleId = governor.currentCycleId();
         assertTrue(cycleId >= 0);
     }
@@ -297,7 +297,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
     // ============ LevrStakedToken Branches ============
 
     /// Line 27-34: constructor, transfer, approve
-    function test_stakedToken_001_basicOperations() public {
+    function test_stakedToken_001_basicOperations() public view {
         assertTrue(sToken.totalSupply() >= 0);
     }
 

@@ -1435,7 +1435,7 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Stake
         underlying.approve(address(staking), 1_000 ether);
         staking.stake(1_000 ether);
-        uint256 vpBefore = staking.getVotingPower(address(this));
+        uint256 _vpBefore = staking.getVotingPower(address(this));
 
         // Unstake everything
         staking.unstake(1_000 ether, address(this));
@@ -1653,7 +1653,7 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         assertEq(fakeToken.balanceOf(address(this)), 0, 'Should not claim non-existent token');
     }
 
-    function test_claim_whenTotalStakedZero_reverts() public {
+    function test_claim_whenTotalStakedZero_reverts() public view {
         // This should not happen in practice, but test the protection
         // User cannot claim when they have no stake
         address[] memory tokens = new address[](1);
@@ -1756,7 +1756,7 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         staking.accrueRewards(address(rewardToken));
 
         // Should create new stream
-        (uint64 streamStart2, uint64 streamEnd2, ) = staking.getTokenStreamInfo(address(rewardToken));
+        (uint64 _streamStart2, uint64 streamEnd2, ) = staking.getTokenStreamInfo(address(rewardToken));
         assertGt(streamEnd2, block.timestamp, 'New stream should be active');
     }
 

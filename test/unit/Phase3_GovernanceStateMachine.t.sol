@@ -36,7 +36,7 @@ contract Phase3_GovernanceStateMachine_Test is Test, LevrFactoryDeployHelper {
 
     // ============ State Machine: Cycle Initialization ============
 
-    function test_gv_state_001_initialCycleId() public {
+    function test_gv_state_001_initialCycleId() public view {
         uint256 cycleId = governor.currentCycleId();
         assertGe(cycleId, 0);
     }
@@ -197,7 +197,7 @@ contract Phase3_GovernanceStateMachine_Test is Test, LevrFactoryDeployHelper {
         
         // Proposal 1
         vm.prank(user);
-        uint256 pid1 = governor.proposeBoost(address(underlying), 10 ether);
+        uint256 _pid1 = governor.proposeBoost(address(underlying), 10 ether);
         
         // Proposal 2 same cycle (should fail - user already proposed)
         vm.prank(user);

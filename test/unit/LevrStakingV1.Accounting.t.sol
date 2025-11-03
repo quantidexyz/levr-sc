@@ -192,7 +192,7 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
         uint256 aliceWethBeforeFinal = weth.balanceOf(alice);
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
-        uint256 aliceSecondClaim = weth.balanceOf(alice) - aliceWethBeforeFinal;
+        uint256 _aliceSecondClaim = weth.balanceOf(alice) - aliceWethBeforeFinal;
         assertAccountingPerfect('After Alice claims');
 
         uint256 totalClaimed = weth.balanceOf(alice);

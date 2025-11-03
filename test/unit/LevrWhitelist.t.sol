@@ -52,7 +52,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
     // ============ Factory Initial Whitelist Tests ============
 
     /// @notice Test factory stores and returns initial whitelist
-    function test_factory_initialWhitelist_storedCorrectly() public {
+    function test_factory_initialWhitelist_storedCorrectly() public view {
         console2.log('\n=== Factory Initial Whitelist Stored ===');
 
         address[] memory whitelist = factory.getInitialWhitelist();

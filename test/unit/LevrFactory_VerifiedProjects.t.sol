@@ -437,7 +437,7 @@ contract LevrFactory_VerifiedProjectsTest is Test, LevrFactoryDeployHelper {
         // Deploy second project
         MockERC20 underlying2 = new MockERC20('Underlying2', 'UND2');
         factory.prepareForDeployment();
-        ILevrFactory_v1.Project memory project2 = factory.register(address(underlying2));
+        ILevrFactory_v1.Project memory _project2 = factory.register(address(underlying2));
 
         // Verify both projects
         vm.prank(owner);

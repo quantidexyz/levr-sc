@@ -71,7 +71,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             maxProposalAmountBps: 500, // 5% max
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
-        (LevrFactory_v1 fac, LevrForwarder_v1 fwd, ) = deployFactoryWithDefaultClanker(
+        (LevrFactory_v1 fac, LevrForwarder_v1 _fwd, ) = deployFactoryWithDefaultClanker(
             cfg,
             address(this)
         );
@@ -421,7 +421,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Get cycle ID from first proposal
         ILevrGovernor_v1.Proposal memory p1Before = governor.getProposal(pid1);
-        uint256 cycleId = p1Before.cycleId;
+        uint256 _cycleId = p1Before.cycleId;
 
         // Second proposal should be in same cycle (if proposal window still open)
         vm.prank(otherUser);
@@ -814,7 +814,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     }
 
     /// Test: Get proposal that doesn't exist
-    function test_branch_006_getProposalDoesNotExist() public {
+    function test_branch_006_getProposalDoesNotExist() public view {
         try governor.getProposal(99999) returns (ILevrGovernor_v1.Proposal memory) {
             // May return default struct or fail
         } catch {
@@ -918,7 +918,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     function test_phase2_005_proposeSameTypeTwice() public {
         // First proposal
         vm.prank(user);
-        uint256 pid1 = governor.proposeBoost(address(underlying), 10 ether);
+        uint256 _pid1 = governor.proposeBoost(address(underlying), 10 ether);
 
         // Second proposal of same type by same user
         vm.prank(user);

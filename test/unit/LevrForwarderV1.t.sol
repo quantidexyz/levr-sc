@@ -434,7 +434,7 @@ contract LevrForwarderV1_UnitTest is Test {
         });
 
         // Should handle recursion gracefully
-        ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+        ILevrForwarder_v1.Result[] memory _results = forwarder.executeMulticall(calls);
         // Result depends on implementation - may succeed or fail
         assertTrue(true, 'Should handle recursion attempt');
     }

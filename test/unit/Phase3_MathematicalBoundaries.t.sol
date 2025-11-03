@@ -182,7 +182,7 @@ contract Phase3_MathematicalBoundaries_Test is Test, LevrFactoryDeployHelper {
     }
 
     /// Test: Percentage calculations
-    function test_math_009_percentageCalculations() public {
+    function test_math_009_percentageCalculations() public pure {
         // Test various BPS calculations
         uint256[] memory bpsValues = new uint256[](5);
         bpsValues[0] = 100;    // 1%

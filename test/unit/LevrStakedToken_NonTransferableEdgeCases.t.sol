@@ -192,7 +192,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         stakedToken.transfer(charlie, 500 ether);
 
         // Quorum calculation remains valid (no manipulation possible)
-        uint256 requiredQuorum = (totalSupply * 7000) / 10000; // 2100
+        uint256 _requiredQuorum = (totalSupply * 7000) / 10000; // 2100
         assertEq(proposal.totalBalanceVoted, 2000 ether, 'Still 2000 (no change)');
         assertFalse(proposal.meetsQuorum, '2000 < 2100, quorum not met');
     }
@@ -437,7 +437,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         // No interference between users (no transfers to complicate)
     }
 
-    /// @notice Test stake → unstake → stake cycle
+    /// @notice Test stake ? unstake ? stake cycle
     function test_stakeUnstakeStake_vpResetsCorrectly() public {
         vm.startPrank(alice);
         underlying.approve(address(staking), 10000 ether);

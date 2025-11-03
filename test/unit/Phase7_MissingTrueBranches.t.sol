@@ -154,7 +154,7 @@ contract Phase7_MissingTrueBranches_Test is Test, LevrFactoryDeployHelper {
         vm.prank(user);
         staking.stake(500 ether);
         
-        uint256 cycle1 = governor.currentCycleId();
+        uint256 _cycle1 = governor.currentCycleId();
         
         // Advance time significantly to allow new cycle
         vm.warp(block.timestamp + 20 days);
@@ -166,7 +166,7 @@ contract Phase7_MissingTrueBranches_Test is Test, LevrFactoryDeployHelper {
             // May fail if cycle still active
         }
         
-        uint256 cycle2 = governor.currentCycleId();
+        uint256 _cycle2 = governor.currentCycleId();
         // Cycle may or may not advance
     }
 

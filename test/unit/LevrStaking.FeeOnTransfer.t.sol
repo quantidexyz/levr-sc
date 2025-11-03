@@ -28,7 +28,7 @@ contract LevrStakingFeeOnTransferTest is Test, LevrFactoryDeployHelper {
         feeToken = new FeeOnTransferToken('FeeToken', 'FEE', 100); // 100 = 1% fee
 
         // Prepare and register
-        (address treasury, address stakingAddr) = factory.prepareForDeployment();
+        (address _treasury, address _stakingAddr) = factory.prepareForDeployment();
         ILevrFactory_v1.Project memory project = factory.register(address(feeToken));
 
         staking = LevrStaking_v1(project.staking);
