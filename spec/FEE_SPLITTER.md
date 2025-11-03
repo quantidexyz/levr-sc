@@ -194,7 +194,6 @@ struct DistributionState {
 ### State Variables
 
 ```solidity
-address public immutable factory;  // The Levr factory address (for getClankerMetadata)
 
 // Per-project configuration (clankerToken => splits)
 mapping(address => SplitConfig[]) private _projectSplits;
@@ -671,7 +670,6 @@ ILevrFactory_v1.Project memory project = factory.getProjectContracts(clankerToke
 // ✅ project.staking - needed for fee splitter constructor
 // ✅ factory.trustedForwarder() - needed for meta-tx support
 
-ILevrFactory_v1.ClankerMetadata memory metadata = factory.getClankerMetadata(clankerToken);
 // ✅ metadata.feeLocker - used by splitter to claim fees
 // ✅ metadata.lpLocker - used by splitter to collect rewards
 ```
@@ -886,7 +884,6 @@ splitter.configureSplits(splits);
 console.log("Splits configured!");
 
 // 2c. Set splitter as reward recipient in LP locker (as token admin)
-ILevrFactory_v1.ClankerMetadata memory metadata = factory.getClankerMetadata(clankerToken);
 IClankerLpLocker(metadata.lpLocker).updateRewardRecipient(
     clankerToken,
     0, // rewardIndex - usually 0 for primary recipient
@@ -1253,7 +1250,6 @@ splits[1] = SplitConfig({
 splitter.configureSplits(splits);
 
 // 5. Set splitter as reward recipient in ClankerLpLocker (as token admin)
-ILevrFactory_v1.ClankerMetadata memory metadata = factory.getClankerMetadata(clankerToken);
 IClankerLpLocker(metadata.lpLocker).updateRewardRecipient(
     clankerToken,
     0, // rewardIndex - usually 0 for primary recipient
@@ -1363,7 +1359,6 @@ splitter.distributeBatch(tokens); // Single transaction for both tokens
 ILevrFactory_v1.Project memory project = factory.getProjectContracts(existingToken);
 
 // 2. Verify staking currently receives 100% of fees (as reward recipient)
-ILevrFactory_v1.ClankerMetadata memory metadata = factory.getClankerMetadata(existingToken);
 // Current setup: staking is the reward recipient in LP locker
 
 // 3. Configure splits in singleton fee splitter (as token admin)
@@ -1578,7 +1573,6 @@ function deployFeeSplitter(
 
    ```solidity
    // Token admin updates reward recipient in LP locker:
-   ILevrFactory_v1.ClankerMetadata memory metadata = factory.getClankerMetadata(clankerToken);
    IClankerLpLocker(metadata.lpLocker).updateRewardRecipient(
        clankerToken,
        0, // rewardIndex - usually 0 for primary recipient

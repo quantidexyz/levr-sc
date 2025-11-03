@@ -713,7 +713,6 @@ factory.updateStreamWindowSeconds(1);
 ```solidity
 function _claimFromClankerFeeLocker(address token) internal {
     // Get metadata from factory
-    try ILevrFactory_v1(factory).getClankerMetadata(underlying) returns (
         ILevrFactory_v1.ClankerMetadata memory metadata
     ) {
         metadata = _metadata;

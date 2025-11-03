@@ -299,7 +299,6 @@ LevrStaking_v1
     ├── ILevrFactory_v1 [TRUSTED - Immutable dependency]
     │   ├── streamWindowSeconds() - Line 484, 562
     │   ├── maxRewardTokens() - Lines 674-675
-    │   └── getClankerMetadata() - Lines 435-437, 584-586, 608-611
     │
     ├── IClankerToken [SEMI-TRUSTED - External Clanker protocol]
     │   └── admin() - Line 273

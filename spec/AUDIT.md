@@ -869,8 +869,7 @@ function _claimFromClankerFeeLocker(address token) internal {
 function _claimFromClankerFeeLocker(address token) internal {
     if (factory == address(0)) return;
 
-    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-        .getClankerMetadata(underlying);
+    // Metadata lookup removed (function deleted)
     if (!metadata.exists) return;
 
     // Collect rewards from LP locker

@@ -320,7 +320,6 @@ return FactoryConfig(
 );
 ```
 
-### 5. Streamlined getClankerMetadata
 - Removed explicit variable initialization (`address feeLocker = address(0);`)
 - Used empty catch blocks instead of commented fallthrough
 - Consolidated return statements with direct constructor calls
@@ -432,7 +431,6 @@ Optimizations applied:
 - Simplified 9 config getters using ternary operators
 - Optimized _updateConfig with direct struct assignment
 - Used positional struct initialization over named fields
-- Streamlined getClankerMetadata and getProjects
 
 Result: Reduced from 594 to 523 lines (12% reduction), estimated new
 size ~22,112 bytes (~10% under limit).

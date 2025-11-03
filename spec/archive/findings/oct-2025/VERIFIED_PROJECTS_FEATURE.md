@@ -183,7 +183,6 @@ uint16 quorum = ILevrFactory_v1(factory).quorumBps(underlying);
 - ✅ New registrations are **blocked** when no trusted factories (security)
 - ✅ Re-adding factory restores registration capability
 - ✅ Multiple factories: removing one doesn't affect others
-- ✅ `getClankerMetadata` fails gracefully (returns non-existent)
 
 **Why It's Safe:**
 
@@ -319,7 +318,6 @@ The interface maintains backwards compatibility by:
   - [x] Implement updateProjectConfig with validation
   - [x] Implement config getters with optional clankerToken parameter
   - [x] Remove immutable clankerFactory
-  - [x] Refactor getClankerMetadata to loop trusted factories
   - [x] Add NO_TRUSTED_FACTORIES requirement
   - [x] Emit events
 

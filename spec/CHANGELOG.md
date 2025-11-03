@@ -289,7 +289,7 @@ Factory owner can now verify trusted projects, allowing them to customize govern
 - Added `updateProjectConfig()` for verified project admins
 - Enhanced all config getters with optional `address clankerToken` parameter
 - Removed immutable `clankerFactory` field from constructor
-- Refactored `getClankerMetadata()` to loop through all trusted Clanker factories
+
 
 **Why This Matters:**
 

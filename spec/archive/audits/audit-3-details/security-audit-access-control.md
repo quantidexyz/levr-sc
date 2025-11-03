@@ -80,7 +80,6 @@ This comprehensive access control audit analyzed all 8 core contracts across the
 | `register()` | external | Token admin check | ❌ No | ✅ SAFE |
 | `updateConfig()` | external | `onlyOwner` | ❌ No | ⚠️ **HIGH** - Single point of control |
 | `getProjectContracts()` | external | view (public) | N/A | N/A |
-| `getClankerMetadata()` | external | view (public) | N/A | N/A |
 
 **Findings:**
 

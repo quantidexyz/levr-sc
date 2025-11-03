@@ -819,7 +819,6 @@ function testPoC_rewardCalculationOverflow() {
 ### LevrFactory_v1 - Uncovered Branches (5/32 tested) ⚠️ **WORST**
 
 **Missing Branch Tests**:
-- `getClankerMetadata()` - All factory pool lookup branches
 - `_applyConfig()` - All 10 validation branches
 - `register()` - Edge cases for project registration
 - `updateConfig()` - All config validation paths
