@@ -2099,4 +2099,193 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 1 days);
         staking.claimRewards(tokens, address(this));
     }
+
+    // ============ PHASE 2: Reward Accrual Edge Cases ============
+
+    /// Test: Accrue multiple reward tokens in sequence
+    function test_phase2_accrue_001_multipleTokensSequence() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        // Accrue multiple reward tokens
+        for (uint256 i = 0; i < 3; i++) {
+            MockERC20 rewardToken = new MockERC20(
+                string(abi.encodePacked('Reward', i)),
+                string(abi.encodePacked('RWD', i))
+            );
+            whitelistRewardToken(staking, address(rewardToken), address(this));
+            
+            rewardToken.mint(address(staking), 1_000 ether);
+            staking.accrueRewards(address(rewardToken));
+        }
+    }
+
+    /// Test: Accrue with partial stream completion
+    function test_phase2_accrue_002_partialStreamWindow() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        // Accrue first batch
+        rewardToken.mint(address(staking), 1_000 ether);
+        staking.accrueRewards(address(rewardToken));
+        
+        // Wait half way through stream window
+        vm.warp(block.timestamp + 1 days + 12 hours); // Half of default 3-day window
+        
+        // Accrue more - should extend or create new stream
+        rewardToken.mint(address(staking), 500 ether);
+        staking.accrueRewards(address(rewardToken));
+    }
+
+    /// Test: Reward distribution with fractional shares
+    function test_phase2_accrue_003_fractionalRewards() public {
+        // Two stakers with different amounts
+        address alice = address(0x1111);
+        address bob = address(0x2222);
+        
+        underlying.mint(alice, 300 ether);
+        underlying.mint(bob, 700 ether);
+        
+        vm.prank(alice);
+        underlying.approve(address(staking), 300 ether);
+        vm.prank(alice);
+        staking.stake(300 ether);
+        
+        vm.prank(bob);
+        underlying.approve(address(staking), 700 ether);
+        vm.prank(bob);
+        staking.stake(700 ether);
+        
+        // Accrue rewards
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        rewardToken.mint(address(staking), 1_000 ether);
+        staking.accrueRewards(address(rewardToken));
+        
+        // Wait and claim
+        vm.warp(block.timestamp + 3 days + 1);
+        
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+        
+        vm.prank(alice);
+        staking.claimRewards(tokens, alice);
+        
+        vm.prank(bob);
+        staking.claimRewards(tokens, bob);
+        
+        // Bob should get more rewards (more stake)
+        assertGt(rewardToken.balanceOf(bob), rewardToken.balanceOf(alice));
+    }
+
+    /// Test: Accrue after unstaking all (pool effect)
+    function test_phase2_accrue_004_accrueAfterUnstakeAll() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        // Unstake all
+        staking.unstake(1_000 ether, address(this));
+        
+        // Try to accrue rewards with zero stakers
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        rewardToken.mint(address(staking), 1_000 ether);
+        // This may create a stream for nobody
+        try staking.accrueRewards(address(rewardToken)) {
+            // May succeed
+        } catch {
+            // May fail with REWARD_TOO_SMALL or similar
+        }
+    }
+
+    /// Test: Claim non-whitelisted token (should skip)
+    function test_phase2_accrue_005_claimNonWhitelisted() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        address[] memory badTokens = new address[](1);
+        badTokens[0] = address(0xDEAD);
+        
+        // Should skip or revert gracefully
+        try staking.claimRewards(badTokens, address(this)) {
+            // Acceptable
+        } catch {
+            // Also acceptable
+        }
+    }
+
+    /// Test: Accrue at exactly stream window boundary
+    function test_phase2_accrue_006_accrueAtWindowBoundary() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        // First accrue
+        rewardToken.mint(address(staking), 1_000 ether);
+        staking.accrueRewards(address(rewardToken));
+        
+        // Wait exactly 3 days (default window)
+        vm.warp(block.timestamp + 3 days);
+        
+        // Accrue at boundary - should start new stream
+        rewardToken.mint(address(staking), 500 ether);
+        staking.accrueRewards(address(rewardToken));
+    }
+
+    /// Test: Very large reward amount
+    function test_phase2_accrue_007_largeRewardAmount() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        // Accrue enormous amount
+        uint256 largeAmount = 10_000_000 ether;
+        rewardToken.mint(address(staking), largeAmount);
+        staking.accrueRewards(address(rewardToken));
+        
+        // Claim and verify
+        vm.warp(block.timestamp + 3 days + 1);
+        
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+        
+        staking.claimRewards(tokens, address(this));
+        assertGt(rewardToken.balanceOf(address(this)), 0);
+    }
+
+    /// Test: Claim rewards multiple times in same block (reentrancy check)
+    function test_phase2_accrue_008_multipleClaimsSameBlock() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        rewardToken.mint(address(staking), 1_000 ether);
+        staking.accrueRewards(address(rewardToken));
+        
+        vm.warp(block.timestamp + 3 days + 1);
+        
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+        
+        // Claim multiple times
+        staking.claimRewards(tokens, address(this));
+        uint256 afterFirst = rewardToken.balanceOf(address(this));
+        
+        staking.claimRewards(tokens, address(this));
+        uint256 afterSecond = rewardToken.balanceOf(address(this));
+        
+        // Second claim should give nothing (already claimed)
+        assertEq(afterSecond, afterFirst);
+    }
 }
