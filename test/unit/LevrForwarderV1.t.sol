@@ -235,7 +235,7 @@ contract LevrForwarderV1_UnitTest is Test {
         vm.prank(attacker);
         forwarder.executeMulticall{value: 1 ether}(calls);
 
-        // ✅ Reentrancy was blocked - counter NOT incremented!
+        // ? Reentrancy was blocked - counter NOT incremented!
         assertEq(malicious.reentrancyCount(), 0);
     }
 
@@ -437,6 +437,119 @@ contract LevrForwarderV1_UnitTest is Test {
         ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
         // Result depends on implementation - may succeed or fail
         assertTrue(true, 'Should handle recursion attempt');
+    }
+
+    // ============ PHASE 1B: Additional Branch Coverage Tests ============
+
+    /// Branch: Multiple empty calls
+    function test_branch_001_multicall_emptyArray() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](0);
+        ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+        assertEq(results.length, 0);
+    }
+
+    /// Branch: Single call with zero value using trusted target
+    function test_branch_002_executeTransaction_zeroValue() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(forwarder),
+            allowFailure: true,
+            value: 0,
+            callData: abi.encodeCall(forwarder.executeTransaction, (address(token), hex''))
+        });
+
+        ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+        assertEq(results.length, 1);
+    }
+
+    /// Branch: Sequential calls to treasury
+    function test_branch_003_multipleCallsSequential() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](2);
+        
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(treasury),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeCall(treasury.underlying, ())
+        });
+        
+        calls[1] = ILevrForwarder_v1.SingleCall({
+            target: address(treasury),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeCall(treasury.getUnderlyingBalance, ())
+        });
+
+        ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+        assertEq(results.length, 2);
+        assertTrue(results[0].success);
+        assertTrue(results[1].success);
+    }
+
+    /// Branch: Large array of calls
+    function test_branch_004_largeMulticall() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](10);
+        
+        for (uint256 i = 0; i < 10; i++) {
+            calls[i] = ILevrForwarder_v1.SingleCall({
+                target: address(treasury),
+                allowFailure: true,
+                value: 0,
+                callData: abi.encodeCall(treasury.underlying, ())
+            });
+        }
+
+        ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+        assertEq(results.length, 10);
+    }
+
+    /// Branch: Call with allowFailure = false requires success
+    function test_branch_005_allowFailure_false_requiresSuccess() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(treasury),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeCall(treasury.underlying, ())
+        });
+
+        ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+        assertTrue(results[0].success);
+    }
+
+    /// Branch: ETH transfer with executeTransaction
+    function test_branch_006_executeTransaction_withETH() public {
+        vm.deal(alice, 1 ether);
+        
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(forwarder),
+            allowFailure: false,
+            value: 1 ether,
+            callData: abi.encodeCall(forwarder.executeTransaction, (address(bob), ''))
+        });
+
+        uint256 bobBefore = bob.balance;
+        vm.prank(alice);
+        forwarder.executeMulticall{value: 1 ether}(calls);
+        uint256 bobAfter = bob.balance;
+        
+        assertGt(bobAfter, bobBefore);
+    }
+
+    /// Branch: Returning data from call
+    function test_branch_007_executeTransaction_withReturnData() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(treasury),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeCall(treasury.underlying, ())
+        });
+
+        ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
+        assertTrue(results[0].success);
+        assertGt(results[0].returnData.length, 0);
     }
 }
 
