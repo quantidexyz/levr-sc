@@ -304,7 +304,7 @@ contract LevrFactory_VerifiedProjectsTest is Test, LevrFactoryDeployHelper {
         });
 
         vm.prank(address(this));
-        vm.expectRevert('INVALID_QUORUM_BPS');
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateProjectConfig(address(underlying), invalidConfig);
 
         console2.log('SUCCESS: Invalid quorum rejected');
@@ -314,7 +314,7 @@ contract LevrFactory_VerifiedProjectsTest is Test, LevrFactoryDeployHelper {
         invalidConfig.proposalWindowSeconds = 0; // Zero window
 
         vm.prank(address(this));
-        vm.expectRevert('PROPOSAL_WINDOW_ZERO');
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateProjectConfig(address(underlying), invalidConfig);
 
         console2.log('SUCCESS: Zero proposal window rejected');

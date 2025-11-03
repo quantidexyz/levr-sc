@@ -70,7 +70,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         factory.prepareForDeployment(); // Need new prepared contracts
 
         vm.prank(alice);
-        vm.expectRevert('TOKEN_NOT_FROM_TRUSTED_FACTORY');
+        vm.expectRevert(ILevrFactory_v1.TokenNotTrusted.selector);
         factory.register(address(fakeToken));
         console2.log('BLOCKED: Token from untrusted factory rejected');
     }
@@ -223,7 +223,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         factory.prepareForDeployment();
 
         vm.prank(alice);
-        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        vm.expectRevert(ILevrFactory_v1.NoTrustedFactories.selector);
         factory.register(address(token));
 
         console2.log('BLOCKED: Registration prevented when no factories configured');
@@ -258,7 +258,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
 
     /// @notice Test edge case: Cannot add zero address
     function test_cannotAdd_zeroAddress() public {
-        vm.expectRevert('ZERO_ADDRESS');
+        vm.expectRevert(ILevrFactory_v1.ZeroAddress.selector);
         factory.addTrustedClankerFactory(address(0));
     }
 
@@ -266,13 +266,13 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
     function test_cannotAdd_duplicate() public {
         factory.addTrustedClankerFactory(mockClankerFactoryV1);
 
-        vm.expectRevert('ALREADY_TRUSTED');
+        vm.expectRevert(ILevrFactory_v1.AlreadyTrusted.selector);
         factory.addTrustedClankerFactory(mockClankerFactoryV1);
     }
 
     /// @notice Test edge case: Cannot remove factory that's not trusted
     function test_cannotRemove_notTrusted() public {
-        vm.expectRevert('NOT_TRUSTED');
+        vm.expectRevert(ILevrFactory_v1.NotTrusted.selector);
         factory.removeTrustedClankerFactory(mockClankerFactoryV1);
     }
 
@@ -320,7 +320,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         factory.prepareForDeployment();
 
         vm.prank(bob);
-        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        vm.expectRevert(ILevrFactory_v1.NoTrustedFactories.selector);
         factory.register(address(token2));
 
         console2.log('BLOCKED: New registrations prevented when no trusted factories');
@@ -360,7 +360,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         factory.prepareForDeployment();
 
         vm.prank(bob);
-        vm.expectRevert('TOKEN_NOT_FROM_TRUSTED_FACTORY');
+        vm.expectRevert(ILevrFactory_v1.TokenNotTrusted.selector);
         factory.register(address(tokenV2));
         console2.log('Phase 1: Token from v2 blocked (not trusted)');
 
@@ -394,7 +394,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         factory.prepareForDeployment();
 
         vm.prank(alice);
-        vm.expectRevert('TOKEN_NOT_FROM_TRUSTED_FACTORY');
+        vm.expectRevert(ILevrFactory_v1.TokenNotTrusted.selector);
         factory.register(address(tokenV1_new));
         console2.log('Phase 2: Token from v1 blocked (no longer trusted)');
 
@@ -446,7 +446,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
         factory.prepareForDeployment();
 
         vm.prank(alice);
-        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        vm.expectRevert(ILevrFactory_v1.NoTrustedFactories.selector);
         factory.register(address(emergencyToken));
 
         console2.log('BLOCKED: Registrations prevented when no factories configured');

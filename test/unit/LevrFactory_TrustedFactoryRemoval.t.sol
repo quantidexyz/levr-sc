@@ -313,7 +313,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
 
         vm.startPrank(bob);
         factory.prepareForDeployment();
-        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        vm.expectRevert(ILevrFactory_v1.NoTrustedFactories.selector);
         factory.register(address(token2));
         vm.stopPrank();
 
@@ -454,7 +454,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
 
         vm.startPrank(bob);
         factory.prepareForDeployment();
-        vm.expectRevert('NO_TRUSTED_FACTORIES');
+        vm.expectRevert(ILevrFactory_v1.NoTrustedFactories.selector);
         factory.register(address(token2));
         vm.stopPrank();
 

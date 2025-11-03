@@ -224,7 +224,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         });
 
         // FIX: Now validation prevents this
-        vm.expectRevert('INVALID_QUORUM_BPS');
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(badConfig);
 
         console2.log('SUCCESS: Invalid BPS (15000) now rejected by validation');
@@ -287,7 +287,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         });
 
         // FIX: Validation prevents this
-        vm.expectRevert('PROPOSAL_WINDOW_ZERO');
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(newConfig);
 
         console2.log('SUCCESS: Zero proposal window now rejected by validation');
@@ -323,7 +323,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         });
 
         // FIX: Validation prevents this
-        vm.expectRevert('MAX_ACTIVE_PROPOSALS_ZERO');
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(newConfig);
 
         console2.log('SUCCESS: maxActiveProposals = 0 now rejected by validation');
@@ -714,7 +714,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         });
 
         // FIX: Validation prevents this
-        vm.expectRevert('INVALID_QUORUM_BPS');
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(badConfig);
 
         console2.log('SUCCESS: Barely-over BPS (10001) now rejected by validation');
@@ -750,7 +750,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         });
 
         // FIX: Validation prevents this
-        vm.expectRevert('INVALID_QUORUM_BPS');
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(maxConfig);
 
         console2.log('SUCCESS: uint16.max BPS (65535) now rejected by validation');

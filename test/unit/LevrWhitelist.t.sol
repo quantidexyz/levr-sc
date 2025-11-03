@@ -112,7 +112,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
         newWhitelist[1] = address(0);
 
         vm.prank(owner);
-        vm.expectRevert('ZERO_ADDRESS_IN_WHITELIST');
+        vm.expectRevert(ILevrFactory_v1.ZeroAddress.selector);
         factory.updateInitialWhitelist(newWhitelist);
 
         console2.log('SUCCESS: Zero address rejected from initial whitelist');

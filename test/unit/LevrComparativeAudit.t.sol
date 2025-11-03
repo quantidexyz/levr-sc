@@ -382,7 +382,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 
         // Second registration fails
         factory.prepareForDeployment();
-        vm.expectRevert('ALREADY_REGISTERED');
+        vm.expectRevert(ILevrFactory_v1.AlreadyRegistered.selector);
         factory.register(address(token));
 
         vm.stopPrank();
