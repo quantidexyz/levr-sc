@@ -219,3 +219,102 @@ contract RevertingToken is MockERC20 {
         revert('Transfer failed');
     }
 }
+
+// ============ PHASE 1A: Quick Win Tests for Branch Coverage ============
+
+contract LevrTreasuryV1_BranchCoverage_Test is Test, LevrFactoryDeployHelper {
+    MockERC20 internal underlying;
+    LevrFactory_v1 internal factory;
+    LevrForwarder_v1 internal forwarder;
+    LevrDeployer_v1 internal levrDeployer;
+    LevrTreasury_v1 internal treasury;
+    LevrStaking_v1 internal staking;
+    address internal governor;
+    address internal protocolTreasury = address(0xDEAD);
+
+    function setUp() public {
+        underlying = new MockERC20('Token', 'TKN');
+        ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
+        (factory, forwarder, levrDeployer) = deployFactoryWithDefaultClanker(cfg, address(this));
+        factory.prepareForDeployment();
+        ILevrFactory_v1.Project memory project = factory.register(address(underlying));
+        governor = project.governor;
+        treasury = LevrTreasury_v1(payable(project.treasury));
+        staking = LevrStaking_v1(project.staking);
+        underlying.mint(address(treasury), 100_000 ether);
+    }
+
+    /// Branch: Transfer max uint256 amount
+    function test_branch_001_transfer_maxAmount() public {
+        uint256 maxTransfer = underlying.balanceOf(address(treasury));
+        vm.prank(governor);
+        treasury.transfer(address(underlying), address(0x1111), maxTransfer);
+        assertEq(underlying.balanceOf(address(0x1111)), maxTransfer);
+    }
+
+    /// Branch: Transfer to multiple recipients
+    function test_branch_002_transfer_multipleRecipients() public {
+        vm.prank(governor);
+        treasury.transfer(address(underlying), address(0x2222), 1000 ether);
+        vm.prank(governor);
+        treasury.transfer(address(underlying), address(0x3333), 2000 ether);
+        vm.prank(governor);
+        treasury.transfer(address(underlying), address(0x4444), 3000 ether);
+        
+        assertEq(underlying.balanceOf(address(0x2222)), 1000 ether);
+        assertEq(underlying.balanceOf(address(0x3333)), 2000 ether);
+        assertEq(underlying.balanceOf(address(0x4444)), 3000 ether);
+    }
+
+    /// Branch: Boost with large amount
+    function test_branch_003_boost_largeAmount() public {
+        uint256 largeAmount = 50_000 ether;
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), largeAmount);
+        assertGt(underlying.balanceOf(address(staking)), 0);
+    }
+
+    /// Branch: Boost multiple times with different amounts
+    function test_branch_004_boost_multipleBoosts() public {
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), 5_000 ether);
+        
+        uint256 balanceAfter1 = underlying.balanceOf(address(staking));
+        
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), 10_000 ether);
+        
+        uint256 balanceAfter2 = underlying.balanceOf(address(staking));
+        assertGt(balanceAfter2, balanceAfter1);
+    }
+
+    /// Branch: Transfer small amounts
+    function test_branch_005_transfer_smallAmounts() public {
+        vm.prank(governor);
+        treasury.transfer(address(underlying), address(0x5555), 1);
+        assertEq(underlying.balanceOf(address(0x5555)), 1);
+    }
+
+    /// Branch: Boost minimum required amount
+    function test_branch_006_boost_minimumAmount() public {
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), 1000 ether);  // Use minimum valid amount
+        assertGt(underlying.balanceOf(address(staking)), 0);
+    }
+
+    /// Branch: Transfer with exact balance
+    function test_branch_007_transfer_exactBalance() public {
+        uint256 balance = underlying.balanceOf(address(treasury));
+        vm.prank(governor);
+        treasury.transfer(address(underlying), address(0x6666), balance);
+        assertEq(underlying.balanceOf(address(treasury)), 0);
+    }
+
+    /// Branch: Boost leaving minimum balance
+    function test_branch_008_boost_leavingMinimum() public {
+        uint256 treasuryBalance = underlying.balanceOf(address(treasury));
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), treasuryBalance - 100);
+        assertEq(underlying.balanceOf(address(treasury)), 100);
+    }
+}
