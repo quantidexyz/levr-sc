@@ -45,6 +45,7 @@
 | Document                                                           | Purpose                              | Use Case               |
 | ------------------------------------------------------------------ | ------------------------------------ | ---------------------- |
 | **[GOV.md](./GOV.md)**                                             | Governance mechanics & glossary      | Quick reference        |
+| **[STAKE.md](./STAKE.md)** 🆕                                      | Staking protocol & reward system     | Staking integration    |
 | **[VERIFIED_PROJECTS_FEATURE.md](./VERIFIED_PROJECTS_FEATURE.md)** | Verified projects & config overrides | Admin customization    |
 | **[FEE_SPLITTER.md](./FEE_SPLITTER.md)**                           | Fee distribution architecture        | Integration            |
 | **[USER_FLOWS.md](./USER_FLOWS.md)**                               | User interaction patterns            | Understanding behavior |
@@ -633,3 +634,26 @@ spec/
 **Last Consolidation:** October 30, 2025  
 **Next Review:** After AUDIT 3 completion  
 **Questions?** Start with AUDIT_STATUS.md or the document index above
+
+## 🆕 LATEST CONSOLIDATION: November 3, 2025 ✅
+
+**Status:** ✅ **COMPLETE** - Reduced from 18 → 15 files  
+**Consolidation:** Archived consolidation record + implementation analysis docs  
+**Details:** See `archive/consolidations/CONSOLIDATION_NOV_03_2025.md`
+
+---
+
+## 📋 Active Documentation (15 Files) ✅
+
+**Status:** Consolidated to optimal state (target: 12-15 files)  
+**Last Update:** November 3, 2025 (Phase 2 consolidation complete)
+
+### 🔴 Current Audit (ACTIVE)
+
+- **[AUDIT_STATUS.md](./AUDIT_STATUS.md)** ⭐ **START HERE** - Current audit status & mainnet readiness
+- **[EXTERNAL_AUDIT_4_COMPLETE.md](./EXTERNAL_AUDIT_4_COMPLETE.md)** - Most recent audit findings (Oct 31)
+
+### ✅ Previous Audits (REFERENCE)
+
+- **[EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)** - Phase 1 complete, remaining items
+- **[EXTERNAL_AUDIT_2_COMPLETE.md](./EXTERNAL_AUDIT_2_COMPLETE.md)** - Previous audit (reference)

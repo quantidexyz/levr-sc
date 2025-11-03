@@ -1,0 +1,652 @@
+---
+alwaysApply: true
+---
+
+## Spec Folder Documentation Rules
+
+**Purpose:** Comprehensive guide for maintaining spec/ folder with active documentation and organized archive.
+
+---
+
+## Code Organization Rule
+
+- **Always** put analysis md's to the spec folder.
+
+---
+
+## Spec Folder Structure (November 3, 2025)
+
+The `spec/` folder contains **13 active documents** (current work) and `archive/` for historical reference.
+
+**Active Documents (spec/ root):**
+
+```
+spec/
+├── README.md                              ⭐ Main navigation hub
+├── AUDIT_STATUS.md                        ⭐ Current audit dashboard
+│
+├── AUDIT.md                               🔐 Security master log
+├── HISTORICAL_FIXES.md                    🔐 Past vulnerabilities
+│
+├── GOV.md                                 📖 Governance reference
+├── FEE_SPLITTER.md                        📖 Fee distribution
+├── USER_FLOWS.md                          📖 User interactions
+├── TESTING.md                             📖 Test guide
+├── MULTISIG.md                            🔑 Gnosis Safe multisig info
+│
+├── CHANGELOG.md                           📅 Feature evolution
+├── FUTURE_ENHANCEMENTS.md                 📅 Roadmap
+│
+└── consolidations/ (in archive/)
+    ├── CONSOLIDATION_PHASE_3_NOV_03_2025.md
+    └── CONSOLIDATION_NOV_03_2025.md
+```
+
+**Archive Directory:**
+
+- `spec/archive/` - Organized historical documentation (116+ files)
+  - `archive/consolidations/` - Consolidation records
+  - `archive/audits/` - Completed audit work + detailed reports
+  - `archive/findings/` - Analysis, findings, implementation research
+  - `archive/testing/` - Historical test analysis
+  - `archive/obsolete-designs/` - Old design exploration
+
+---
+
+## Where to Find Current Data (Always Start Here)
+
+### 🚨 AUDIT STATUS
+
+- **Dashboard:** `spec/AUDIT_STATUS.md` - Current audit status, timeline to mainnet
+- **Security Log:** `spec/AUDIT.md` - Complete security findings and fixes
+- **Past Fixes:** `spec/HISTORICAL_FIXES.md` - Past bugs and lessons learned
+
+### 📖 PROTOCOL REFERENCE
+
+- **Governance:** `spec/GOV.md` - Mechanics, glossary, quick lookup
+- **Fee Distribution:** `spec/FEE_SPLITTER.md` - Architecture, integration
+- **User Flows:** `spec/USER_FLOWS.md` - Interaction patterns, edge cases
+- **Testing:** `spec/TESTING.md` - Test strategies, commands, utilities
+- **Multisig:** `spec/MULTISIG.md` - Gnosis Safe multisig configuration
+
+### 📅 PLANNING
+
+- **Evolution:** `spec/CHANGELOG.md` - Feature timeline
+- **Future:** `spec/FUTURE_ENHANCEMENTS.md` - Roadmap and V2 ideas
+
+---
+
+## Where to Find Historical Data
+
+**Archive Location:** `spec/archive/`
+
+**Completed Audits:**
+
+- `archive/audits/EXTERNAL_AUDIT_0.md` - First audit (8/8 fixed)
+- `archive/audits/EXTERNAL_AUDIT_2_COMPLETE.md` - AUDIT 2 summary (13/13 fixed)
+- `archive/audits/audit-2-details/` - 8 technical analysis reports
+- `archive/audits/audit-3-details/` - 15 technical analysis reports
+- `archive/audits/audit-4/` - AUDIT 4 working documents
+
+**Past Consolidations:**
+
+- `archive/consolidations/` - All past consolidation records
+- Sorted by recency with naming: `CONSOLIDATION_YYYY_MM_DD_PHASE_N.md`
+
+**Specific Findings:**
+
+- `archive/findings/COMPARATIVE_AUDIT.md` - Industry benchmarks
+- `archive/findings/ADERYN_ANALYSIS.md` - Static analysis
+- `archive/findings/implementation-analysis/` - Technical deep-dives
+- `archive/findings/oct-2025/` - October 2025 development analysis
+
+**Historical Testing:**
+
+- `archive/testing/COVERAGE_ANALYSIS.md` - Historical coverage metrics
+- Current coverage in `spec/TESTING.md`
+
+**Obsolete Designs:**
+
+- `archive/obsolete-designs/` - 10 design exploration documents
+- Transferable token designs, upgradeability exploration, pool-based design
+
+---
+
+## When Adding New Documentation
+
+### Security Findings
+
+- **All findings** → Always log in `spec/AUDIT.md` (master security log)
+- **Fixed bugs** → Add to `spec/HISTORICAL_FIXES.md` with lessons learned
+- **Completed audit** → Move actions to `archive/audits/`
+
+### Protocol Changes
+
+- **Governance mechanics** → Update `spec/GOV.md`
+- **Fee distribution** → Update `spec/FEE_SPLITTER.md`
+- **User interactions** → Update `spec/USER_FLOWS.md`
+- **Version tracking** → Update `spec/CHANGELOG.md`
+
+### Analysis & Research
+
+- **Test strategies** → Update `spec/TESTING.md`
+- **Future features** → Update `spec/FUTURE_ENHANCEMENTS.md`
+- **One-off analysis** → Create in `spec/`, plan to archive when complete
+
+---
+
+## Documentation Consolidation Guidelines
+
+### WHEN TO CONSOLIDATE (Red Flags)
+
+1. **File count > 20 in spec/ root** → Time to consolidate
+2. **Multiple docs on same topic** → Merge into single source of truth
+3. **"Which doc is current?"** → Clear sign of duplication
+4. **Temp analysis files aging** → Archive or integrate into main docs
+
+### HOW TO CONSOLIDATE
+
+1. **Identify active work:**
+   - Protocol references (GOV, FEE_SPLITTER, USER_FLOWS, TESTING)
+   - Security logs (AUDIT, HISTORICAL_FIXES)
+   - Planning docs (CHANGELOG, FUTURE_ENHANCEMENTS)
+
+2. **Merge overlapping docs:**
+   - Audit + Validation + Summary → Single ACTIONS.md
+   - Multiple findings on same topic → Into AUDIT.md or HISTORICAL_FIXES.md
+   - Temporary analysis → Into appropriate main doc
+
+3. **Archive completed work:**
+   - Completed audits → `archive/audits/`
+   - Past consolidations → `archive/consolidations/`
+   - Specific findings (now in AUDIT.md) → `archive/findings/`
+   - Old test analysis → `archive/testing/`
+   - Obsolete designs → `archive/obsolete-designs/`
+
+4. **Create clear navigation:**
+   - Update `spec/README.md` with current structure
+   - Update `archive/README.md` for historical navigation
+
+5. **Verify:**
+   - No duplicate information
+   - All links work
+   - Clear "start here" pointers
+   - Archive remains accessible
+
+### TARGET STATE
+
+- **Active files in spec/:** ~12-15 files (max 20)
+- **Single source of truth** per topic
+- **Clear entry points** (README, AUDIT_STATUS)
+- **Archive organized** with subdirectories
+
+---
+
+## Current Spec Status (November 3, 2025)
+
+**Active Files:** 13 (consolidated, maintainable)  
+**Archive Files:** 116+ (organized by type and phase)  
+**Last Consolidation:** November 3, 2025  
+**Archive Structure:** 5 subdirectories + README navigation
+
+---
+
+## Documentation Best Practices
+
+### ✅ DO
+
+- **Start with README.md** - Check navigation first
+- **Use AUDIT_STATUS.md** - For current audit status
+- **Update AUDIT.md** - For all security findings
+- **Archive completed work** - Move to archive/ when done
+- **One file per topic** - Merge duplicates
+- **Clear naming** - Use descriptive, unique names
+- **Add README to every archive subdirectory** - Maintain navigation
+- **Sync spec/ files after archive changes** - CRITICAL requirement
+
+### ❌ DON'T
+
+- **Create duplicate docs** - Merge into existing
+- **Keep temp analysis files** - Integrate or archive within 1 week
+- **Reference deleted files** - Update links when consolidating
+- **Let spec/ grow past 20 files** - Consolidate when hitting limit
+- **Archive without syncing spec/** - Must update spec/ references
+- **Skip README files in archive** - Every subdirectory needs one
+
+---
+
+## Quick Lookups
+
+### Current Status
+
+- Audit status → `spec/AUDIT_STATUS.md` ⭐ **Start here**
+- Security log → `spec/AUDIT.md` (complete history)
+- Past bugs → `spec/HISTORICAL_FIXES.md`
+
+### Protocol Reference
+
+- Governance → `spec/GOV.md`
+- Fee distribution → `spec/FEE_SPLITTER.md`
+- User flows → `spec/USER_FLOWS.md`
+- Testing → `spec/TESTING.md`
+- Multisig → `spec/MULTISIG.md`
+
+### History & Planning
+
+- Evolution → `spec/CHANGELOG.md`
+- Future → `spec/FUTURE_ENHANCEMENTS.md`
+
+### Archive Navigation
+
+- Archive hub → `spec/archive/README.md`
+- Audits → `spec/archive/audits/README.md`
+- Consolidations → `spec/archive/consolidations/README.md`
+- Findings → `spec/archive/findings/README.md`
+- Testing → `spec/archive/testing/README.md`
+- Designs → `spec/archive/obsolete-designs/README.md`
+
+---
+
+## Decision Tree: Where Does This Doc Go?
+
+```
+Is it current active work?
+├─ YES → Which topic?
+│  ├─ Governance → GOV.md
+│  ├─ Fees → FEE_SPLITTER.md
+│  ├─ Flows → USER_FLOWS.md
+│  ├─ Tests → TESTING.md
+│  ├─ Security findings → AUDIT.md
+│  ├─ Fixed bugs → HISTORICAL_FIXES.md
+│  ├─ Future features → FUTURE_ENHANCEMENTS.md
+│  └─ Changes → CHANGELOG.md
+└─ NO → Archive it
+   ├─ Completed audit → archive/audits/
+   ├─ Old consolidation → archive/consolidations/
+   ├─ Specific finding → archive/findings/
+   ├─ Test analysis → archive/testing/
+   └─ Old design → archive/obsolete-designs/
+```
+
+---
+
+## File Lifecycle
+
+### NEW ANALYSIS
+
+1. Create in `spec/` (e.g., `NEW_FINDING_ANALYSIS.md`)
+2. Work on it (update frequently)
+3. Within 1 week: Integrate into main doc OR archive
+
+### MAIN DOCS (Rarely Archive)
+
+- `AUDIT.md` - Never archive (master log)
+- `HISTORICAL_FIXES.md` - Never archive (learning resource)
+- `GOV.md`, `FEE_SPLITTER.md`, `USER_FLOWS.md` - Keep current
+- `TESTING.md` - Keep current
+- `CHANGELOG.md`, `FUTURE_ENHANCEMENTS.md` - Keep current
+- `MULTISIG.md` - Keep current
+
+---
+
+## Consolidation Triggers
+
+**Consolidate when:**
+
+1. **spec/ has > 20 files** → Target: 12-15 files
+2. **Multiple overlapping docs** → Merge into one
+3. **Temp analysis > 1 week old** → Integrate into main doc or archive
+4. **"Which doc should I read?"** → Too many options, need to merge
+
+**Steps:**
+
+```bash
+# 1. List current files
+ls spec/*.md | wc -l # If > 20, consolidate!
+
+# 2. Identify duplicates/overlaps
+# Look for: *_SUMMARY, *_VALIDATION, *_ACTIONS on same topic
+
+# 3. Merge related docs
+# Example: Multiple findings → Single AUDIT.md entry
+
+# 4. Move completed work
+mv COMPLETED_AUDIT_*.md spec/archive/audits/
+
+# 5. Update navigation
+# Edit spec/README.md with new structure
+
+# 6. Create consolidation record
+# spec/archive/consolidations/CONSOLIDATION_[YYYY_MM_DD_PHASE_N].md
+```
+
+---
+
+## Consolidation Summary Creation
+
+### NAMING CONVENTION (Auto-sorts by recency)
+
+```
+CONSOLIDATION_[YYYY]_[MM]_[DD]_PHASE_[N].md
+
+Examples (sorted newest first with ls -r):
+- CONSOLIDATION_2025_11_03_PHASE_3.md  ← Newest
+- CONSOLIDATION_2025_11_03_PHASE_2.md
+- CONSOLIDATION_2025_11_03_PHASE_1.md
+- CONSOLIDATION_2025_10_30_GENERAL.md  ← Oldest
+```
+
+### LOCATION
+
+**Always:** `spec/archive/consolidations/` (never in spec/ root)
+
+### 10-SECTION TEMPLATE
+
+1. **Header with Metadata** - Date, Phase, Duration, Reason
+2. **Executive Summary** - Goal, why consolidation needed, approach
+3. **Before & After Metrics** - Active files, archive files, other metrics
+4. **Files Moved** - Source → Destination → Reason (per category)
+5. **Files Merged** - List of files → Merged into → Result
+6. **Files Updated** - Which spec/ files changed and what changed
+7. **Archive Reorganization** - New subdirectories, structure improvements
+8. **Navigation Changes** - Old paths → New paths, verification results
+9. **Lessons & Notes** - What worked, challenges, recommendations
+10. **Files Not Included (Reasoning)** - Why files stayed in root, exceptions
+
+### BEST PRACTICES
+
+✅ **DO:**
+
+- Include concrete metrics (before/after numbers)
+- Document the "why" behind each move
+- Verify all links work post-consolidation
+- Include specific date with phase number
+- Store ONLY in spec/archive/consolidations/
+
+❌ **DON'T:**
+
+- Keep consolidation records in spec/ root
+- Create generic "CONSOLIDATION.md" (needs date)
+- Skip before/after metrics
+- Forget to document reasoning
+- Consolidate without recording summary
+
+---
+
+## Archive Organization & Maintenance
+
+### PURPOSE
+
+Keep archive organized, searchable, and maintainable. Archive is NOT dumping ground—it's structured historical record.
+
+**Archive is the SOURCE OF TRUTH FOR HISTORY**
+
+### CANONICAL STRUCTURE
+
+```
+spec/archive/
+├── README.md                    ⭐ Archive navigation hub
+├── consolidations/              📅 Consolidation records
+│   ├── README.md
+│   └── CONSOLIDATION_*.md (sorted by recency)
+├── audits/                      🔐 Completed audit work (40+ files)
+│   ├── README.md
+│   ├── EXTERNAL_AUDIT_0.md
+│   ├── EXTERNAL_AUDIT_2_COMPLETE.md
+│   ├── audit-2-details/
+│   ├── audit-3-details/
+│   ├── audit-4/
+│   └── audit-4-details/
+├── findings/                    🔍 Analysis & findings (55+ files)
+│   ├── README.md
+│   ├── COMPARATIVE_AUDIT.md
+│   ├── ADERYN_ANALYSIS.md
+│   ├── implementation-analysis/
+│   │   ├── README.md
+│   │   └── [20+ technical analysis files]
+│   └── oct-2025/
+│       ├── README.md
+│       └── [30 analysis files]
+├── testing/                     📊 Historical test analysis (2 files)
+│   ├── README.md
+│   └── COVERAGE_ANALYSIS.md
+└── obsolete-designs/            🗃️ Old design exploration (10 files)
+    ├── README.md
+    └── [design exploration documents]
+```
+
+### EVERY SUBDIRECTORY MUST HAVE README.md
+
+Each subdirectory README explains:
+
+1. **Purpose:** What is stored here and why
+2. **Contents:** List of files with descriptions
+3. **When Added:** When files are added here
+4. **Cross-References:** Links to related spec/ documents
+5. **Maintenance:** When/how to clean up or reorganize
+
+### ARCHIVE ORGANIZATION WORKFLOW
+
+When consolidating documentation:
+
+1. **Identify files to archive:**
+   - Completed audits → `archive/audits/`
+   - Analysis/findings → `archive/findings/` or `archive/oct-2025/` (if recent)
+   - Consolidation records → `archive/consolidations/`
+   - Test reports → `archive/testing/`
+   - Old designs → `archive/obsolete-designs/`
+
+2. **Organize with subdirectories:**
+   - Group detailed reports in `audit-N-details/`
+   - Create `implementation-analysis/` for technical docs
+   - Use `oct-YYYY/` for temporary analysis (temporary only!)
+
+3. **Add README.md to each subdirectory:**
+   - Purpose, contents list, when files are added
+   - Cross-references, maintenance notes
+
+4. **Update archive/README.md:**
+   - Add new sections for subdirectories
+   - Update statistics (total files, last update date)
+   - Update navigation table
+   - Verify all cross-references
+
+5. **CRITICAL: Sync top-level spec/ documents:**
+   - **spec/README.md** → Update archive section with new structure
+   - **spec/AUDIT_STATUS.md** → Update archive references if changed
+   - **spec/CHANGELOG.md** → Add consolidation entry
+   - **spec/archive/README.md** → Already updated above
+   - **Verify all links in spec/ point to correct archive locations**
+
+### ARCHIVE MAINTENANCE RULES
+
+✅ **DO:**
+
+- Keep archive organized by type/purpose
+- Add README.md to every subdirectory
+- Update statistics monthly
+- Verify links quarterly
+- Use consistent naming conventions
+- Document why files are archived
+
+❌ **DON'T:**
+
+- Mix different file types in same directory
+- Create nested subdirectories > 2 levels deep
+- Skip README files in subdirectories
+- Archive without updating spec/ documents
+- Leave orphaned files (not in any subdirectory)
+- Create temp directories that stay forever (move within 2 weeks)
+
+### TEMPORARY ANALYSIS HANDLING
+
+Recent analysis (< 2 weeks old) can use temporary monthly directories:
+
+- Example: `archive/oct-2025/` for October 2025 analysis
+- Purpose: Hold analysis during development phase
+- Requirement: Move to permanent location or delete after 2 weeks
+- Never: Create `archive/temp/` or `archive/misc/`
+
+### SYNCING TOP-LEVEL SPEC AFTER ARCHIVE ORGANIZATION
+
+After organizing archive, ALWAYS update:
+
+1. **spec/README.md**
+   - Update "Archive" section with new structure
+   - Update file count references
+   - Ensure archive links work
+
+2. **spec/AUDIT_STATUS.md**
+   - Update archive references if needed
+   - Add links to archived audit reports
+
+3. **spec/CHANGELOG.md**
+   - Add entry: `[CONSOLIDATION] - YYYY-MM-DD - Archive Reorganized`
+   - Document what changed
+
+4. **spec/archive/README.md**
+   - Updated during archive organization (step 4 above)
+   - Verify all external links work
+
+5. **Verification (CRITICAL!):**
+   - Run: `grep -r "spec/archive" spec/*.md`
+   - Check all archive references point to correct paths
+   - Verify no broken links
+   - Test navigating from spec/ to archive/
+
+### ARCHIVE ORGANIZATION CHECKLIST
+
+```
+Before Moving Files to Archive:
+  ☐ Decide which archive subdirectory each file belongs
+  ☐ Create subdirectories if needed
+  ☐ Create README.md in each new subdirectory
+  ☐ Update README.md content with files list
+
+Moving Files:
+  ☐ Move files to appropriate archive/ subdirectory
+  ☐ Verify files moved (not copied)
+  ☐ Update archive/ README file statistics
+  ☐ Add cross-references in new README.md files
+
+After Moving to Archive:
+  ☐ Update spec/README.md archive section
+  ☐ Update spec/AUDIT_STATUS.md if applicable
+  ☐ Update spec/CHANGELOG.md with consolidation entry
+  ☐ Verify all links work: grep -r "archive/" spec/
+
+Verification:
+  ☐ Run broken link check (grep and path verification)
+  ☐ Manually test 3-5 random archive links from spec/
+  ☐ Confirm archive structure matches documentation
+  ☐ Check file counts match what README says
+```
+
+---
+
+## Anti-Patterns (Don't Do This)
+
+❌ **Create summary of summary** - Update existing or archive  
+❌ **Create temp file and forget** - Integrate within 1 week  
+❌ **Duplicate information** - Merge into single doc  
+❌ **Reference deleted files** - Update links when consolidating  
+❌ **Keep completed work in root** - Move to archive/  
+❌ **No README in archive/** - Always add navigation  
+❌ **Archive without syncing spec/** - Update spec/ files first
+
+---
+
+## Maintenance Schedule
+
+### Weekly (During Active Development)
+
+- Update `AUDIT_STATUS.md` with progress
+- Update `AUDIT.md` with new findings
+- Check for temp files > 1 week old
+
+### After Each Fix
+
+- Update `AUDIT.md` with finding + fix
+- Update `HISTORICAL_FIXES.md` if bug fix
+- Update `CHANGELOG.md` if feature change
+
+### After Audit Completion
+
+- Move completed audit docs to `archive/audits/`
+- Update `AUDIT_STATUS.md`
+- Update `README.md` if structure changed
+
+### Quarterly
+
+- Review `FUTURE_ENHANCEMENTS.md`
+- Archive obsolete analysis files
+- Verify all links work
+- Update archive statistics
+
+---
+
+## Current vs Historical
+
+### Use CURRENT (spec/ root) for
+
+- ✅ Active protocol work
+- ✅ Protocol reference (governance, fees, flows)
+- ✅ Security master log (all findings)
+- ✅ Testing guides
+- ✅ Planning docs (changelog, roadmap)
+
+### Use HISTORICAL (spec/archive/) for
+
+- ✅ Completed audits (all findings fixed)
+- ✅ Past consolidation records
+- ✅ Specific findings (now in AUDIT.md)
+- ✅ Old test analysis (superseded)
+- ✅ Obsolete design explorations
+
+### NEVER
+
+- ❌ Reference archive/ for current implementation
+- ❌ Put active work in archive/
+- ❌ Create docs outside spec/ (except temp, then move within 1 day)
+
+---
+
+## Quick Reference Card
+
+```
+NEED TO KNOW CURRENT AUDIT STATUS?
+→ spec/AUDIT_STATUS.md ⭐
+
+NEED GOVERNANCE INFO?
+→ spec/GOV.md 📖
+
+NEED TO UNDERSTAND A FLOW?
+→ spec/USER_FLOWS.md 📖
+
+NEED TO WRITE TESTS?
+→ spec/TESTING.md 📖
+
+NEED SECURITY HISTORY?
+→ spec/AUDIT.md 🔐
+
+NEED TO KNOW WHAT WAS FIXED?
+→ spec/HISTORICAL_FIXES.md 🔐
+
+NEED HISTORICAL CONTEXT?
+→ spec/archive/ 📦
+
+NEED TO NAVIGATE ARCHIVE?
+→ spec/archive/README.md ⭐
+
+LOST? START HERE:
+→ spec/README.md ⭐
+```
+
+---
+
+**Last Updated:** November 3, 2025  
+**Current Spec Status:** 13 active files, 116+ archived  
+**Archive Structure:** 5 organized subdirectories with README navigation  
+**Consolidation Summary Location:** `spec/archive/consolidations/CONSOLIDATION_YYYY_MM_DD_PHASE_N.md`  
+**Next Review:** After next consolidation or when spec/ reaches 20+ active files  
+**Maintainer:** Follow these rules to keep spec/ clean and organized!

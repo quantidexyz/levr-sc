@@ -444,3 +444,54 @@ The spec/ folder is now optimized for clarity, maintainability, and quick inform
 **Date:** November 3, 2025  
 **Next Review:** After Audit 3 completion or when spec/ reaches 20 files  
 **Maintainer:** Follow recommendations above to keep spec/ clean
+
+## ⏳ FOLLOW-UP CONSOLIDATION NEEDED (November 2025)
+
+### Files Needing Resolution
+
+After the Nov 3 consolidation (24 → 15 files), 3 additional files have emerged that should be consolidated:
+
+1. **CONTRACT_SIZE_FIX.md** - Implementation reference for LevrFactory_v1 contract size optimization
+   - Status: Complete (bytecode optimization verified)
+   - Consolidation Target: Move implementation details to `archive/findings/` + summary to `HISTORICAL_FIXES.md`
+
+2. **ACCOUNTING_ANALYSIS.md** - Root cause analysis for LevrStaking accounting
+   - Status: Complete (perfect accounting by design verified)
+   - Consolidation Target: Move to `archive/findings/` as reference doc
+
+3. **CONSOLIDATION_NOV_03_2025.md** (THIS FILE) - Historical consolidation record
+   - Status: Complete (already executed)
+   - Consolidation Target: Move to `archive/consolidations/` (following archival guidelines)
+
+### Recommended Actions
+
+**Step 1: Archive Consolidation Record (1 file)**
+```bash
+mv spec/CONSOLIDATION_NOV_03_2025.md spec/archive/consolidations/CONSOLIDATION_NOV_03_2025.md
+```
+
+**Step 2: Move Analysis Files to Archive (2 files)**
+```bash
+# Move implementation/analysis references to archive/findings/
+mkdir -p spec/archive/findings/implementation-analysis/
+mv spec/CONTRACT_SIZE_FIX.md spec/archive/findings/implementation-analysis/CONTRACT_SIZE_FIX.md
+mv spec/ACCOUNTING_ANALYSIS.md spec/archive/findings/implementation-analysis/ACCOUNTING_ANALYSIS.md
+```
+
+**Step 3: Ensure AUDIT_STATUS.md is Current (1 file)**
+- Verify AUDIT_STATUS.md correctly reflects AUDIT 4 status
+- Verify EXTERNAL_AUDIT_4_COMPLETE.md or EXTERNAL_AUDIT_4_ACTIONS.md status
+
+### Result After Consolidation
+
+**Before:** 18 files
+**After:** 15 files (TARGET ACHIEVED)
+- Removes: 1 consolidation record, 2 analysis files
+- Files optimized to 15 active docs
+
+---
+
+**FINAL STATE (Post-Next-Consolidation):**
+- Spec/ root: 15 files
+- Archive/consolidations/: 6 files (includes CONSOLIDATION_NOV_03_2025.md)
+- Archive/findings/: Expanded with implementation analysis subdirectory

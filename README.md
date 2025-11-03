@@ -182,9 +182,11 @@ struct FactoryConfig {
 
 ### Test Coverage
 
-- **57 total tests** (100% pass rate)
-- **Unit Tests** (41 tests): Individual contract security and functionality
-- **E2E Tests** (16 tests): Full protocol flows and integration
+- **310+ total tests** (100% pass rate) - Unit, E2E, edge cases, and integration
+- **Unit Tests** (125+ tests): Individual contract security and functionality
+- **E2E Tests** (50+ tests): Full protocol flows and integration
+- **Edge Case Tests** (85+ tests): Boundary conditions and attack scenarios
+- **Industry Comparison Tests** (50+ tests): Validation against known vulnerabilities
 
 ### Run Tests
 
@@ -207,15 +209,18 @@ forge test --fork-url $RPC_URL
 ```
 test/
 ├── e2e/
-│   ├── LevrV1.Governance.t.sol      # 9 governance E2E tests
-│   ├── LevrV1.Staking.t.sol         # 5 staking E2E tests
-│   └── LevrV1.Registration.t.sol    # 4 registration tests
+│   ├── LevrV1.Governance.t.sol      # Governance E2E tests
+│   ├── LevrV1.Staking.t.sol         # Staking E2E tests
+│   ├── LevrV1.Registration.t.sol    # Registration tests
+│   └── LevrV1.StuckFundsRecovery.t.sol # Recovery scenarios
 └── unit/
-    ├── LevrFactoryV1.*.t.sol        # 9 factory tests
-    ├── LevrStakingV1.t.sol          # 13 staking tests
-    ├── LevrGovernorV1.t.sol         # 1 governor test
-    ├── LevrTreasuryV1.t.sol         # 2 treasury tests
-    └── LevrStakedTokenV1.t.sol      # 2 staked token tests
+    ├── LevrFactory*.t.sol            # Factory unit tests
+    ├── LevrStaking*.t.sol            # Staking unit tests (40+ tests)
+    ├── LevrGovernor*.t.sol           # Governor tests (66+ tests)
+    ├── LevrTreasury*.t.sol           # Treasury tests
+    ├── LevrStakedToken*.t.sol        # Staked token tests
+    ├── LevrFeeSplitter*.t.sol        # Fee splitter tests (74 tests)
+    └── Levr*.t.sol                   # Integration & edge cases
 ```
 
 ## Security
@@ -318,9 +323,12 @@ governor.execute(proposalId);
 
 ## Documentation
 
-- **Protocol Guide**: [specs/gov.md](specs/gov.md) - Complete governance mechanics
-- **Security Audit**: [specs/audit.md](specs/audit.md) - Full security assessment
+- **Protocol Guide**: [spec/GOV.md](spec/GOV.md) - Complete governance mechanics
+- **Security Audit**: [spec/AUDIT.md](spec/AUDIT.md) - Full security assessment & findings
+- **Audit Status**: [spec/AUDIT_STATUS.md](spec/AUDIT_STATUS.md) - Current audit progress
 - **API Reference**: Inline NatSpec documentation in all contracts
+- **Historical Fixes**: [spec/HISTORICAL_FIXES.md](spec/HISTORICAL_FIXES.md) - Past bugs and lessons learned
+- **Detailed Reports**: [spec/archive/audits/](spec/archive/audits/) - Complete audit technical reports
 
 ## Contributing
 

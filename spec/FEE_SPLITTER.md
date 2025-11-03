@@ -8,119 +8,128 @@
 
 ## Executive Summary
 
-The `LevrFeeSplitter_v1` contract is a **singleton** that enables flexible fee distribution for **all** Clanker tokens. It acts as the fee receiver from `ClankerFeeLocker` and distributes fees according to per-project configurable percentages set by each token admin.
+The `LevrFeeSplitter_v1` contract enables flexible fee distribution for Clanker tokens. Each project deploys its **own dedicated fee splitter instance** (not shared) via `LevrFeeSplitterFactory_v1`.
 
 **Key Features:**
 
-- ✅ **Singleton architecture** - one contract manages all projects
-- ✅ Acts as fee receiver in ClankerFeeLocker (replaces direct staking integration)
+- ✅ **Per-project instances** - Each Clanker token gets its own dedicated splitter
+- ✅ Acts as fee receiver (redirects from staking contract)
 - ✅ Per-project split configuration (each token admin controls their project)
 - ✅ Permissionless distribution (anyone can trigger)
 - ✅ Multi-token support (ETH, WETH, underlying token, etc.)
-- ✅ Non-disruptive to existing flows (staking contract unchanged)
+- ✅ Auto-accrue on distribution (try-catch prevents failures)
+- ✅ Whitelist enforcement (v1.5.0+ requirement)
 - ✅ ERC2771 meta-transaction support (gasless operations)
-- ✅ **Zero changes to LevrFactory_v1 or LevrStaking_v1** (works with existing contracts)
-- ✅ **Optional enhancement** - can be added to new or existing projects anytime
+- ✅ Dust recovery function (recover rounding errors)
+- ✅ Zero changes to LevrFactory_v1 or LevrStaking_v1
 
-**Singleton Architecture:**
+**Per-Project Architecture:**
 
-Instead of deploying a new fee splitter per project, **one contract manages all projects**:
+Instead of one shared fee splitter, each project deploys its own instance via factory:
 
 ```
-LevrFeeSplitter_v1 (deployed once by protocol)
-  ├─ Project A: 50% staking, 50% team
-  ├─ Project B: 80% staking, 20% dev fund
-  └─ Project C: 100% staking
+LevrFeeSplitterFactory_v1
+  ├─ Project A Splitter:  50% staking, 50% team
+  ├─ Project B Splitter:  80% staking, 20% dev fund
+  └─ Project C Splitter:  100% staking
 ```
+
+This prevents token mixing issues and gives each project full autonomy over its fee split.
 
 **Integration Model:**
 
-The fee splitter is **completely optional** and deployed **once by the protocol**. Projects opt-in after the standard Levr registration flow. It does not require modifications to the factory or staking contracts - it simply:
+The fee splitter is **completely optional** and each project deploys its own instance via factory. Projects opt-in after standard Levr registration. It does not require modifications to the factory or staking contracts - it simply:
 
-1. Stores per-project split configurations (clankerToken → SplitConfig[])
-2. Becomes the reward recipient in `ClankerLpLocker` for projects that opt-in (via `updateRewardRecipient()`)
-3. Claims fees from `ClankerFeeLocker` and distributes per project configuration
+1. Stores split configurations per project
+2. Becomes the reward recipient in `ClankerLpLocker` for projects that opt-in
+3. Claims fees and distributes per project configuration
 4. Sends the staking portion to each project's `LevrStaking_v1` (existing manual accrual flow)
+5. **Auto-accrues rewards** (try-catch safe) if staking is a receiver
 
 This allows projects to:
 
 - Start with 100% fees to stakers (default behavior, no splitter)
 - Opt-in to fee splitter and configure custom splits (token admin only)
 - Reconfigure splits at any time (token admin only)
-- Each project operates independently within the singleton contract
+- Each project operates independently with its own splitter instance
 
 ---
 
 ## Architecture
 
-### Singleton Design
+### Per-Project Design
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│           LevrFeeSplitter_v1 (Singleton)            │
-│                                                     │
-│  Project A (TokenA):                                │
-│    splits: [50% stakingA, 50% teamA]                │
-│                                                     │
-│  Project B (TokenB):                                │
-│    splits: [80% stakingB, 20% devFund]              │
-│                                                     │
-│  Project C (TokenC):                                │
-│    splits: [100% stakingC]                          │
+│      LevrFeeSplitterFactory_v1                      │
+│      Deploys dedicated instances                    │
 └─────────────────────────────────────────────────────┘
+                        │
+        ┌───────────────┼───────────────┐
+        │               │               │
+        ▼               ▼               ▼
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│ Project A   │ │ Project B   │ │ Project C   │
+│ Splitter    │ │ Splitter    │ │ Splitter    │
+│             │ │             │ │             │
+│ 50% staking │ │ 80% staking │ │ 100% staking│
+│ 50% team    │ │ 20% dev     │ │             │
+└─────────────┘ └─────────────┘ └─────────────┘
 ```
 
 ### Current Flow (Without Fee Splitter)
 
 ```
 Project A:
-ClankerFeeLocker (fee owner: stakingA)
-  ↓ claim()
+ClankerLpLocker (fee recipient: stakingA)
+  ↓ collectRewards()
 LevrStaking_v1
   ↓ accrueRewards()
 Stakers receive 100% of fees
 ```
 
-### New Flow (With Fee Splitter - Singleton)
+### New Flow (With Fee Splitter - Per-Project Instance)
 
 ```
 Project A:
-ClankerFeeLocker (fee owner: feeSplitter)
-  ↓ claim() - anyone can trigger
-LevrFeeSplitter_v1 (singleton)
-  ├─ distribute(tokenA, WETH) → queries Project A splits
-  ├─ → LevrStaking_v1 (50%)
-  └─ → Team Wallet (50%)
+ClankerLpLocker (fee recipient: splitterA)
+  ↓ collectRewards() - anyone can trigger
+LevrFeeSplitter_v1 (splitterA instance)
+  ├─ distribute(WETH) → queries Project A splits
+  ├─ → LevrStaking_v1 (50%, auto-accrued)
+  ├─ → Team Wallet (50%)
+  └─ emit AutoAccrualSuccess event
 
 Project B:
-ClankerFeeLocker (fee owner: feeSplitter)
-  ↓ claim() - anyone can trigger
-LevrFeeSplitter_v1 (same singleton)
-  ├─ distribute(tokenB, WETH) → queries Project B splits
-  ├─ → LevrStaking_v1 (80%)
+ClankerLpLocker (fee recipient: splitterB)
+  ↓ collectRewards() - anyone can trigger
+LevrFeeSplitter_v1 (splitterB instance)
+  ├─ distribute(WETH) → queries Project B splits
+  ├─ → LevrStaking_v1 (80%, auto-accrued)
   └─ → Dev Fund (20%)
 
-Each project's staking:
-LevrStaking_v1
-  ↓ accrueRewards() - manual accrual (unchanged)
-Stakers receive their portion
+Each splitter:
+- Independent state (splits, distribution state)
+- Independent fees
+- Cannot access other projects' tokens
 ```
 
 ### Integration Points
 
-1. **LevrFactory_v1:** Fee splitter reads `getClankerMetadata(clankerToken)` to find LP locker address
-2. **ClankerLpLocker:** Token admin calls `updateRewardRecipient(clankerToken, index, splitterAddress)` to route fees to splitter
+1. **LevrFeeSplitterFactory_v1:** Deploys per-project splitter instances
+2. **ClankerLpLocker:** Token admin calls `updateRewardRecipient()` to route fees to splitter
 3. **Fee Distribution Flow:**
-   - Fee splitter calls `collectRewards()` on LP locker
-   - LP locker sends fees to fee splitter (because it's the reward recipient)
-   - Fee splitter does NOT claim from ClankerFeeLocker (LP locker handles that internally)
+   - SDK or bot calls `splitter.distribute(rewardToken)` on specific project's splitter
+   - Splitter claims fees via `collectRewards()` from LP locker
+   - Distributes according to project's configured splits
+   - **Auto-accrues** if staking is a receiver (try-catch safe)
 4. **LevrStaking_v1:**
-   - Receives split portion via direct transfer from fee splitter
-   - `accrueRewards()` auto-claim gets 0 from FeeLocker (fails gracefully)
+   - Receives split portion via direct transfer from splitter
+   - Auto-accrual triggered by splitter (if staking is receiver)
    - Balance delta detection credits the transferred amount
    - No code changes needed!
-5. **Token Admin:** Each token admin configures their project's split percentages and receivers
-6. **Singleton Deployment:** Protocol deploys one fee splitter, all projects use it
+5. **Token Admin:** Configures split percentages and receivers via splitter instance
+6. **Factory Deployment:** Each project deploys its own splitter instance via factory
 
 ---
 
@@ -128,16 +137,43 @@ Stakers receive their portion
 
 ### LevrFeeSplitter_v1
 
-**Role:** Singleton that manages fee distribution for all Clanker projects
+**Role:** Per-project fee splitter for flexible fee distribution
 
 **Extends:** `ERC2771ContextBase` (supports meta-transactions)
+
+**Constructor:** `constructor(address clankerToken_, address factory_, address trustedForwarder_)`
+
+**Parameters:**
+
+- `clankerToken_`: The Clanker token this splitter handles
+- `factory_`: LevrFactory_v1 address (used to query staking contract)
+- `trustedForwarder_`: ERC2771 forwarder for meta-transactions
+
+**Key Property:** Each splitter is dedicated to one Clanker token - cannot access other projects' funds
+
+### LevrFeeSplitterFactory_v1
+
+**Role:** Factory for deploying per-project fee splitters
 
 **Constructor:** `constructor(address factory_, address trustedForwarder_)`
 
 **Parameters:**
 
-- `factory_`: LevrFactory_v1 address (used to query project contracts via `getProjectContracts()` and `getClankerMetadata()`)
-- `trustedForwarder_`: ERC2771 forwarder for meta-transactions
+- `factory_`: LevrFactory_v1 address
+- `trustedForwarder_`: ERC2771 forwarder
+
+**Deployment Methods:**
+
+```solidity
+// Standard deployment
+function deploy(address clankerToken) external returns (address splitter);
+
+// Deterministic deployment (CREATE2)
+function deployDeterministic(address clankerToken, bytes32 salt) external returns (address splitter);
+
+// Compute address before deployment
+function computeDeterministicAddress(address clankerToken, bytes32 salt) external view returns (address);
+```
 
 ### Data Structures
 
@@ -174,13 +210,19 @@ uint256 private constant BPS_DENOMINATOR = 10_000;  // 100% = 10,000 bps
 #### Admin Functions (Per-Project)
 
 ```solidity
-/// @notice Configure fee splits for a project (only token admin)
+/// @notice Configure fee splits for this project (only token admin)
 /// @dev Total bps must equal 10,000 (100%)
 ///      Caller must be the token admin (IClankerToken(clankerToken).admin())
 ///      At most one split can point to the staking contract
-/// @param clankerToken The Clanker token address (identifies the project)
 /// @param splits Array of split configurations for this project
-function configureSplits(address clankerToken, SplitConfig[] calldata splits) external;
+function configureSplits(SplitConfig[] calldata splits) external;
+
+/// @notice Recover trapped dust from rounding (only token admin)
+/// @dev Only allows recovery of tokens that aren't pending distribution
+///      This prevents stealing pending fees while allowing dust cleanup
+/// @param token The token to recover dust from
+/// @param to The address to send the dust to
+function recoverDust(address token, address to) external;
 ```
 
 **Access Control:** Uses `IClankerToken(clankerToken).admin()` to verify caller is the token admin. No separate admin transfer needed - admin is always the current token admin.
@@ -188,65 +230,53 @@ function configureSplits(address clankerToken, SplitConfig[] calldata splits) ex
 #### Distribution Functions
 
 ```solidity
-/// @notice Claim fees from ClankerFeeLocker and distribute according to configured splits
+/// @notice Distribute fees according to configured splits
 /// @dev Permissionless - anyone can trigger distribution
-///      Supports multiple tokens (ETH, WETH, underlying, etc.)
-///      ⚠️ IMPORTANT: Call once per (clankerToken, rewardToken) pair
-///         Multiple calls for same pair will have no effect (second call finds 0 balance)
-///      ⚠️ WHITELIST REQUIREMENT (v1.5.0): Reward token must be whitelisted in staking contract
+///      ⚠️ IMPORTANT: Reward token must be whitelisted in staking contract
 ///         Distribution will revert with TOKEN_NOT_WHITELISTED if token is not whitelisted
-/// @param clankerToken The Clanker token address (identifies the project)
-/// @param rewardToken The reward token to distribute (e.g., WETH, clankerToken itself)
-function distribute(address clankerToken, address rewardToken) external;
+///      ⚠️ Auto-accrues if staking is a receiver (try-catch safe)
+/// @param rewardToken The reward token to distribute
+function distribute(address rewardToken) external;
 
-/// @notice Batch distribute multiple reward tokens for a single project
+/// @notice Batch distribute multiple reward tokens
 /// @dev More gas efficient than calling distribute() multiple times
 ///      Use this for multi-token fee distribution (e.g., WETH + Clanker token)
-///      ⚠️ WHITELIST REQUIREMENT (v1.5.0): All reward tokens must be whitelisted in staking
-///         Distribution will skip tokens that are not whitelisted (does not revert)
-/// @param clankerToken The Clanker token address (identifies the project)
 /// @param rewardTokens Array of reward tokens to distribute
-function distributeBatch(address clankerToken, address[] calldata rewardTokens) external;
+function distributeBatch(address[] calldata rewardTokens) external;
 ```
 
 #### View Functions
 
 ```solidity
-/// @notice Get current split configuration for a project
-/// @param clankerToken The Clanker token address
+/// @notice Get current split configuration for this project
 /// @return splits Array of split configurations
-function getSplits(address clankerToken) external view returns (SplitConfig[] memory splits);
+function getSplits() external view returns (SplitConfig[] memory splits);
 
-/// @notice Get total configured split percentage for a project
-/// @param clankerToken The Clanker token address
+/// @notice Get total configured split percentage
 /// @return totalBps Total basis points (should always be 10,000 if configured)
-function getTotalBps(address clankerToken) external view returns (uint256 totalBps);
+function getTotalBps() external view returns (uint256 totalBps);
 
-/// @notice Get pending fees for a project's reward token from ClankerFeeLocker
-/// @param clankerToken The Clanker token address (identifies the project)
-/// @param rewardToken The reward token to check
-/// @return pending Pending fees available to distribute
-function pendingFees(address clankerToken, address rewardToken) external view returns (uint256 pending);
-
-/// @notice Get distribution state for a project's reward token
-/// @param clankerToken The Clanker token address
+/// @notice Get distribution state for a reward token
 /// @param rewardToken The reward token to check
 /// @return state Distribution state (total distributed, last distribution time)
-function getDistributionState(
-    address clankerToken,
-    address rewardToken
-) external view returns (DistributionState memory state);
+function getDistributionState(address rewardToken) external view returns (DistributionState memory state);
 
-/// @notice Check if splits are configured for a project (sum to 100%)
-/// @param clankerToken The Clanker token address
+/// @notice Check if splits are configured (sum to 100%)
 /// @return configured True if splits are properly configured
-function isSplitsConfigured(address clankerToken) external view returns (bool configured);
+function isSplitsConfigured() external view returns (bool configured);
 
-/// @notice Get the staking contract address for a project
+/// @notice Get the staking contract address for this project
 /// @dev Queries factory.getProjectContracts(clankerToken).staking
-/// @param clankerToken The Clanker token address
 /// @return staking The staking contract address
-function getStakingAddress(address clankerToken) external view returns (address staking);
+function getStakingAddress() public view returns (address staking);
+
+/// @notice Get the Clanker token this splitter handles
+/// @return token The Clanker token address
+function clankerToken() external view returns (address token);
+
+/// @notice Get the factory address
+/// @return factory The Levr factory address
+function factory() external view returns (address);
 ```
 
 ---
@@ -368,54 +398,55 @@ ILevrStaking_v1(project.staking).accrueRewards(clankerToken);
 **distribute() Implementation:**
 
 ```solidity
-function distribute(address clankerToken, address rewardToken) external nonReentrant {
-    // 1. Get LP locker from factory
-    ILevrFactory_v1.ClankerMetadata memory metadata = ILevrFactory_v1(factory)
-        .getClankerMetadata(clankerToken);
-    require(metadata.exists, "Clanker metadata not found");
-    require(metadata.lpLocker != address(0), "LP locker not configured");
-
-    // 2. Collect rewards from LP locker
-    //    This sends fees directly to address(this) because we're the reward recipient
-    //    NOTE: We do NOT claim from ClankerFeeLocker - the LP locker handles that
-    try IClankerLpLocker(metadata.lpLocker).collectRewards(clankerToken) {
-        // Successfully collected - fees now in this contract
-    } catch {
-        // Ignore errors - might not have fees to collect
-    }
-
-    // 3. Check balance available for distribution
+function distribute(address rewardToken) external nonReentrant {
+    // 1. Get fee balance in this splitter
     uint256 balance = IERC20(rewardToken).balanceOf(address(this));
-    if (balance == 0) return; // No fees to distribute
+    if (balance == 0) return;
 
-    // 5. Distribute according to configured splits
-    require(isSplitsConfigured(), "Splits not configured");
+    // 2. Verify splits are configured
+    if (!isSplitsConfigured()) revert SplitsNotConfigured();
 
-    uint256 totalToDistribute = IERC20(token).balanceOf(address(this));
+    // 3. CRITICAL: Enforce whitelist - only whitelisted tokens can be distributed
+    address staking = getStakingAddress();
+    if (!ILevrStaking_v1(staking).isTokenWhitelisted(rewardToken))
+        revert TokenNotTrusted();
 
-    for (uint256 i = 0; i < _splits.length; i++) {
-        SplitConfig memory split = _splits[i];
-        uint256 amount = (totalToDistribute * split.bps) / BPS_DENOMINATOR;
+    // 4. Distribute according to configured splits
+    bool sentToStaking = false;
+    for (uint256 i = 0; i < splits.length; i++) {
+        SplitConfig memory split = splits[i];
+        uint256 amount = (balance * split.bps) / BPS_DENOMINATOR;
 
         if (amount > 0) {
-            IERC20(token).safeTransfer(split.receiver, amount);
+            IERC20(rewardToken).safeTransfer(split.receiver, amount);
 
-            // If this is the staking contract, emit event for manual accrual
             if (split.receiver == staking) {
-                emit StakingDistribution(token, amount);
+                sentToStaking = true;
+                emit StakingDistribution(clankerToken, rewardToken, amount);
             }
 
-            emit FeeDistributed(token, split.receiver, amount);
+            emit FeeDistributed(clankerToken, rewardToken, split.receiver, amount);
         }
     }
 
-    // 6. Update distribution state
-    _distributionState[token].totalDistributed += totalToDistribute;
-    _distributionState[token].lastDistribution = block.timestamp;
+    // 5. Update distribution state
+    distributionState[rewardToken].totalDistributed += balance;
+    distributionState[rewardToken].lastDistribution = block.timestamp;
 
-    emit Distributed(token, totalToDistribute);
+    emit Distributed(clankerToken, rewardToken, balance);
+
+    // 6. AUTO-ACCRUE if sent to staking (try-catch prevents distribution failure)
+    if (sentToStaking) {
+        try ILevrStaking_v1(staking).accrueRewards(rewardToken) {
+            emit AutoAccrualSuccess(clankerToken, rewardToken);
+        } catch {
+            emit AutoAccrualFailed(clankerToken, rewardToken);
+        }
+    }
 }
 ```
+
+**Key Difference:** Auto-accrual is now **automatic** with try-catch protection. If staking is a receiver, rewards are auto-accrued without manual intervention.
 
 ### Staking Integration
 
@@ -423,8 +454,8 @@ function distribute(address clankerToken, address rewardToken) external nonReent
 
 1. Fee splitter sends tokens directly to staking contract
 2. Staking contract balance increases
-3. **Manual accrual still required**: Someone must call `staking.accrueRewards(token)`
-4. Fee splitter emits `StakingDistribution` event for indexers/UIs
+3. **Auto-accrual triggered** by splitter (if staking is receiver)
+4. Splitter emits `AutoAccrualSuccess` or `AutoAccrualFailed` event
 
 **No Changes to Staking Contract:**
 
@@ -434,7 +465,7 @@ The staking contract flow remains exactly the same:
 // Existing flow (unchanged)
 1. Fee splitter transfers tokens to staking contract
 2. Staking contract balance increases
-3. Anyone calls staking.accrueRewards(token)
+3. Splitter auto-accrues via accrueRewards(token)
 4. Staking credits rewards and starts streaming
 ```
 
@@ -443,7 +474,24 @@ The staking contract flow remains exactly the same:
 - `accrueRewards()` uses `_availableUnaccountedRewards()` which measures contract balance
 - When fee splitter transfers to staking, balance increases
 - `accrueRewards()` detects the increase and credits it
+- Auto-accrual via try-catch means no manual steps needed
 - No code changes needed in staking contract
+
+**Auto-Accrual Safety:**
+
+The try-catch pattern ensures distribution never fails:
+
+```solidity
+// If accrual succeeds (normal case)
+try ILevrStaking_v1(staking).accrueRewards(rewardToken) {
+    emit AutoAccrualSuccess(clankerToken, rewardToken);
+}
+// If accrual fails (edge case - doesn't block distribution)
+catch {
+    emit AutoAccrualFailed(clankerToken, rewardToken);
+    // Still emitted AutoAccrualFailed - distribution continues
+}
+```
 
 ---
 
@@ -463,7 +511,13 @@ event Distributed(address indexed token, uint256 totalAmount);
 event FeeDistributed(address indexed token, address indexed receiver, uint256 amount);
 
 /// @notice Emitted when fees are distributed to staking contract (signals manual accrual needed)
-event StakingDistribution(address indexed token, uint256 amount);
+event StakingDistribution(address indexed token, address indexed rewardToken, uint256 amount);
+
+/// @notice Emitted when auto-accrual succeeds
+event AutoAccrualSuccess(address indexed token, address indexed rewardToken);
+
+/// @notice Emitted when auto-accrual fails
+event AutoAccrualFailed(address indexed token, address indexed rewardToken);
 ```
 
 ---
@@ -480,6 +534,7 @@ error DuplicateStakingReceiver();
 error SplitsNotConfigured();
 error NoPendingFees();
 error NoReceivers();
+error TokenNotTrusted();
 ```
 
 ---
