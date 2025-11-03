@@ -258,7 +258,7 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
 
     /// @notice Test edge case: Cannot add zero address
     function test_cannotAdd_zeroAddress() public {
-        vm.expectRevert('ZERO_ADDRESS');
+        vm.expectRevert(ILevrFactory_v1.ZeroAddress.selector);
         factory.addTrustedClankerFactory(address(0));
     }
 
@@ -266,13 +266,13 @@ contract LevrFactoryClankerValidationTest is Test, LevrFactoryDeployHelper {
     function test_cannotAdd_duplicate() public {
         factory.addTrustedClankerFactory(mockClankerFactoryV1);
 
-        vm.expectRevert('ALREADY_TRUSTED');
+        vm.expectRevert(ILevrFactory_v1.AlreadyTrusted.selector);
         factory.addTrustedClankerFactory(mockClankerFactoryV1);
     }
 
     /// @notice Test edge case: Cannot remove factory that's not trusted
     function test_cannotRemove_notTrusted() public {
-        vm.expectRevert('NOT_TRUSTED');
+        vm.expectRevert(ILevrFactory_v1.NotTrusted.selector);
         factory.removeTrustedClankerFactory(mockClankerFactoryV1);
     }
 

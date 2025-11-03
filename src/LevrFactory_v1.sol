@@ -59,7 +59,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
         // Store initial whitelist (will be passed to new projects)
         for (uint256 i = 0; i < initialWhitelistedTokens_.length; i++) {
-            require(initialWhitelistedTokens_[i] != address(0), 'ZERO_ADDRESS_IN_WHITELIST');
+            if (initialWhitelistedTokens_[i] == address(0)) revert ZeroAddress();
             _initialWhitelistedTokens.push(initialWhitelistedTokens_[i]);
         }
     }
@@ -83,35 +83,25 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     function register(
         address clankerToken
     ) external override nonReentrant returns (ILevrFactory_v1.Project memory project) {
-        Project storage p = _projects[clankerToken];
-        require(p.staking == address(0), 'ALREADY_REGISTERED');
-
+        if (_projects[clankerToken].staking != address(0)) revert AlreadyRegistered();
+        
         address caller = _msgSender();
-
-        // Only token admin can register
-        address tokenAdmin = IClankerToken(clankerToken).admin();
-        if (caller != tokenAdmin) {
-            revert UnauthorizedCaller();
-        }
+        if (IClankerToken(clankerToken).admin() != caller) revert UnauthorizedCaller();
+        if (_trustedClankerFactories.length == 0) revert NoTrustedFactories();
 
         // Validate token from trusted Clanker factory
-        require(_trustedClankerFactories.length > 0, 'NO_TRUSTED_FACTORIES');
-
-        bool validFactory = false;
-        bool hasDeployedFactory = false;
-
-        for (uint256 i = 0; i < _trustedClankerFactories.length; i++) {
+        bool validFactory;
+        bool hasDeployedFactory;
+        
+        for (uint256 i; i < _trustedClankerFactories.length; ++i) {
             address factory = _trustedClankerFactories[i];
-
-            // Skip if factory not deployed (testing/future support)
+            
             uint256 size;
-            assembly {
-                size := extcodesize(factory)
-            }
+            assembly { size := extcodesize(factory) }
             if (size == 0) continue;
-
+            
             hasDeployedFactory = true;
-
+            
             try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (
                 IClanker.DeploymentInfo memory info
             ) {
@@ -119,49 +109,34 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
                     validFactory = true;
                     break;
                 }
-            } catch {
-                continue;
-            }
+            } catch {}
         }
+        
+        if (hasDeployedFactory && !validFactory) revert TokenNotTrusted();
 
-        if (hasDeployedFactory) {
-            require(validFactory, 'TOKEN_NOT_FROM_TRUSTED_FACTORY');
-        }
-
-        // Look up prepared contracts for this caller
+        // Look up and delete prepared contracts
         ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[caller];
-
-        // Delete prepared contracts to prevent reuse across multiple registrations
         delete _preparedContracts[caller];
 
-        // Deploy all contracts via delegatecall to deployer logic
-        // Pass initial whitelist (underlying is auto-whitelisted in staking.initialize)
-        bytes memory data = abi.encodeWithSignature(
-            'deployProject(address,address,address,address,address,address[])',
-            clankerToken,
-            prepared.treasury,
-            prepared.staking,
-            address(this),
-            trustedForwarder(),
-            _initialWhitelistedTokens
+        // Deploy via delegatecall
+        (bool success, bytes memory returnData) = levrDeployer.delegatecall(
+            abi.encodeWithSignature(
+                'deployProject(address,address,address,address,address,address[])',
+                clankerToken,
+                prepared.treasury,
+                prepared.staking,
+                address(this),
+                trustedForwarder(),
+                _initialWhitelistedTokens
+            )
         );
-
-        (bool success, bytes memory returnData) = levrDeployer.delegatecall(data);
-        require(success, 'DEPLOY_FAILED');
+        if (!success) revert DeployFailed();
 
         project = abi.decode(returnData, (ILevrFactory_v1.Project));
-
-        // Store in registry
         _projects[clankerToken] = project;
         _projectTokens.push(clankerToken);
 
-        emit Registered(
-            clankerToken,
-            project.treasury,
-            project.governor,
-            project.staking,
-            project.stakedToken
-        );
+        emit Registered(clankerToken, project.treasury, project.governor, project.staking, project.stakedToken);
     }
 
     /// @inheritdoc ILevrFactory_v1
@@ -174,14 +149,11 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     function verifyProject(address clankerToken) external override onlyOwner {
         Project storage p = _projects[clankerToken];
         if (p.staking == address(0)) revert ProjectNotFound();
-        require(!p.verified, 'ALREADY_VERIFIED');
-
-        // Mark as verified
+        if (p.verified) revert AlreadyVerified();
+        
         p.verified = true;
-
-        // Initialize override config with current factory config
-        _updateConfig(_getCurrentFactoryConfig(), clankerToken, false);
-
+        _projectOverrideConfig[clankerToken] = _getCurrentFactoryConfig();
+        
         emit ProjectVerified(clankerToken);
     }
 
@@ -190,13 +162,10 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         Project storage p = _projects[clankerToken];
         if (p.staking == address(0)) revert ProjectNotFound();
         if (!p.verified) revert ProjectNotVerified();
-
-        // Mark as unverified
+        
         p.verified = false;
-
-        // Clear override config to free storage
         delete _projectOverrideConfig[clankerToken];
-
+        
         emit ProjectUnverified(clankerToken);
     }
 
@@ -208,40 +177,34 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         Project storage p = _projects[clankerToken];
         if (p.staking == address(0)) revert ProjectNotFound();
         if (!p.verified) revert ProjectNotVerified();
+        if (IClankerToken(clankerToken).admin() != _msgSender()) revert UnauthorizedCaller();
 
-        // Only token admin can update project config
-        address tokenAdmin = IClankerToken(clankerToken).admin();
-        if (_msgSender() != tokenAdmin) {
-            revert UnauthorizedCaller();
-        }
-
-        // Convert ProjectConfig to FactoryConfig, preserving non-overridable fields
-        // CRITICAL: protocolFeeBps and protocolTreasury MUST always match factory values
-        // Projects cannot override these fields - they are protocol-level settings
-        FactoryConfig memory fullCfg = FactoryConfig({
-            protocolFeeBps: _protocolFeeBps, // ALWAYS use current factory value (not overridable)
-            streamWindowSeconds: cfg.streamWindowSeconds,
-            protocolTreasury: _protocolTreasury, // ALWAYS use current factory value (not overridable)
-            proposalWindowSeconds: cfg.proposalWindowSeconds,
-            votingWindowSeconds: cfg.votingWindowSeconds,
-            maxActiveProposals: cfg.maxActiveProposals,
-            quorumBps: cfg.quorumBps,
-            approvalBps: cfg.approvalBps,
-            minSTokenBpsToSubmit: cfg.minSTokenBpsToSubmit,
-            maxProposalAmountBps: cfg.maxProposalAmountBps,
-            minimumQuorumBps: cfg.minimumQuorumBps
-        });
-
-        // Update project config (validate but skip protocol fee validation)
-        _updateConfig(fullCfg, clankerToken, false);
+        // Update project config (preserve protocol-level fields)
+        _updateConfig(
+            FactoryConfig(
+                _protocolFeeBps,
+                cfg.streamWindowSeconds,
+                _protocolTreasury,
+                cfg.proposalWindowSeconds,
+                cfg.votingWindowSeconds,
+                cfg.maxActiveProposals,
+                cfg.quorumBps,
+                cfg.approvalBps,
+                cfg.minSTokenBpsToSubmit,
+                cfg.maxProposalAmountBps,
+                cfg.minimumQuorumBps
+            ),
+            clankerToken,
+            false
+        );
 
         emit ProjectConfigUpdated(clankerToken);
     }
 
     /// @inheritdoc ILevrFactory_v1
     function addTrustedClankerFactory(address factory) external override onlyOwner {
-        require(factory != address(0), 'ZERO_ADDRESS');
-        require(!_isTrustedClankerFactory[factory], 'ALREADY_TRUSTED');
+        if (factory == address(0)) revert ZeroAddress();
+        if (_isTrustedClankerFactory[factory]) revert AlreadyTrusted();
 
         _trustedClankerFactories.push(factory);
         _isTrustedClankerFactory[factory] = true;
@@ -251,7 +214,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
     /// @inheritdoc ILevrFactory_v1
     function removeTrustedClankerFactory(address factory) external override onlyOwner {
-        require(_isTrustedClankerFactory[factory], 'NOT_TRUSTED');
+        if (!_isTrustedClankerFactory[factory]) revert NotTrusted();
 
         _isTrustedClankerFactory[factory] = false;
 
@@ -285,7 +248,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
         // Set new whitelist
         for (uint256 i = 0; i < tokens.length; i++) {
-            require(tokens[i] != address(0), 'ZERO_ADDRESS_IN_WHITELIST');
+            if (tokens[i] == address(0)) revert ZeroAddress();
             _initialWhitelistedTokens.push(tokens[i]);
         }
 
@@ -474,21 +437,12 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     /// @dev Validate config parameters
     function _validateConfig(FactoryConfig memory cfg, bool validateProtocolFee) private pure {
         // BPS values must be ? 100% (10000 basis points)
-        require(cfg.quorumBps <= 10000, 'INVALID_QUORUM_BPS');
-        require(cfg.approvalBps <= 10000, 'INVALID_APPROVAL_BPS');
-        require(cfg.minSTokenBpsToSubmit <= 10000, 'INVALID_MIN_STAKE_BPS');
-        require(cfg.maxProposalAmountBps <= 10000, 'INVALID_MAX_PROPOSAL_BPS');
-        require(cfg.minimumQuorumBps <= 10000, 'INVALID_MINIMUM_QUORUM_BPS');
+        if (cfg.quorumBps > 10000 || cfg.approvalBps > 10000 || cfg.minSTokenBpsToSubmit > 10000 || cfg.maxProposalAmountBps > 10000 || cfg.minimumQuorumBps > 10000) revert InvalidConfig();
 
-        if (validateProtocolFee) {
-            require(cfg.protocolFeeBps <= 10000, 'INVALID_PROTOCOL_FEE_BPS');
-        }
+        if (validateProtocolFee && cfg.protocolFeeBps > 10000) revert InvalidConfig();
 
         // Prevent zero values that disable functionality
-        require(cfg.maxActiveProposals > 0, 'MAX_ACTIVE_PROPOSALS_ZERO');
-        require(cfg.proposalWindowSeconds > 0, 'PROPOSAL_WINDOW_ZERO');
-        require(cfg.votingWindowSeconds > 0, 'VOTING_WINDOW_ZERO');
-        require(cfg.streamWindowSeconds > 0, 'STREAM_WINDOW_ZERO');
+        if (cfg.maxActiveProposals == 0 || cfg.proposalWindowSeconds == 0 || cfg.votingWindowSeconds == 0 || cfg.streamWindowSeconds == 0) revert InvalidConfig();
     }
 
     /// @dev Override trustedForwarder to satisfy both ILevrFactory_v1 and ERC2771Context

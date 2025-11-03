@@ -420,7 +420,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
 
         // Try to register same token again - should revert
         factory.prepareForDeployment();
-        vm.expectRevert('ALREADY_REGISTERED');
+        vm.expectRevert(ILevrFactory_v1.AlreadyRegistered.selector);
         factory.register(address(clankerToken));
     }
 
@@ -435,7 +435,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         // Try to register second token with same prepared contracts
         // Since prepared contracts were deleted, register will fail during deploy
         MockERC20 token2 = new MockERC20('Token2', 'TK2');
-        vm.expectRevert('DEPLOY_FAILED');
+        vm.expectRevert(ILevrFactory_v1.DeployFailed.selector);
         factory.register(address(token2));
     }
 
@@ -458,7 +458,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         // 3. Register looks up _preparedContracts[caller2] which is empty/zero
         // 4. Deploy will fail with zero addresses
         vm.prank(caller2);
-        vm.expectRevert('DEPLOY_FAILED'); // Will fail because prepared contracts are for caller1, not caller2
+        vm.expectRevert(ILevrFactory_v1.DeployFailed.selector); // Will fail because prepared contracts are for caller1, not caller2
         factory.register(address(clankerToken));
     }
 
@@ -468,7 +468,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
 
         // Try to register without preparing - prepared contracts will be zero addresses
         // This should fail during deployer initialization
-        vm.expectRevert('DEPLOY_FAILED');
+        vm.expectRevert(ILevrFactory_v1.DeployFailed.selector);
         factory.register(address(clankerToken));
     }
 
@@ -534,7 +534,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
 
         // Verify another time should revert
         vm.prank(address(this));
-        vm.expectRevert('ALREADY_VERIFIED');
+        vm.expectRevert(ILevrFactory_v1.AlreadyVerified.selector);
         factory.verifyProject(address(token));
     }
 

@@ -76,6 +76,33 @@ interface ILevrFactory_v1 {
     /// @notice Revert if project is not verified.
     error ProjectNotVerified();
 
+    /// @notice Revert if project is already registered.
+    error AlreadyRegistered();
+
+    /// @notice Revert if no trusted factories configured.
+    error NoTrustedFactories();
+
+    /// @notice Revert if token not from trusted factory.
+    error TokenNotTrusted();
+
+    /// @notice Revert if deployment failed.
+    error DeployFailed();
+
+    /// @notice Revert if project already verified.
+    error AlreadyVerified();
+
+    /// @notice Revert if zero address provided.
+    error ZeroAddress();
+
+    /// @notice Revert if factory already trusted.
+    error AlreadyTrusted();
+
+    /// @notice Revert if factory not trusted.
+    error NotTrusted();
+
+    /// @notice Revert if invalid configuration value.
+    error InvalidConfig();
+
     // ============ Events ============
 
     /// @notice Emitted when a trusted Clanker factory is added.
