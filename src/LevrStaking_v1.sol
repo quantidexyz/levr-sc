@@ -87,11 +87,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         for (uint256 i = 0; i < initialWhitelistedTokens.length; i++) {
             address token = initialWhitelistedTokens[i];
 
-            // Skip if already initialized (underlying was already added)
-            if (token == underlying_ || _tokenState[token].exists) continue;
-
-            // Skip zero addresses
-            if (token == address(0)) continue;
+            // Factory ensures: token is not underlying and token is not zero address and no duplicates
+            // These assertions document the invariant rather than defensively checking
+            assert(token != address(0));        // Factory validates token addresses
+            assert(token != underlying_);       // Factory validates no underlying duplication
+            assert(!_tokenState[token].exists); // Factory prevents duplicate tokens
 
             // Initialize whitelisted token
             _tokenState[token] = ILevrStaking_v1.RewardTokenState({
