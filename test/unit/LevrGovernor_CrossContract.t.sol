@@ -123,7 +123,6 @@ contract LevrGovernor_CrossContract_Test is Test, LevrFactoryDeployHelper {
 
         // Treasury balance decreases before execution (simulated - in practice would need another proposal)
         // Drain treasury so balance is insufficient (proposal needs 1_000, leave only 500)
-        uint256 initialRecipientBalance = weth.balanceOf(address(0xB0B));
         vm.prank(address(governor));
         treasury.transfer(address(weth), address(0xB0B), 19_500 ether); // Leave only 500 ether
         

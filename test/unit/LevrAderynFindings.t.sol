@@ -89,7 +89,7 @@ contract LevrAderynFindingsTest is Test {
      *      Using: OpenZeppelin SafeERC20.forceApprove()
      *      Benefit: Handles non-standard tokens that return false instead of reverting
      */
-    function test_aderyn_L2_safeERC20_forceApprove() public {
+    function test_aderyn_L2_safeERC20_forceApprove() public pure {
         // Verify SafeERC20 is imported and used in Treasury
         // Fixed: Lines 61, 65 changed from .approve() to .forceApprove()
         //
@@ -214,7 +214,7 @@ contract LevrAderynFindingsTest is Test {
      *      The function was never called anywhere in the codebase
      *      If protocol fees are needed in future, function can be re-added
      */
-    function test_aderyn_L13_deadCode_removed() public {
+    function test_aderyn_L13_deadCode_removed() public pure {
         // The function has been removed from the contract
         // This test documents that dead code was identified and cleaned up
         
@@ -259,7 +259,7 @@ contract LevrAderynFindingsTest is Test {
      *      Protection: OpenZeppelin ReentrancyGuard prevents reentrancy
      *      12 instances flagged, all protected
      */
-    function test_aderyn_H3_reentrancy_allProtected() public {
+    function test_aderyn_H3_reentrancy_allProtected() public pure {
         // All flagged contracts use ReentrancyGuard:
         // - LevrFactory_v1.register() - nonReentrant modifier
         // - LevrFeeSplitter_v1.distribute() - nonReentrant modifier
@@ -278,7 +278,7 @@ contract LevrAderynFindingsTest is Test {
      * @dev Verifies nonReentrant modifier actually prevents reentrancy
      *      Note: Detailed reentrancy attack tests exist in LevrFactoryV1.Security.t.sol
      */
-    function test_aderyn_H3_reentrancy_modifierVerified() public {
+    function test_aderyn_H3_reentrancy_modifierVerified() public pure {
         // ReentrancyGuard from OpenZeppelin is battle-tested
         // All flagged functions have nonReentrant modifier:
         // - LevrFactory_v1.register() ✅

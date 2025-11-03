@@ -19,7 +19,7 @@ contract LevrStakedTokenV1_Test is Test {
         );
     }
 
-    function test_decimals_matches_init() public {
+    function test_decimals_matches_init() public view {
         assertEq(sToken.decimals(), 18);
     }
 

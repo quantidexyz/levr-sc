@@ -170,7 +170,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
     /// @notice BUG?: Vote overflow - can yesVotes overflow?
     /// @dev Solidity 0.8.x has automatic overflow checks, should revert
-    function test_voteOverflow_automaticProtection() public {
+    function test_voteOverflow_automaticProtection() public pure {
         console2.log('\n=== Vote Overflow Protection ===');
 
         // This is testing Solidity 0.8.x overflow protection
@@ -294,7 +294,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
     /// @notice BUG?: What if NotWinner check passes but winner changes before execution completes?
     /// @dev Race condition between winner check and actual execution
-    function test_winnerCheck_raceCondition() public {
+    function test_winnerCheck_raceCondition() public pure {
         console2.log('\n=== Winner Determination Race Condition ===');
 
         // The winner is determined at line 191: uint256 winnerId = _getWinner(proposal.cycleId);

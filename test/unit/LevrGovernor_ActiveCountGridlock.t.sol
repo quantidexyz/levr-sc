@@ -50,8 +50,8 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
         (
             LevrFactory_v1 fac,
-            LevrForwarder_v1 fwd,
-            LevrDeployer_v1 dep
+            ,
+
         ) = deployFactoryWithDefaultClanker(cfg, address(this));
         factory = fac;
 
@@ -210,7 +210,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
             console2.log('BUG CONFIRMED: Defeated proposals from cycle 1 block cycle 2');
         } else {
             // If count reset, should succeed
-            uint256 pid3 = governor.proposeBoost(address(underlying), 5000 ether);
+            governor.proposeBoost(address(underlying), 5000 ether);
             console2.log('SUCCESS: Created proposal 3 in cycle 2');
             console2.log('NO BUG: Count resets between cycles');
         }
@@ -287,7 +287,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
         vm.prank(alice);
         if (countAfterFailed < 2) {
-            uint256 pid3 = governor.proposeBoost(address(underlying), 3000 ether);
+            governor.proposeBoost(address(underlying), 3000 ether);
             console2.log('Created proposal 3: SUCCESS');
 
             uint256 countNow = governor.activeProposalCount(

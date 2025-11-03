@@ -621,7 +621,6 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         console2.log('  Honest minority: 25% (cannot stop attack)');
 
         // ATTACK: Entity proposes MAXIMUM treasury drain
-        uint256 maxDrain = underlying.balanceOf(address(treasury));
         vm.prank(sybilWallets[0]);
         uint256 pid = governor.proposeTransfer(address(underlying), 
             maliciousRecipient,

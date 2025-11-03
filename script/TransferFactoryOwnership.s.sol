@@ -63,7 +63,7 @@ contract TransferFactoryOwnership is Script {
 /// @notice Helper script to document Gnosis Safe deployment
 /// @dev Gnosis Safe should be deployed via https://app.safe.global
 contract DeployMultisigHelper is Script {
-    function run() external view {
+    function run() external pure {
         console2.log('=== Gnosis Safe Deployment Guide ===');
         console2.log('');
         console2.log('IMPORTANT: Deploy Gnosis Safe via official interface');
