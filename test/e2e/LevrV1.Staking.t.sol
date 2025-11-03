@@ -100,7 +100,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             address governor,
             address treasury,
             address staking,
-            address stakedToken
+            
         ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens from LP locker - but LP locker has very little, so let's use deal instead
@@ -176,8 +176,8 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      */
     function test_staking_with_real_v4_swaps() public {
         (
-            address governor,
-            address treasury,
+            ,
+            ,
             address staking,
             address stakedToken
         ) = _deployRegisterAndGet(address(factory));
@@ -239,7 +239,6 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Execute actual V4 swaps to generate real trading fees
         // Get initial liquidity info - LP locker manages liquidity, so check via pool state
-        (, , , , uint128 liquidityFromPool) = swapHelper.getPoolInfo(poolKey);
         // Note: Pool reports 0 liquidity because LP positions are managed by locker
         // But we can still swap as long as there's actual liquidity
 
@@ -329,17 +328,9 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         if (availableBefore > 0 || stakingWethBalance > 0) {
             // console2.log('[OK] Rewards available - proceeding with accrual');
 
-            // Accrue the available rewards
-            uint256 amountToAccrue = availableBefore > 0 ? availableBefore : stakingWethBalance;
-
             // Simply call accrueRewards - it will automatically collect from LP locker, claim from ClankerFeeLocker, and credit all available rewards
             ILevrStaking_v1(staking).accrueRewards(WETH);
             // console2.log('  [OK] accrueRewards succeeded - automatically collected from LP locker, claimed from ClankerFeeLocker, and credited all available rewards');
-
-            // Check rewards after accrual
-            uint256 availableAfter = ILevrStaking_v1(staking).outstandingRewards(WETH);
-            // console2.log('[INFO] Outstanding rewards after accrual:');
-            // console2.log('  Available:', availableAfter);
 
             // Warp forward to allow reward streaming
             vm.warp(block.timestamp + 2 hours);
@@ -402,10 +393,10 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      */
     function test_streaming_logic_fix() public {
         (
-            address governor,
-            address treasury,
+            ,
+            ,
             address staking,
-            address stakedToken
+            
         ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
@@ -501,10 +492,10 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      */
     function test_claimable_rewards_accuracy() public {
         (
-            address governor,
-            address treasury,
+            ,
+            ,
             address staking,
-            address stakedToken
+            
         ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
@@ -622,10 +613,10 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      */
     function test_swap_v4_helper_integration() public {
         (
-            address governor,
-            address treasury,
+            ,
+            ,
             address staking,
-            address stakedToken
+            
         ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
@@ -661,10 +652,10 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Validate SwapV4Helper can read pool state correctly
         (
             uint160 sqrtPriceX96,
-            int24 tick,
-            uint24 protocolFee,
-            uint24 lpFee,
-            uint128 liquidity
+            ,
+            ,
+            ,
+            
         ) = swapHelper.getPoolInfo(poolKey);
         assertTrue(sqrtPriceX96 > 0, 'Pool should have valid price');
 
