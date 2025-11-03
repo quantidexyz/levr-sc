@@ -51,8 +51,8 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_error_treasury_002_transferZeroToken() public {
-        address governor = address(governor);
-        vm.prank(governor);
+        address gov = address(governor);
+        vm.prank(gov);
         vm.expectRevert();
         treasury.transfer(address(0), address(0x1234), 100 ether);
     }
