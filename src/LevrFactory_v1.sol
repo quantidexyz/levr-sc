@@ -307,7 +307,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     /// @inheritdoc ILevrFactory_v1
     function getClankerMetadata(
         address clankerToken
-    ) external view override returns (ILevrFactory_v1.ClankerMetadata memory metadata) {
+    ) external view override returns (ILevrFactory_v1.ClankerMetadata memory) {
         // Loop through all trusted Clanker factories to find the token
         for (uint256 i = 0; i < _trustedClankerFactories.length; i++) {
             address factory = _trustedClankerFactories[i];
@@ -323,7 +323,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
                 IClanker.DeploymentInfo memory info
             ) {
                 if (info.token == clankerToken) {
-                    address feeLocker = address(0);
+                    address feeLocker;
 
                     // Try to get fee locker from LP locker
                     if (info.locker != address(0)) {
@@ -331,70 +331,34 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
                             address _feeLocker
                         ) {
                             feeLocker = _feeLocker;
-                        } catch {
-                            // Fee locker not available
-                        }
+                        } catch {}
                     }
 
-                    return
-                        ILevrFactory_v1.ClankerMetadata({
-                            feeLocker: feeLocker,
-                            lpLocker: info.locker,
-                            hook: info.hook,
-                            exists: true
-                        });
+                    return ILevrFactory_v1.ClankerMetadata(feeLocker, info.locker, info.hook, true);
                 }
-            } catch {
-                // This factory doesn't know this token, try next
-                continue;
-            }
+            } catch {}
         }
 
         // Token not found in any trusted factory
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0),
-                lpLocker: address(0),
-                hook: address(0),
-                exists: false
-            });
+        return ILevrFactory_v1.ClankerMetadata(address(0), address(0), address(0), false);
     }
 
     /// @inheritdoc ILevrFactory_v1
     function getProjects(
         uint256 offset,
         uint256 limit
-    )
-        external
-        view
-        override
-        returns (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total)
-    {
+    ) external view override returns (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) {
         total = _projectTokens.length;
+        if (offset >= total) return (new ILevrFactory_v1.ProjectInfo[](0), total);
 
-        // Handle bounds
-        if (offset >= total) {
-            return (new ILevrFactory_v1.ProjectInfo[](0), total);
-        }
-
-        // Calculate actual length
-        uint256 end = offset + limit;
-        if (end > total) {
-            end = total;
-        }
+        uint256 end = offset + limit > total ? total : offset + limit;
         uint256 length = end - offset;
 
-        // Build result array
         projects = new ILevrFactory_v1.ProjectInfo[](length);
         for (uint256 i = 0; i < length; i++) {
             address token = _projectTokens[offset + i];
-            projects[i] = ILevrFactory_v1.ProjectInfo({
-                clankerToken: token,
-                project: _projects[token]
-            });
+            projects[i] = ILevrFactory_v1.ProjectInfo(token, _projects[token]);
         }
-
-        return (projects, total);
     }
 
     // Config getters - optional clankerToken parameter for project-specific config
@@ -409,93 +373,70 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function streamWindowSeconds(address clankerToken) external view override returns (uint32) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].streamWindowSeconds;
-        }
-        return _streamWindowSeconds;
+    function streamWindowSeconds(address c) external view override returns (uint32) {
+        return _isVerified(c) ? _projectOverrideConfig[c].streamWindowSeconds : _streamWindowSeconds;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function proposalWindowSeconds(address clankerToken) external view override returns (uint32) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].proposalWindowSeconds;
-        }
-        return _proposalWindowSeconds;
+    function proposalWindowSeconds(address c) external view override returns (uint32) {
+        return _isVerified(c) ? _projectOverrideConfig[c].proposalWindowSeconds : _proposalWindowSeconds;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function votingWindowSeconds(address clankerToken) external view override returns (uint32) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].votingWindowSeconds;
-        }
-        return _votingWindowSeconds;
+    function votingWindowSeconds(address c) external view override returns (uint32) {
+        return _isVerified(c) ? _projectOverrideConfig[c].votingWindowSeconds : _votingWindowSeconds;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function maxActiveProposals(address clankerToken) external view override returns (uint16) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].maxActiveProposals;
-        }
-        return _maxActiveProposals;
+    function maxActiveProposals(address c) external view override returns (uint16) {
+        return _isVerified(c) ? _projectOverrideConfig[c].maxActiveProposals : _maxActiveProposals;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function quorumBps(address clankerToken) external view override returns (uint16) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].quorumBps;
-        }
-        return _quorumBps;
+    function quorumBps(address c) external view override returns (uint16) {
+        return _isVerified(c) ? _projectOverrideConfig[c].quorumBps : _quorumBps;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function approvalBps(address clankerToken) external view override returns (uint16) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].approvalBps;
-        }
-        return _approvalBps;
+    function approvalBps(address c) external view override returns (uint16) {
+        return _isVerified(c) ? _projectOverrideConfig[c].approvalBps : _approvalBps;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function minSTokenBpsToSubmit(address clankerToken) external view override returns (uint16) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].minSTokenBpsToSubmit;
-        }
-        return _minSTokenBpsToSubmit;
+    function minSTokenBpsToSubmit(address c) external view override returns (uint16) {
+        return _isVerified(c) ? _projectOverrideConfig[c].minSTokenBpsToSubmit : _minSTokenBpsToSubmit;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function maxProposalAmountBps(address clankerToken) external view override returns (uint16) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].maxProposalAmountBps;
-        }
-        return _maxProposalAmountBps;
+    function maxProposalAmountBps(address c) external view override returns (uint16) {
+        return _isVerified(c) ? _projectOverrideConfig[c].maxProposalAmountBps : _maxProposalAmountBps;
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function minimumQuorumBps(address clankerToken) external view override returns (uint16) {
-        if (clankerToken != address(0) && _projects[clankerToken].verified) {
-            return _projectOverrideConfig[clankerToken].minimumQuorumBps;
-        }
-        return _minimumQuorumBps;
+    function minimumQuorumBps(address c) external view override returns (uint16) {
+        return _isVerified(c) ? _projectOverrideConfig[c].minimumQuorumBps : _minimumQuorumBps;
+    }
+
+    /// @dev Check if project is verified
+    function _isVerified(address c) private view returns (bool) {
+        return c != address(0) && _projects[c].verified;
     }
 
     /// @dev Get current factory config as a struct
     function _getCurrentFactoryConfig() private view returns (FactoryConfig memory) {
-        return
-            FactoryConfig({
-                protocolFeeBps: _protocolFeeBps,
-                streamWindowSeconds: _streamWindowSeconds,
-                protocolTreasury: _protocolTreasury,
-                proposalWindowSeconds: _proposalWindowSeconds,
-                votingWindowSeconds: _votingWindowSeconds,
-                maxActiveProposals: _maxActiveProposals,
-                quorumBps: _quorumBps,
-                approvalBps: _approvalBps,
-                minSTokenBpsToSubmit: _minSTokenBpsToSubmit,
-                maxProposalAmountBps: _maxProposalAmountBps,
-                minimumQuorumBps: _minimumQuorumBps
-            });
+        return FactoryConfig(
+            _protocolFeeBps,
+            _streamWindowSeconds,
+            _protocolTreasury,
+            _proposalWindowSeconds,
+            _votingWindowSeconds,
+            _maxActiveProposals,
+            _quorumBps,
+            _approvalBps,
+            _minSTokenBpsToSubmit,
+            _maxProposalAmountBps,
+            _minimumQuorumBps
+        );
     }
 
     /// @dev Unified config update function for both factory and project configs
@@ -510,7 +451,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         // Validate config parameters
         _validateConfig(cfg, validateProtocolFee);
 
-        // Apply config based on target (factory or project)
+        // Get target config storage
         if (clankerToken == address(0)) {
             // Update factory default config (state variables)
             _protocolFeeBps = cfg.protocolFeeBps;
@@ -526,24 +467,13 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             _minimumQuorumBps = cfg.minimumQuorumBps;
         } else {
             // Update project override config (mapping)
-            FactoryConfig storage target = _projectOverrideConfig[clankerToken];
-            target.protocolFeeBps = cfg.protocolFeeBps;
-            target.streamWindowSeconds = cfg.streamWindowSeconds;
-            target.protocolTreasury = cfg.protocolTreasury;
-            target.proposalWindowSeconds = cfg.proposalWindowSeconds;
-            target.votingWindowSeconds = cfg.votingWindowSeconds;
-            target.maxActiveProposals = cfg.maxActiveProposals;
-            target.quorumBps = cfg.quorumBps;
-            target.approvalBps = cfg.approvalBps;
-            target.minSTokenBpsToSubmit = cfg.minSTokenBpsToSubmit;
-            target.maxProposalAmountBps = cfg.maxProposalAmountBps;
-            target.minimumQuorumBps = cfg.minimumQuorumBps;
+            _projectOverrideConfig[clankerToken] = cfg;
         }
     }
 
     /// @dev Validate config parameters
     function _validateConfig(FactoryConfig memory cfg, bool validateProtocolFee) private pure {
-        // BPS values must be ≤ 100% (10000 basis points)
+        // BPS values must be ? 100% (10000 basis points)
         require(cfg.quorumBps <= 10000, 'INVALID_QUORUM_BPS');
         require(cfg.approvalBps <= 10000, 'INVALID_APPROVAL_BPS');
         require(cfg.minSTokenBpsToSubmit <= 10000, 'INVALID_MIN_STAKE_BPS');
