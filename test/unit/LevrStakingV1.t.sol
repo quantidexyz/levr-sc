@@ -1960,4 +1960,143 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
             // Acceptable to revert
         }
     }
+
+    // ============ PHASE 1C: Error Path and Edge Case Tests ============
+
+    /// Test: Stake with insufficient approval
+    function test_error_001_stake_insufficientAllowance() public {
+        underlying.approve(address(staking), 100 ether); // Approve less
+        
+        vm.expectRevert();
+        staking.stake(1_000 ether); // Try to stake more
+    }
+
+    /// Test: Stake with zero amount
+    function test_error_002_stake_zeroAmount() public {
+        underlying.approve(address(staking), 1_000 ether);
+        
+        vm.expectRevert();
+        staking.stake(0);
+    }
+
+    /// Test: Unstake with insufficient balance
+    function test_error_003_unstake_insufficientBalance() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(500 ether);
+        
+        vm.expectRevert();
+        staking.unstake(1_000 ether, address(this));
+    }
+
+    /// Test: Claim rewards with non-whitelisted token
+    function test_error_004_claimRewards_nonExistentToken() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(0xDEAD); // Non-existent token
+        
+        // Should handle gracefully (may skip or revert)
+        try staking.claimRewards(tokens, address(this)) {
+            // Acceptable to succeed or fail
+        } catch {
+            // Acceptable
+        }
+    }
+
+    /// Test: Accrue with minimum amount below MIN_REWARD_AMOUNT
+    function test_error_005_accrue_belowMinimum() public {
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        // Mint less than MIN_REWARD_AMOUNT (1e15)
+        rewardToken.mint(address(staking), 100); // Way below minimum
+        
+        // Try to accrue - should revert for REWARD_TOO_SMALL
+        vm.expectRevert();
+        staking.accrueRewards(address(rewardToken));
+    }
+
+    /// Test: Accrue with unwhitelisted token
+    function test_error_006_accrue_unwhitelistedToken() public {
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        rewardToken.mint(address(staking), 1_000 ether);
+        
+        // Token not whitelisted - should revert
+        vm.expectRevert();
+        staking.accrueRewards(address(rewardToken));
+    }
+
+    /// Test: Whitelist zero address
+    function test_error_007_whitelist_zeroAddress() public {
+        vm.expectRevert();
+        staking.whitelistToken(address(0));
+    }
+
+    /// Test: Unwhitelist non-existent token
+    function test_error_008_unwhitelist_nonExistent() public {
+        MockERC20 randomToken = new MockERC20('Random', 'RND');
+        
+        vm.expectRevert();
+        staking.unwhitelistToken(address(randomToken));
+    }
+
+    /// Test: Claim with empty token array
+    function test_edge_001_claimRewards_emptyArray() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        address[] memory emptyTokens = new address[](0);
+        // Should handle empty array gracefully
+        staking.claimRewards(emptyTokens, address(this));
+    }
+
+    /// Test: Stake maximum possible amount
+    function test_edge_002_stake_largeAmount() public {
+        uint256 largeAmount = 1_000_000 ether;
+        underlying.mint(address(this), largeAmount);
+        underlying.approve(address(staking), largeAmount);
+        
+        staking.stake(largeAmount);
+        assertEq(sToken.balanceOf(address(this)), largeAmount);
+    }
+
+    /// Test: Unstake to self
+    function test_edge_003_unstake_toSelf() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        uint256 beforeBalance = underlying.balanceOf(address(this));
+        staking.unstake(500 ether, address(this));
+        uint256 afterBalance = underlying.balanceOf(address(this));
+        
+        assertEq(afterBalance - beforeBalance, 500 ether);
+    }
+
+    /// Test: Multiple claims across time periods
+    function test_edge_004_multipleClaimsAcrossTime() public {
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+        
+        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        whitelistRewardToken(staking, address(rewardToken), address(this));
+        
+        rewardToken.mint(address(staking), 3_000 ether);
+        staking.accrueRewards(address(rewardToken));
+        
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardToken);
+        
+        // Claim at 1 day
+        vm.warp(block.timestamp + 1 days);
+        staking.claimRewards(tokens, address(this));
+        
+        // Claim at 2 days
+        vm.warp(block.timestamp + 1 days);
+        staking.claimRewards(tokens, address(this));
+        
+        // Claim at 3 days
+        vm.warp(block.timestamp + 1 days);
+        staking.claimRewards(tokens, address(this));
+    }
 }
