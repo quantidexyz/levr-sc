@@ -317,4 +317,48 @@ contract LevrTreasuryV1_BranchCoverage_Test is Test, LevrFactoryDeployHelper {
         treasury.applyBoost(address(underlying), treasuryBalance - 100);
         assertEq(underlying.balanceOf(address(treasury)), 100);
     }
+
+    /// Branch: Transfer exactly 1 wei
+    function test_branch_009_transfer_oneWei() public {
+        vm.prank(governor);
+        treasury.transfer(address(underlying), address(0x9999), 1);
+        assertEq(underlying.balanceOf(address(0x9999)), 1);
+    }
+
+    /// Branch: Boost with all treasury funds
+    function test_branch_010_boost_allFunds() public {
+        uint256 balance = underlying.balanceOf(address(treasury));
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), balance);
+        assertEq(underlying.balanceOf(address(treasury)), 0);
+    }
+
+    /// Branch: Transfer after boost
+    function test_branch_011_transferAfterBoost() public {
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), 5_000 ether);
+        
+        uint256 remaining = underlying.balanceOf(address(treasury));
+        if (remaining > 0) {
+            vm.prank(governor);
+            treasury.transfer(address(underlying), address(0x5555), remaining);
+            assertEq(underlying.balanceOf(address(treasury)), 0);
+        }
+    }
+
+    /// Branch: Boost then transfer to same recipient
+    function test_branch_012_boostThenTransferToSame() public {
+        address recipient = address(0x6666);
+        
+        vm.prank(governor);
+        treasury.applyBoost(address(underlying), 2_000 ether);
+        
+        uint256 remaining = underlying.balanceOf(address(treasury));
+        if (remaining > 0) {
+            vm.prank(governor);
+            treasury.transfer(address(underlying), recipient, remaining);
+        }
+        
+        assertGt(underlying.balanceOf(recipient), 0);
+    }
 }
