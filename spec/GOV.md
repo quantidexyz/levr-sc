@@ -328,3 +328,255 @@ winner = argmax(eligibleProposals, by: yesVotes);  // Highest VP-weighted yes vo
 - VP snapshot at proposal start (no last-minute staking)
 - Unstake resets time (discourages manipulation)
 - Strict quorum + approval thresholds
+
+---
+
+## Reward Token Whitelisting System (v1.5.0+)
+
+### Overview
+
+The Levr protocol implements a **mandatory whitelist-only system** for reward tokens. Only explicitly whitelisted tokens can be used for staking rewards, preventing token spam and ensuring controlled reward distribution.
+
+### Key Features
+
+**1. Factory Initial Whitelist**
+
+- Factory owner sets initial whitelist (e.g., WETH) at deployment
+- All projects inherit factory whitelist automatically
+- Projects can extend whitelist by whitelisting additional tokens
+
+**2. Project-Level Control**
+
+- Each project manages its own whitelisted tokens
+- Token admin (underlying token owner) can whitelist/unwhitelist tokens
+- Independent whitelists per project (no cross-contamination)
+
+**3. Underlying Token Protection**
+
+- Underlying token (project token) is auto-whitelisted and immutable
+- Cannot call `whitelistToken(underlying)` - reverts with `CANNOT_MODIFY_UNDERLYING`
+- Cannot call `unwhitelistToken(underlying)` - reverts with `CANNOT_UNWHITELIST_UNDERLYING`
+
+**4. Reward State Safety**
+
+- Cannot re-whitelist token with pending rewards - reverts with `CANNOT_WHITELIST_WITH_PENDING_REWARDS`
+- Cannot unwhitelist token with claimable rewards - reverts with `CANNOT_UNWHITELIST_WITH_PENDING_REWARDS`
+- Prevents fund loss and state corruption
+
+**5. Enforcement Points**
+
+- All reward accrual enforces whitelist: `_ensureRewardToken(token)` reverts with `TOKEN_NOT_WHITELISTED`
+- Fee splitter distribution enforces whitelist
+- Factory config tracks whitelisted status per token
+
+### Whitelist Lifecycle
+
+**New Token Flow:**
+
+1. Token admin calls `whitelistToken(rewardToken)`
+   - Validates token not already whitelisted
+   - Validates no pending rewards (if token was used before)
+   - Creates token state entry
+2. Token is now usable for `accrueRewards(rewardToken)` in staking
+3. Fee splitter can distribute this token as rewards
+
+**Unwhitelist Flow:**
+
+1. Token admin settles all pending rewards for token
+2. Requires both: `availablePool == 0` AND `streamTotal == 0`
+3. Calls `unwhitelistToken(rewardToken)` - sets `whitelisted = false`
+4. Token no longer accepted in reward accrual or distribution
+
+**Re-whitelist Flow:**
+
+1. Token was previously used and unwhitelisted
+2. Token admin calls `whitelistToken(rewardToken)` again
+3. Validates no pending rewards from previous state
+4. Can now use token for new rewards
+
+### Factory Configuration
+
+New parameter in factory initialization:
+
+```solidity
+address[] memory _initialWhitelistedTokens  // NEW
+```
+
+**Deployment Example:**
+
+```solidity
+address[] memory initialWhitelist = new address[](1);
+initialWhitelist[0] = WETH_ADDRESS;  // Factory canonical reward token
+
+factory = new LevrFactory_v1(
+    config,
+    owner,
+    trustedForwarder,
+    levrDeployer,
+    initialWhitelist  // NEW
+);
+```
+
+### Protocol Fee Protection (v1.5.0+ CRITICAL)
+
+**Issue:** Verified projects could potentially override protocol fee in their config overrides.
+
+**Fix:** Runtime enforcement ensures protocol fee and treasury always use factory values.
+
+#### Implementation
+
+```solidity
+// BEFORE: Could store stale values
+FactoryConfig storage existingCfg = _projectOverrideConfig[clankerToken];
+FactoryConfig memory fullCfg = FactoryConfig({
+    protocolFeeBps: existingCfg.protocolFeeBps,  // Could be stale!
+    protocolTreasury: existingCfg.protocolTreasury,  // Could be stale!
+    // ...
+});
+
+// AFTER: Always use current factory values
+FactoryConfig memory fullCfg = FactoryConfig({
+    protocolFeeBps: _protocolFeeBps,          // Always current ✅
+    protocolTreasury: _protocolTreasury,      // Always current ✅
+    // ... rest from project config ...
+});
+```
+
+#### Protection Layers
+
+1. **Struct Design** - `ProjectConfig` excludes `protocolFeeBps` and `protocolTreasury`
+   - Projects cannot specify these fields at API level
+   - Compile-time prevention
+
+2. **Runtime Enforcement** - `updateProjectConfig()` always uses `_protocolFeeBps`
+   - Factory state variables hold current values
+   - No stale values possible
+   - Automatic sync on factory updates
+
+3. **Getter Isolation** - `protocolFeeBps()` function has no project override logic
+   - Returns factory value directly
+   - No delegation to project config
+
+4. **Factory Control** - Only factory owner can change protocol fee
+   - `setProtocolFeeBps()` requires `onlyOwner`
+   - Changes apply to all projects immediately
+
+#### Verification Matrix
+
+| Scenario                        | Before                           | After                 | Status |
+| ------------------------------- | -------------------------------- | --------------------- | ------ |
+| Factory increases fee           | All projects sync automatically  | ✅ Tested             |
+| Verified project updates config | Could use old fee value          | ✅ Uses current value |
+| New project deployment          | Inherits factory fee             | ✅ Correct            |
+| Factory lowers fee              | All projects immediately benefit | ✅ Tested             |
+| Multiple fee changes            | No stale values possible         | ✅ Always current     |
+
+### Test Coverage
+
+**New test file: `test/unit/LevrFactory_VerifiedProjects.t.sol` (15 tests)**
+
+**Protocol Fee Protection Tests (CRITICAL):**
+
+- ✅ Verified projects cannot override protocol fee
+- ✅ Factory protocol fee changes apply to all projects
+- ✅ Project config updates always use current factory fee
+- ✅ Multiple projects cannot override fee independently
+- ✅ Protocol fee cannot be avoided with any config combination
+- ✅ Factory owner maintains control over protocol revenue
+
+**Result:** 6 comprehensive tests verify revenue protection
+
+### Example: Verified Project with Custom Config
+
+**Goal:** Faster governance while protecting protocol revenue
+
+```solidity
+// Project admin can customize governance
+ProjectConfig memory customConfig = ProjectConfig({
+    streamWindowSeconds: 7 days,
+    proposalWindowSeconds: 3 days,      // Faster: 2 days → 3 days
+    votingWindowSeconds: 4 days,        // Faster: 5 days → 4 days
+    maxActiveProposals: 10,
+    quorumBps: 6000,                    // ✅ Can override: 70% quorum
+    approvalBps: 5500,                  // ✅ Can override: 55% approval
+    minSTokenBpsToSubmit: 50,           // ✅ Can override: 0.5% min stake
+    maxProposalAmountBps: 3000,         // ✅ Can override: 30% treasury limit
+    minimumQuorumBps: 100               // ✅ Can override: 1% minimum
+    // protocolFeeBps: ???               // ❌ NOT in struct - CANNOT override
+    // protocolTreasury: ???             // ❌ NOT in struct - CANNOT override
+});
+
+factory.verifyProject(clankerToken);
+factory.updateProjectConfig(clankerToken, customConfig);
+
+// At runtime:
+uint256 customQuorum = factory.quorumBps(clankerToken);      // 6000 (60%) ✅
+uint16 protocolFee = factory.protocolFeeBps(clankerToken);   // _protocolFeeBps (factory) ✅
+address protocolTx = factory.protocolTreasury(clankerToken); // _protocolTreasury (factory) ✅
+```
+
+### Security Guarantees
+
+**Whitelist System:**
+| Protection | Mechanism | Guarantee |
+|-----------|-----------|-----------|
+| Underlying immutability | Cannot modify underlying token | Cannot remove project's base token |
+| State corruption | Pending rewards validation | Cannot corrupt reward pools |
+| Fund loss | Unwhitelist validation | Cannot strand claimable rewards |
+| Token spam | Admin-only whitelisting | Cannot DOS with dust tokens |
+
+**Protocol Revenue (CRITICAL):**
+| Protection | Mechanism | Guarantee |
+|-----------|-----------|-----------|
+| Struct exclusion | ProjectConfig omits fee fields | Cannot specify at API level |
+| Runtime enforcement | Always use \_protocolFeeBps | Cannot use stale values |
+| Getter isolation | No override in protocolFeeBps() | Cannot query project-specific fee |
+| Auto-sync | Factory changes propagate immediately | All projects always current |
+| Ownership control | Only factory owner controls fees | No delegation possible |
+
+### Migration Guide (v1.4.0 → v1.5.0)
+
+**Factory Deployment:**
+
+```solidity
+// BEFORE (v1.4.0)
+factory = new LevrFactory_v1(config, owner, forwarder, deployer);
+
+// AFTER (v1.5.0)
+address[] memory initialWhitelist = new address[](1);
+initialWhitelist[0] = WETH_ADDRESS;  // Factory's canonical reward token
+factory = new LevrFactory_v1(config, owner, forwarder, deployer, initialWhitelist);
+```
+
+**Test File Updates:**
+
+```solidity
+// BEFORE: Could use any token
+function setUp() public {
+    staking.initialize(underlying, stakedToken, treasury, factory);
+    // Any token now works without whitelisting
+}
+
+// AFTER: Must whitelist tokens
+function setUp() public {
+    address[] memory rewardTokens = new address[](1);
+    rewardTokens[0] = address(weth);
+    initializeStakingWithRewardTokens(
+        staking, underlying, stakedToken, treasury, factory, rewardTokens
+    );
+}
+```
+
+### Removed Features
+
+- ❌ `maxRewardTokens` - Replaced with whitelist system
+- ❌ `factory.maxRewardTokens(address)` - No longer exists
+- ❌ `MAX_REWARD_TOKENS_REACHED` error - No longer needed
+
+### Behavior Changes
+
+- Cannot accrue rewards for non-whitelisted tokens → reverts with `TOKEN_NOT_WHITELISTED`
+- Fee splitter rejects distribution of non-whitelisted tokens
+- All deployment scripts must initialize factory with `initialWhitelistedTokens` array
+
+---
