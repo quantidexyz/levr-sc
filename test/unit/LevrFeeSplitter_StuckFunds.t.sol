@@ -37,17 +37,6 @@ contract LevrFeeSplitter_StuckFundsTest is Test {
             });
     }
 
-    function getClankerMetadata(
-        address /* clankerToken */
-    ) external pure returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0), // No fee locker (will be handled by try/catch)
-                lpLocker: address(0), // No LP locker (will be handled by try/catch)
-                hook: address(0),
-                exists: true
-            });
-    }
 
     function setUp() public {
         tokenAdmin = makeAddr('tokenAdmin');

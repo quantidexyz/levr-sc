@@ -97,7 +97,13 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
         address predictedFactory = vm.computeCreateAddress(address(this), nonce + 1);
 
         deployer = new LevrDeployer_v1(predictedFactory);
-        factory = new LevrFactory_v1(config, owner, address(forwarder), address(deployer), new address[](0));
+        factory = new LevrFactory_v1(
+            config,
+            owner,
+            address(forwarder),
+            address(deployer),
+            new address[](0)
+        );
 
         // Deploy mock Clanker factory
         clankerFactory = new MockClankerFactory();
@@ -352,32 +358,6 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
         // Verify registration
         assertTrue(project2.staking != address(0), 'Project should be registered');
         console2.log('[PASS] Re-adding factory allows new registrations');
-    }
-
-    function test_GetClankerMetadata_FailsGracefullyAfterRemoval() public {
-        console2.log('\n=== Test: getClankerMetadata Fails Gracefully After Removal ===');
-
-        // Get metadata before removal
-        ILevrFactory_v1.ClankerMetadata memory metadataBefore = factory.getClankerMetadata(
-            address(token1)
-        );
-        assertTrue(metadataBefore.exists, 'Metadata should exist before removal');
-
-        console2.log('Metadata exists before removal');
-
-        // Remove factory
-        factory.removeTrustedClankerFactory(address(clankerFactory));
-
-        // Get metadata after removal - should return non-existent
-        ILevrFactory_v1.ClankerMetadata memory metadataAfter = factory.getClankerMetadata(
-            address(token1)
-        );
-        assertFalse(metadataAfter.exists, 'Metadata should not exist after removal');
-        assertEq(metadataAfter.feeLocker, address(0), 'Fee locker should be zero');
-        assertEq(metadataAfter.lpLocker, address(0), 'LP locker should be zero');
-        assertEq(metadataAfter.hook, address(0), 'Hook should be zero');
-
-        console2.log('[PASS] getClankerMetadata fails gracefully (returns non-existent)');
     }
 
     function test_MultipleFactories_RemovalOfOneDoesNotAffectOthers() public {

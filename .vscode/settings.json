@@ -45,5 +45,6 @@
 
   // ---------------------------
   // Cursor Settings
-  "cursor.cpp.enablePartialAccepts": true
+  "cursor.cpp.enablePartialAccepts": true,
+  "makefile.configureOnOpen": false
 }

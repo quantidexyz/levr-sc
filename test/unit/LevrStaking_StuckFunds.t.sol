@@ -27,17 +27,6 @@ contract LevrStaking_StuckFundsTest is Test {
         return address(0);
     }
 
-    function getClankerMetadata(
-        address /* clankerToken */
-    ) external pure returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0),
-                lpLocker: address(0),
-                hook: address(0),
-                exists: false
-            });
-    }
 
     function streamWindowSeconds(address) external pure returns (uint32) {
         return 3 days;

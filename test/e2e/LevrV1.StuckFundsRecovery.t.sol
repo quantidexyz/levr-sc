@@ -110,17 +110,6 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             });
     }
 
-    function getClankerMetadata(
-        address /* clankerToken */
-    ) external pure returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0), // No fee locker for tests
-                lpLocker: address(0), // No LP locker for tests
-                hook: address(0),
-                exists: true
-            });
-    }
 
     // ============ E2E Stuck Funds Recovery Tests ============
 

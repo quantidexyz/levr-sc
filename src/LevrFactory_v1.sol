@@ -10,7 +10,6 @@ import {Context} from '@openzeppelin/contracts/utils/Context.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 import {IClanker} from './interfaces/external/IClanker.sol';
-import {IClankerLpLockerFeeConversion} from './interfaces/external/IClankerLpLockerFeeConversion.sol';
 
 import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
 import {LevrStaking_v1} from './LevrStaking_v1.sol';
@@ -84,7 +83,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         address clankerToken
     ) external override nonReentrant returns (ILevrFactory_v1.Project memory project) {
         if (_projects[clankerToken].staking != address(0)) revert AlreadyRegistered();
-        
+
         address caller = _msgSender();
         if (IClankerToken(clankerToken).admin() != caller) revert UnauthorizedCaller();
         if (_trustedClankerFactories.length == 0) revert NoTrustedFactories();
@@ -92,16 +91,18 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         // Validate token from trusted Clanker factory
         bool validFactory;
         bool hasDeployedFactory;
-        
+
         for (uint256 i; i < _trustedClankerFactories.length; ++i) {
             address factory = _trustedClankerFactories[i];
-            
+
             uint256 size;
-            assembly { size := extcodesize(factory) }
+            assembly {
+                size := extcodesize(factory)
+            }
             if (size == 0) continue;
-            
+
             hasDeployedFactory = true;
-            
+
             try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (
                 IClanker.DeploymentInfo memory info
             ) {
@@ -111,7 +112,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
                 }
             } catch {}
         }
-        
+
         if (hasDeployedFactory && !validFactory) revert TokenNotTrusted();
 
         // Look up and delete prepared contracts
@@ -136,7 +137,13 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         _projects[clankerToken] = project;
         _projectTokens.push(clankerToken);
 
-        emit Registered(clankerToken, project.treasury, project.governor, project.staking, project.stakedToken);
+        emit Registered(
+            clankerToken,
+            project.treasury,
+            project.governor,
+            project.staking,
+            project.stakedToken
+        );
     }
 
     /// @inheritdoc ILevrFactory_v1
@@ -150,10 +157,10 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         Project storage p = _projects[clankerToken];
         if (p.staking == address(0)) revert ProjectNotFound();
         if (p.verified) revert AlreadyVerified();
-        
+
         p.verified = true;
         _projectOverrideConfig[clankerToken] = _getCurrentFactoryConfig();
-        
+
         emit ProjectVerified(clankerToken);
     }
 
@@ -162,10 +169,10 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         Project storage p = _projects[clankerToken];
         if (p.staking == address(0)) revert ProjectNotFound();
         if (!p.verified) revert ProjectNotVerified();
-        
+
         p.verified = false;
         delete _projectOverrideConfig[clankerToken];
-        
+
         emit ProjectUnverified(clankerToken);
     }
 
@@ -268,49 +275,15 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     }
 
     /// @inheritdoc ILevrFactory_v1
-    function getClankerMetadata(
-        address clankerToken
-    ) external view override returns (ILevrFactory_v1.ClankerMetadata memory) {
-        // Loop through all trusted Clanker factories to find the token
-        for (uint256 i = 0; i < _trustedClankerFactories.length; i++) {
-            address factory = _trustedClankerFactories[i];
-
-            // Skip if factory has no code (for testing or if not deployed yet)
-            uint256 size;
-            assembly {
-                size := extcodesize(factory)
-            }
-            if (size == 0) continue;
-
-            try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (
-                IClanker.DeploymentInfo memory info
-            ) {
-                if (info.token == clankerToken) {
-                    address feeLocker;
-
-                    // Try to get fee locker from LP locker
-                    if (info.locker != address(0)) {
-                        try IClankerLpLockerFeeConversion(info.locker).feeLocker() returns (
-                            address _feeLocker
-                        ) {
-                            feeLocker = _feeLocker;
-                        } catch {}
-                    }
-
-                    return ILevrFactory_v1.ClankerMetadata(feeLocker, info.locker, info.hook, true);
-                }
-            } catch {}
-        }
-
-        // Token not found in any trusted factory
-        return ILevrFactory_v1.ClankerMetadata(address(0), address(0), address(0), false);
-    }
-
-    /// @inheritdoc ILevrFactory_v1
     function getProjects(
         uint256 offset,
         uint256 limit
-    ) external view override returns (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) {
+    )
+        external
+        view
+        override
+        returns (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total)
+    {
         total = _projectTokens.length;
         if (offset >= total) return (new ILevrFactory_v1.ProjectInfo[](0), total);
 
@@ -337,17 +310,22 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
     /// @inheritdoc ILevrFactory_v1
     function streamWindowSeconds(address c) external view override returns (uint32) {
-        return _isVerified(c) ? _projectOverrideConfig[c].streamWindowSeconds : _streamWindowSeconds;
+        return
+            _isVerified(c) ? _projectOverrideConfig[c].streamWindowSeconds : _streamWindowSeconds;
     }
 
     /// @inheritdoc ILevrFactory_v1
     function proposalWindowSeconds(address c) external view override returns (uint32) {
-        return _isVerified(c) ? _projectOverrideConfig[c].proposalWindowSeconds : _proposalWindowSeconds;
+        return
+            _isVerified(c)
+                ? _projectOverrideConfig[c].proposalWindowSeconds
+                : _proposalWindowSeconds;
     }
 
     /// @inheritdoc ILevrFactory_v1
     function votingWindowSeconds(address c) external view override returns (uint32) {
-        return _isVerified(c) ? _projectOverrideConfig[c].votingWindowSeconds : _votingWindowSeconds;
+        return
+            _isVerified(c) ? _projectOverrideConfig[c].votingWindowSeconds : _votingWindowSeconds;
     }
 
     /// @inheritdoc ILevrFactory_v1
@@ -367,12 +345,14 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
     /// @inheritdoc ILevrFactory_v1
     function minSTokenBpsToSubmit(address c) external view override returns (uint16) {
-        return _isVerified(c) ? _projectOverrideConfig[c].minSTokenBpsToSubmit : _minSTokenBpsToSubmit;
+        return
+            _isVerified(c) ? _projectOverrideConfig[c].minSTokenBpsToSubmit : _minSTokenBpsToSubmit;
     }
 
     /// @inheritdoc ILevrFactory_v1
     function maxProposalAmountBps(address c) external view override returns (uint16) {
-        return _isVerified(c) ? _projectOverrideConfig[c].maxProposalAmountBps : _maxProposalAmountBps;
+        return
+            _isVerified(c) ? _projectOverrideConfig[c].maxProposalAmountBps : _maxProposalAmountBps;
     }
 
     /// @inheritdoc ILevrFactory_v1
@@ -387,19 +367,20 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
     /// @dev Get current factory config as a struct
     function _getCurrentFactoryConfig() private view returns (FactoryConfig memory) {
-        return FactoryConfig(
-            _protocolFeeBps,
-            _streamWindowSeconds,
-            _protocolTreasury,
-            _proposalWindowSeconds,
-            _votingWindowSeconds,
-            _maxActiveProposals,
-            _quorumBps,
-            _approvalBps,
-            _minSTokenBpsToSubmit,
-            _maxProposalAmountBps,
-            _minimumQuorumBps
-        );
+        return
+            FactoryConfig(
+                _protocolFeeBps,
+                _streamWindowSeconds,
+                _protocolTreasury,
+                _proposalWindowSeconds,
+                _votingWindowSeconds,
+                _maxActiveProposals,
+                _quorumBps,
+                _approvalBps,
+                _minSTokenBpsToSubmit,
+                _maxProposalAmountBps,
+                _minimumQuorumBps
+            );
     }
 
     /// @dev Unified config update function for both factory and project configs
@@ -437,12 +418,23 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     /// @dev Validate config parameters
     function _validateConfig(FactoryConfig memory cfg, bool validateProtocolFee) private pure {
         // BPS values must be ? 100% (10000 basis points)
-        if (cfg.quorumBps > 10000 || cfg.approvalBps > 10000 || cfg.minSTokenBpsToSubmit > 10000 || cfg.maxProposalAmountBps > 10000 || cfg.minimumQuorumBps > 10000) revert InvalidConfig();
+        if (
+            cfg.quorumBps > 10000 ||
+            cfg.approvalBps > 10000 ||
+            cfg.minSTokenBpsToSubmit > 10000 ||
+            cfg.maxProposalAmountBps > 10000 ||
+            cfg.minimumQuorumBps > 10000
+        ) revert InvalidConfig();
 
         if (validateProtocolFee && cfg.protocolFeeBps > 10000) revert InvalidConfig();
 
         // Prevent zero values that disable functionality
-        if (cfg.maxActiveProposals == 0 || cfg.proposalWindowSeconds == 0 || cfg.votingWindowSeconds == 0 || cfg.streamWindowSeconds == 0) revert InvalidConfig();
+        if (
+            cfg.maxActiveProposals == 0 ||
+            cfg.proposalWindowSeconds == 0 ||
+            cfg.votingWindowSeconds == 0 ||
+            cfg.streamWindowSeconds == 0
+        ) revert InvalidConfig();
     }
 
     /// @dev Override trustedForwarder to satisfy both ILevrFactory_v1 and ERC2771Context

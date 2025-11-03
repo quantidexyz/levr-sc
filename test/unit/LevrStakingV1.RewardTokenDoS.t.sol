@@ -46,17 +46,6 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
         return 7 days;
     }
 
-    function getClankerMetadata(
-        address
-    ) external pure returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0),
-                lpLocker: address(0),
-                hook: address(0),
-                exists: false
-            });
-    }
 
     /// @notice MEDIUM-2: Test that dust amounts are rejected
     function test_creditRewards_rejectsDustAmounts() public {

@@ -38,17 +38,6 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
     function streamWindowSeconds(address) external pure returns (uint32) {
         return 7 days;
     }
-    function getClankerMetadata(
-        address
-    ) external pure returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0),
-                lpLocker: address(0),
-                hook: address(0),
-                exists: false
-            });
-    }
 
     /// @notice Helper: Check if accounting is correct
     /// @dev Fails test if claimable > actual tokens available
