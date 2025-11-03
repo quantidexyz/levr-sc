@@ -13,38 +13,38 @@
 
 ### ✅ COMPLETION STATUS
 
-| Metric                             | Status                                   |
-| ---------------------------------- | ---------------------------------------- |
-| **Original Findings**              | 31 issues                                |
-| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)        |
-| **Already Fixed (Current)**        | 3 issues (C-3, H-3, M-4, M-5)            |
+| Metric                             | Status                                       |
+| ---------------------------------- | -------------------------------------------- |
+| **Original Findings**              | 31 issues                                    |
+| **Already Fixed (Audit 2)**        | 2 issues (C-5, H-7 auto-progress)            |
+| **Already Fixed (Current)**        | 3 issues (C-3, H-3, M-4, M-5)                |
 | **Design Decisions (Intentional)** | 7 issues (C-4, H-5, H-8, M-2, M-7, M-8, M-9) |
-| **Deferred (TBD)**                 | 1 issue (H-6 - emergency pause)          |
-| **Optional (Low Priority)**        | 1 issue (M-1)                            |
-| **Duplicates**                     | 1 issue (M-6 = C-4)                      |
-| **Audit Errors**                   | 1 issue (C-3)                            |
-| **🎉 IMPLEMENTED IN PHASE 1**      | **4 items: C-1, C-2, H-2, H-4**          |
-| **REMAINING TO FIX**               | **10 items** (post-mainnet)               |
+| **Deferred (TBD)**                 | 1 issue (H-6 - emergency pause)              |
+| **Optional (Low Priority)**        | 1 issue (M-1)                                |
+| **Duplicates**                     | 1 issue (M-6 = C-4)                          |
+| **Audit Errors**                   | 1 issue (C-3)                                |
+| **🎉 IMPLEMENTED IN PHASE 1**      | **4 items: C-1, C-2, H-2, H-4**              |
+| **REMAINING TO FIX**               | **10 items** (post-mainnet)                  |
 
 ### Phase 1 Implementation Results ✅
 
-| Fix | Status | Dev Days | Tests | Lines Changed |
-|-----|--------|----------|-------|----------------|
-| **C-1** | ✅ COMPLETE | 0.75 | 11 new | ~50 src + ~300 tests |
-| **C-2** | ✅ COMPLETE | 0.75 | 4 new | ~6 src + ~230 tests |
-| **H-2** | ✅ COMPLETE | 0.25 | Updated | ~12 src |
-| **H-4** | ✅ COMPLETE | 0.5 | 0 | 1 doc + 1 script |
-| **H-1** | 🔵 CANCELLED | 0 | N/A | Reverted |
-| **BONUS** | ✅ COMPLETE | Included | 10 fixed | Fixed pre-existing tests |
-| **TOTAL** | **✅ DONE** | **2.25 days** | **15 new + 10 fixed** | **All passing** |
+| Fix       | Status       | Dev Days      | Tests                 | Lines Changed            |
+| --------- | ------------ | ------------- | --------------------- | ------------------------ |
+| **C-1**   | ✅ COMPLETE  | 0.75          | 11 new                | ~50 src + ~300 tests     |
+| **C-2**   | ✅ COMPLETE  | 0.75          | 4 new                 | ~6 src + ~230 tests      |
+| **H-2**   | ✅ COMPLETE  | 0.25          | Updated               | ~12 src                  |
+| **H-4**   | ✅ COMPLETE  | 0.5           | 0                     | 1 doc + 1 script         |
+| **H-1**   | 🔵 CANCELLED | 0             | N/A                   | Reverted                 |
+| **BONUS** | ✅ COMPLETE  | Included      | 10 fixed              | Fixed pre-existing tests |
+| **TOTAL** | **✅ DONE**  | **2.25 days** | **15 new + 10 fixed** | **All passing**          |
 
 ### Test Results 🎉
 
-| Suite | Tests | Status | Notes |
-|-------|-------|--------|-------|
-| **Unit Tests** | 414 | ✅ 100% PASS | Dev profile (fast) |
-| **E2E Tests** | 45 | ✅ 100% PASS | Default profile |
-| **TOTAL** | **459** | ✅ **100% PASS** | Zero regressions |
+| Suite          | Tests   | Status           | Notes              |
+| -------------- | ------- | ---------------- | ------------------ |
+| **Unit Tests** | 414     | ✅ 100% PASS     | Dev profile (fast) |
+| **E2E Tests**  | 45      | ✅ 100% PASS     | Default profile    |
+| **TOTAL**      | **459** | ✅ **100% PASS** | Zero regressions   |
 
 ---
 
@@ -977,6 +977,71 @@ The analysis confirms the existing implementation is **already secure** against:
 - Whitelist tokens being blocked (bypass logic)
 
 This is **testing-only** to provide explicit coverage for edge cases.
+
+---
+
+## Security Analysis: LevrStaking_v1 Initial Whitelist Validation (Lines 90-92)
+
+### Defensive Check Code
+
+```solidity
+// Factory ensures: token is not underlying and token is not zero address and no duplicates
+if (token == address(0) || token == underlying_ || _tokenState[token].exists) continue;
+```
+
+### Validation Layer Responsibility Analysis
+
+| Check                                    | Factory Validates       | Staking Validates   | VERDICT                 |
+| ---------------------------------------- | ----------------------- | ------------------- | ----------------------- |
+| `token == address(0)`                    | ✓ LevrFactory_v1:62,288 | ✓ LevrStaking_v1:91 | **DEFENSE-IN-DEPTH**    |
+| `token == underlying_`                   | ✗ NOT VALIDATED         | ✓ LevrStaking_v1:91 | **CRITICAL & REQUIRED** |
+| `_tokenState[token].exists` (duplicates) | ✗ NOT VALIDATED         | ✓ LevrStaking_v1:91 | **CRITICAL & REQUIRED** |
+
+### Why Checks Are NOT Redundant
+
+1. **Zero Address (Partially Redundant)**
+   - Factory validates at constructor and `updateInitialWhitelist()`
+   - Staking check is defense-in-depth
+   - Status: Can be considered redundant but acceptable for safety
+
+2. **token == underlying (CRITICAL - NOT Redundant)**
+   - Factory does NOT validate this constraint
+   - Whitelisting underlying as a reward token would create state corruption:
+     - Underlying has special handling in `_availableUnaccountedRewards()` (line 540)
+     - Escrow tracking would conflict with reward pool accounting
+   - Status: **MUST BE KEPT** - Not validated anywhere else
+
+3. **Duplicate Prevention (CRITICAL - NOT Redundant)**
+   - Factory does NOT validate duplicates in initialWhitelistedTokens array
+   - Duplicate tokens would cause:
+     - Duplicate entries in `_rewardTokens` array
+     - Multiple state entries for same token (array duplication issue)
+     - Higher gas costs and state bloat
+   - Status: **MUST BE KEPT** - Not validated anywhere else
+
+### Test Coverage
+
+Created comprehensive test suite: `test/unit/LevrStaking.InitialWhitelist.Validation.t.sol`
+
+Tests verify:
+
+- ✓ Staking prevents underlying token from being whitelisted (line 91)
+- ✓ Staking prevents duplicate tokens (line 91)
+- ✓ Staking prevents zero address (defense-in-depth)
+- ✓ Combined edge cases all handled correctly
+- ✓ Valid whitelist tokens properly initialized
+
+**All 6 tests PASS** ✅
+
+### Conclusion
+
+**The checks in LevrStaking_v1:90-92 are NOT redundant and MUST be kept.**
+
+The factory provides first-line validation (zero address), but the staking contract's defensive checks are critical security measures:
+
+1. Prevent state corruption by whitelisting underlying token
+2. Prevent array duplication issues
+3. Provide defense-in-depth for zero address checks
 
 ---
 
