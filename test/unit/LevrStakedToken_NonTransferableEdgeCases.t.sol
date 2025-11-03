@@ -10,6 +10,7 @@ import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
 /**
@@ -44,7 +45,13 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0), new address[](0));
+        factory = new LevrFactory_v1(
+            config,
+            address(this),
+            address(0),
+            address(0),
+            new address[](0)
+        );
         underlying = new MockERC20('Underlying', 'UND');
 
         staking = new LevrStaking_v1(address(0));
@@ -90,7 +97,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         staking.stake(1000 ether);
 
         // Direct transfer blocked
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transfer(bob, 500 ether);
 
         // Approve bob
@@ -98,12 +105,12 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
         // transferFrom also blocked
         vm.startPrank(bob);
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transferFrom(alice, bob, 500 ether);
 
         // Self-transfer also blocked
         vm.startPrank(alice);
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transfer(alice, 100 ether);
     }
 
@@ -135,7 +142,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         governor.vote(pid, true);
 
         // Alice tries to transfer - BLOCKED
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transfer(bob, 500 ether);
 
         // Alice's vote should still be valid
@@ -188,7 +195,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         assertEq(proposal.totalBalanceVoted, 2000 ether, 'Should be 2000 tokens voted');
 
         // Try to manipulate by transferring - BLOCKED
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transfer(charlie, 500 ether);
 
         // Quorum calculation remains valid (no manipulation possible)
@@ -221,7 +228,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         governor.vote(pid, true);
 
         // Alice can't transfer to Bob to let him vote with same tokens
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transfer(bob, 2000 ether);
 
         // totalBalanceVoted stays at 2000 (no inflation possible)
@@ -241,7 +248,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
         // But Bob still can't transferFrom
         vm.startPrank(bob);
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transferFrom(alice, bob, 500 ether);
 
         // Approval unchanged (transfer didn't happen)
@@ -571,7 +578,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 totalBefore = staking.totalStaked();
 
         // Attempt transfer (will revert)
-        vm.expectRevert('STAKED_TOKENS_NON_TRANSFERABLE');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         stakedToken.transfer(bob, 500 ether);
 
         // State should be unchanged

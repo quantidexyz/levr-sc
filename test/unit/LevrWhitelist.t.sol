@@ -6,6 +6,7 @@ import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
@@ -184,7 +185,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
 
         // Try to whitelist underlying (should fail - already whitelisted)
         vm.prank(address(this));
-        vm.expectRevert('CANNOT_MODIFY_UNDERLYING');
+        vm.expectRevert(ILevrStaking_v1.CannotModifyUnderlying.selector);
         staking.whitelistToken(address(underlying));
 
         console2.log('SUCCESS: Cannot whitelist underlying token');
@@ -207,7 +208,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
 
         // Try to unwhitelist underlying (should fail)
         vm.prank(address(this));
-        vm.expectRevert('CANNOT_UNWHITELIST_UNDERLYING');
+        vm.expectRevert(ILevrStaking_v1.CannotUnwhitelistUnderlying.selector);
         staking.unwhitelistToken(address(underlying));
 
         // Verify still whitelisted
@@ -253,7 +254,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
 
         // Unwhitelist (should fail - still has pending rewards in stream)
         vm.prank(address(this));
-        vm.expectRevert('CANNOT_UNWHITELIST_WITH_PENDING_REWARDS');
+        vm.expectRevert(ILevrStaking_v1.CannotUnwhitelistWithPendingRewards.selector);
         staking.unwhitelistToken(address(dai));
 
         console2.log('SUCCESS: Cannot unwhitelist token with active stream');
@@ -289,7 +290,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
         // Don't claim - rewards are in pool now
         // Try to unwhitelist - should fail
         vm.prank(address(this));
-        vm.expectRevert('CANNOT_UNWHITELIST_WITH_PENDING_REWARDS');
+        vm.expectRevert(ILevrStaking_v1.CannotUnwhitelistWithPendingRewards.selector);
         staking.unwhitelistToken(address(dai));
 
         console2.log('SUCCESS: Cannot unwhitelist token with vested pool rewards');
@@ -379,7 +380,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
 
         // Try to whitelist again
         vm.prank(address(this));
-        vm.expectRevert('ALREADY_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.AlreadyWhitelisted.selector);
         staking.whitelistToken(address(dai));
 
         console2.log('SUCCESS: Cannot whitelist already whitelisted token');
@@ -398,7 +399,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
 
         // Alice tries to whitelist (not admin)
         vm.prank(alice);
-        vm.expectRevert('ONLY_TOKEN_ADMIN');
+        vm.expectRevert(ILevrStaking_v1.OnlyTokenAdmin.selector);
         staking.whitelistToken(address(dai));
 
         // Token admin can whitelist
@@ -424,7 +425,7 @@ contract LevrWhitelistTest is Test, LevrFactoryDeployHelper {
 
         // Alice tries to unwhitelist (not admin)
         vm.prank(alice);
-        vm.expectRevert('ONLY_TOKEN_ADMIN');
+        vm.expectRevert(ILevrStaking_v1.OnlyTokenAdmin.selector);
         staking.unwhitelistToken(address(dai));
 
         // Token admin can unwhitelist

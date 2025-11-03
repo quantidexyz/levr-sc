@@ -435,7 +435,7 @@ contract LevrStaking_StuckFundsTest is Test {
         nonWhitelisted.mint(address(staking), 100 ether);
 
         // Should revert because token is not whitelisted
-        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
         staking.accrueRewards(address(nonWhitelisted));
 
         console2.log('SUCCESS: Non-whitelisted token rejected');
@@ -584,7 +584,7 @@ contract LevrStaking_StuckFundsTest is Test {
         staking.claimRewards(tokens, alice);
 
         // Try to cleanup whitelisted token - should fail
-        vm.expectRevert('CANNOT_REMOVE_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.CannotRemoveWhitelisted.selector);
         staking.cleanupFinishedRewardToken(address(weth));
 
         console2.log('SUCCESS: Whitelisted tokens protected from cleanup');

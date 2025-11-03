@@ -226,7 +226,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         address recipient
     ) external {
         // Only callable by this contract (via try-catch)
-        require(_msgSender() == address(this), 'INTERNAL_ONLY');
+        if (_msgSender() != address(this)) revert ILevrGovernor_v1.InternalOnly();
 
         if (proposalType == ProposalType.BoostStakingPool) {
             ILevrTreasury_v1(treasury).applyBoost(token, amount);

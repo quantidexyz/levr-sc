@@ -229,22 +229,21 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (token == address(0)) revert ZeroAddress();
 
         // CRITICAL: Cannot modify underlying token's whitelist status
-        require(token != underlying, 'CANNOT_MODIFY_UNDERLYING');
+        if (token == underlying) revert CannotModifyUnderlying();
 
         // Only token admin can whitelist
         address tokenAdmin = IClankerToken(underlying).admin();
-        require(_msgSender() == tokenAdmin, 'ONLY_TOKEN_ADMIN');
+        if (_msgSender() != tokenAdmin) revert OnlyTokenAdmin();
 
         // Cannot whitelist already whitelisted token
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
-        require(!tokenState.whitelisted, 'ALREADY_WHITELISTED');
+        if (tokenState.whitelisted) revert AlreadyWhitelisted();
 
         // If token exists, verify it has no pending rewards (prevent state corruption)
         if (tokenState.exists) {
-            require(
-                tokenState.availablePool == 0 && tokenState.streamTotal == 0,
-                'CANNOT_WHITELIST_WITH_PENDING_REWARDS'
-            );
+            if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
+                revert CannotWhitelistWithPendingRewards();
+            }
         }
 
         tokenState.whitelisted = true;
@@ -268,31 +267,29 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (token == address(0)) revert ZeroAddress();
 
         // CRITICAL: CANNOT unwhitelist underlying token (permanent protection)
-        require(token != underlying, 'CANNOT_UNWHITELIST_UNDERLYING');
+        if (token == underlying) revert CannotUnwhitelistUnderlying();
 
         // Only token admin can unwhitelist
         address tokenAdmin = IClankerToken(underlying).admin();
-        require(_msgSender() == tokenAdmin, 'ONLY_TOKEN_ADMIN');
+        if (_msgSender() != tokenAdmin) revert OnlyTokenAdmin();
 
         // Token must exist and be whitelisted
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
-        require(tokenState.exists, 'TOKEN_NOT_REGISTERED');
-        require(tokenState.whitelisted, 'NOT_WHITELISTED');
+        if (!tokenState.exists) revert TokenNotRegistered();
+        if (!tokenState.whitelisted) revert NotWhitelisted();
 
         // CRITICAL: Cannot unwhitelist if token has pending rewards (would make them unclaimable)
-        require(
-            tokenState.availablePool == 0 && tokenState.streamTotal == 0,
-            'CANNOT_UNWHITELIST_WITH_PENDING_REWARDS'
-        );
+        if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
+            revert CannotUnwhitelistWithPendingRewards();
+        }
 
         // Settle the pool to ensure all rewards are accounted for before unwhitelisting
         _settlePoolForToken(token);
 
         // Verify again after settlement (in case streaming added to pool)
-        require(
-            tokenState.availablePool == 0 && tokenState.streamTotal == 0,
-            'CANNOT_UNWHITELIST_WITH_PENDING_REWARDS'
-        );
+        if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
+            revert CannotUnwhitelistWithPendingRewards();
+        }
 
         // Remove from whitelist (token state kept for historical tracking)
         tokenState.whitelisted = false;
@@ -302,15 +299,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function cleanupFinishedRewardToken(address token) external nonReentrant {
-        require(token != underlying, 'CANNOT_REMOVE_UNDERLYING');
+        if (token == underlying) revert CannotRemoveUnderlying();
 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
-        require(tokenState.exists, 'TOKEN_NOT_REGISTERED');
-        require(!tokenState.whitelisted, 'CANNOT_REMOVE_WHITELISTED');
-        require(
-            tokenState.availablePool == 0 && tokenState.streamTotal == 0,
-            'REWARDS_STILL_PENDING'
-        );
+        if (!tokenState.exists) revert TokenNotRegistered();
+        if (tokenState.whitelisted) revert CannotRemoveWhitelisted();
+        if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
+            revert RewardsTillPending();
+        }
 
         _removeTokenFromArray(token);
         delete _tokenState[token];
@@ -364,7 +360,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (amount == 0) revert InvalidAmount();
         if (pullFromTreasury) {
             // Only treasury can initiate a pull
-            require(_msgSender() == treasury, 'ONLY_TREASURY');
+            if (_msgSender() != treasury) revert ILevrFactory_v1.UnauthorizedCaller();
             uint256 beforeAvail = _availableUnaccountedRewards(token);
             IERC20(token).safeTransferFrom(treasury, address(this), amount);
             uint256 afterAvail = _availableUnaccountedRewards(token);
@@ -374,7 +370,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             }
         } else {
             uint256 available = _availableUnaccountedRewards(token);
-            require(available >= amount, 'INSUFFICIENT_AVAILABLE');
+            if (available < amount) revert InsufficientAvailable();
             _creditRewards(token, amount);
         }
     }
@@ -495,7 +491,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     function _creditRewards(address token, uint256 amount) internal {
-        require(amount >= MIN_REWARD_AMOUNT, 'REWARD_TOO_SMALL');
+        if (amount < MIN_REWARD_AMOUNT) revert RewardTooSmall();
 
         RewardTokenState storage tokenState = _ensureRewardToken(token);
 
@@ -513,10 +509,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         tokenState = _tokenState[token];
 
         // Token MUST already exist (via initialize() or whitelistToken())
-        require(tokenState.exists, 'TOKEN_NOT_WHITELISTED');
+        if (!tokenState.exists) revert TokenNotWhitelisted();
 
         // Token MUST be whitelisted
-        require(tokenState.whitelisted, 'TOKEN_NOT_WHITELISTED');
+        if (!tokenState.whitelisted) revert TokenNotWhitelisted();
     }
 
     /// @notice Internal helper to remove token from array

@@ -6,6 +6,7 @@ import '../../src/LevrFactory_v1.sol';
 import '../../src/LevrGovernor_v1.sol';
 import '../../src/LevrStaking_v1.sol';
 import '../../src/LevrTreasury_v1.sol';
+import '../../src/interfaces/ILevrStaking_v1.sol';
 import '../utils/LevrFactoryDeployHelper.sol';
 import '../mocks/MockERC20.sol';
 
@@ -207,7 +208,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         MockERC20 token11 = new MockERC20('Token11', 'TKN11');
         token11.mint(address(staking), 100 ether);
 
-        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
         staking.accrueRewards(address(token11));
         console2.log('RESULT: Non-whitelisted token rejected as expected');
     }
@@ -261,7 +262,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
 
         // Non-admin cannot whitelist
         vm.prank(alice);
-        vm.expectRevert('ONLY_TOKEN_ADMIN');
+        vm.expectRevert(ILevrStaking_v1.OnlyTokenAdmin.selector);
         staking.whitelistToken(address(newToken));
         console2.log('Non-admin blocked from whitelisting');
 
@@ -290,7 +291,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         staking.whitelistToken(address(newToken));
 
         // Try again - should revert
-        vm.expectRevert('ALREADY_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.AlreadyWhitelisted.selector);
         staking.whitelistToken(address(newToken));
 
         vm.stopPrank();
@@ -343,7 +344,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
     function test_staking_cleanupUnderlying_reverts() public {
         console2.log('\n=== STAKING: Cannot Cleanup Underlying ===');
 
-        vm.expectRevert('CANNOT_REMOVE_UNDERLYING');
+        vm.expectRevert(ILevrStaking_v1.CannotRemoveUnderlying.selector);
         staking.cleanupFinishedRewardToken(address(underlying));
         console2.log('RESULT: Underlying token protection works');
     }
@@ -361,11 +362,11 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         // Try to cleanup directly (should fail because token is whitelisted and has pending rewards)
         // First need to unwhitelist, but that will also fail with pending rewards
         vm.prank(address(this)); // Test contract is admin of underlying
-        vm.expectRevert('CANNOT_UNWHITELIST_WITH_PENDING_REWARDS');
+        vm.expectRevert(ILevrStaking_v1.CannotUnwhitelistWithPendingRewards.selector);
         staking.unwhitelistToken(address(testToken));
-        
+
         // Also try cleanup directly - should fail because whitelisted
-        vm.expectRevert('CANNOT_REMOVE_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.CannotRemoveWhitelisted.selector);
         staking.cleanupFinishedRewardToken(address(testToken));
         console2.log('RESULT: Cleanup blocked when rewards pending (even during active stream)');
     }
@@ -463,7 +464,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         // Try to add 11th without whitelisting - fails
         MockERC20 newToken = new MockERC20('New', 'NEW');
         newToken.mint(address(staking), 100 ether);
-        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
         staking.accrueRewards(address(newToken));
         console2.log('Non-whitelisted token rejected');
 

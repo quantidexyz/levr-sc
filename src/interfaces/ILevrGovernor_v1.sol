@@ -109,6 +109,9 @@ interface ILevrGovernor_v1 {
     /// @notice Proposal amount exceeds maximum allowed percentage of treasury balance
     error ProposalAmountExceedsLimit();
 
+    /// @notice Function is internal only (cannot be called directly)
+    error InternalOnly();
+
     // ============ Events ============
 
     /// @notice Emitted when a new proposal is created

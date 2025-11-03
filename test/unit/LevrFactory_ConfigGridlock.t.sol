@@ -9,6 +9,7 @@ import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
 /**
@@ -244,7 +245,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
 
         // Try to accrue rewards with non-whitelisted token
         rewardToken.mint(address(staking), 100 ether);
-        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
         staking.accrueRewards(address(rewardToken));
 
         // Whitelist the token
@@ -587,7 +588,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         // Non-whitelisted tokens should fail
         MockERC20 token1 = new MockERC20('T1', 'T1');
         token1.mint(address(staking), 10 ether);
-        vm.expectRevert('TOKEN_NOT_WHITELISTED');
+        vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
         staking.accrueRewards(address(token1));
 
         console2.log('CONFIRMED: Only whitelisted tokens can accrue rewards');

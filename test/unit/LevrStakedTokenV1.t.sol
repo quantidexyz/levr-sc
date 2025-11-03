@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 import {LevrStakedToken_v1} from "../../src/LevrStakedToken_v1.sol";
+import {ILevrStaking_v1} from "../../src/interfaces/ILevrStaking_v1.sol";
 
 contract LevrStakedTokenV1_Test is Test {
     LevrStakedToken_v1 internal sToken;
@@ -30,7 +31,7 @@ contract LevrStakedTokenV1_Test is Test {
         assertEq(sToken.balanceOf(user), 100);
 
         vm.prank(user);
-        vm.expectRevert(bytes("ONLY_STAKING"));
+        vm.expectRevert(ILevrStaking_v1.OnlyFactory.selector);
         sToken.mint(user, 1);
 
         vm.prank(staking);
@@ -38,7 +39,7 @@ contract LevrStakedTokenV1_Test is Test {
         assertEq(sToken.balanceOf(user), 60);
 
         vm.prank(user);
-        vm.expectRevert(bytes("ONLY_STAKING"));
+        vm.expectRevert(ILevrStaking_v1.OnlyFactory.selector);
         sToken.burn(user, 1);
     }
 }

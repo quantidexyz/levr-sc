@@ -5,6 +5,7 @@ import {Test} from 'forge-std/Test.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
 /// @title LevrStakingV1.RewardTokenDoS Test
@@ -71,7 +72,7 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
         rewardToken.transfer(address(staking), dustAmount);
 
         // Should revert with REWARD_TOO_SMALL
-        vm.expectRevert('REWARD_TOO_SMALL');
+        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
         staking.accrueFromTreasury(address(rewardToken), dustAmount, false);
     }
 
@@ -131,7 +132,7 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
             staking.whitelistToken(address(dustToken));
 
             // Try to accrueFromTreasury with dust - should revert with REWARD_TOO_SMALL
-            vm.expectRevert('REWARD_TOO_SMALL');
+            vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
             staking.accrueFromTreasury(address(dustToken), 1e14, false);
         }
 

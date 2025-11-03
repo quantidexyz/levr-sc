@@ -45,6 +45,20 @@ interface ILevrStaking_v1 {
     error InsufficientEscrow();
     error AlreadyInitialized();
     error OnlyFactory();
+    error CannotModifyUnderlying();
+    error OnlyTokenAdmin();
+    error AlreadyWhitelisted();
+    error CannotWhitelistWithPendingRewards();
+    error CannotUnwhitelistUnderlying();
+    error TokenNotRegistered();
+    error NotWhitelisted();
+    error CannotUnwhitelistWithPendingRewards();
+    error CannotRemoveUnderlying();
+    error CannotRemoveWhitelisted();
+    error RewardsTillPending();
+    error RewardTooSmall();
+    error TokenNotWhitelisted();
+    error InsufficientAvailable();
 
     // ============ Events ============
 
