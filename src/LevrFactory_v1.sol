@@ -90,18 +90,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
         // Validate token from trusted Clanker factory
         bool validFactory;
-        bool hasDeployedFactory;
 
         for (uint256 i; i < _trustedClankerFactories.length; ++i) {
             address factory = _trustedClankerFactories[i];
-
-            uint256 size;
-            assembly {
-                size := extcodesize(factory)
-            }
-            if (size == 0) continue;
-
-            hasDeployedFactory = true;
 
             try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (
                 IClanker.DeploymentInfo memory info
@@ -113,7 +104,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             } catch {}
         }
 
-        if (hasDeployedFactory && !validFactory) revert TokenNotTrusted();
+        if (!validFactory) revert TokenNotTrusted();
 
         // Look up and delete prepared contracts
         ILevrFactory_v1.PreparedContracts memory prepared = _preparedContracts[caller];

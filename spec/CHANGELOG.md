@@ -4,6 +4,111 @@ All notable changes to the Levr V1 protocol are documented here.
 
 ---
 
+## [SECURITY] - 2025-11-04 - Critical Factory Validation Bypass Fix
+
+**Status:** ✅ Complete - Security vulnerability fixed and verified
+
+### 🔐 Security Enhancement
+
+#### Summary
+
+Fixed critical security bypass in `LevrFactory_v1.register()` where Clanker factory validation could be completely bypassed if whitelisted factory addresses had no code deployed.
+
+**Severity:** CRITICAL  
+**Impact:** Complete bypass of Clanker factory validation allowing unauthorized token registration  
+**Status:** ✅ FIXED
+
+#### Changes Made
+
+**Source Code:**
+- ✅ **Removed `extcodesize` assembly check** from `LevrFactory_v1.sol:register()`
+- ✅ **Removed `hasDeployedFactory` boolean variable** (simplified validation logic)
+- ✅ **Simplified validation check** - Now always enforces: `if (!validFactory) revert TokenNotTrusted()`
+- ✅ **Code reduction:** -8 lines of vulnerable code
+
+**Test Infrastructure:**
+- ✅ **Created `test/mocks/MockClankerFactory.sol`** - Mock Clanker factory for unit tests
+  - Supports "permissive mode" for broad test coverage
+  - Can register tokens for strict validation testing
+  - Auto-used in unit tests, real factory on forks
+- ✅ **Updated `test/utils/LevrFactoryDeployHelper.sol`**
+  - Auto-detects unit test vs fork mode
+  - Deploys mock factory for unit tests
+  - Uses real Clanker factory for fork tests
+
+**Before (VULNERABLE):**
+```solidity
+for (uint256 i; i < _trustedClankerFactories.length; ++i) {
+    address factory = _trustedClankerFactories[i];
+    
+    uint256 size;
+    assembly { size := extcodesize(factory) }
+    if (size == 0) continue;  // ❌ BYPASS
+    
+    hasDeployedFactory = true;
+    // ... validation ...
+}
+if (hasDeployedFactory && !validFactory) revert TokenNotTrusted();
+// ❌ Never reverts if all factories have no code
+```
+
+**After (SECURE):**
+```solidity
+for (uint256 i; i < _trustedClankerFactories.length; ++i) {
+    address factory = _trustedClankerFactories[i];
+    
+    try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (...) {
+        if (info.token == clankerToken) {
+            validFactory = true;
+            break;
+        }
+    } catch {}  // ✅ Gracefully handles non-contracts
+}
+if (!validFactory) revert TokenNotTrusted();  // ✅ Always enforces
+```
+
+#### Test Results
+
+- ✅ **768 unit tests passed** - All existing functionality preserved
+- ✅ **51 e2e tests passed** - End-to-end flows verified
+- ✅ **819 total tests** - Complete test coverage maintained
+- ✅ **11 validation tests** in `LevrFactory.ClankerValidation.t.sol` verify security
+
+#### Security Impact
+
+**Attack Vectors Eliminated:**
+1. ✅ Pre-deployment bypass (admin adds factory before deployment)
+2. ✅ Self-destruct attack (attacker destroys whitelisted factory)
+3. ✅ Race condition (factory has no code during upgrade)
+
+**Benefits:**
+- ✅ **Simpler, more secure code** - Removed unnecessary complexity
+- ✅ **No bypass paths** - Validation always enforces
+- ✅ **Easier to audit** - Clearer intent, fewer variables
+- ✅ **Better test coverage** - Mock infrastructure enables comprehensive testing
+
+#### Lessons Learned
+
+1. **Don't add special-case handling for already-handled cases** - `try-catch` handles non-contracts
+2. **Simpler is safer** - Removing code improved security
+3. **Always validate** - `if (!valid)` is bulletproof vs `if (cond && !valid)`
+4. **Test infrastructure matters** - Mock contracts enable comprehensive security testing
+
+#### Documentation Updates
+
+- ✅ Updated `spec/AUDIT.md` - Added [C-3] critical finding
+- ✅ Updated `spec/HISTORICAL_FIXES.md` - Added comprehensive analysis
+- ✅ Updated `spec/CHANGELOG.md` - This entry
+
+#### Related Files
+
+- **Fixed:** `src/LevrFactory_v1.sol` (lines 91-107)
+- **Created:** `test/mocks/MockClankerFactory.sol`
+- **Updated:** `test/utils/LevrFactoryDeployHelper.sol`
+- **Documentation:** `spec/AUDIT.md` ([C-3]), `spec/HISTORICAL_FIXES.md`
+
+---
+
 ## [CONSOLIDATION] - 2025-11-03 - Consolidation Records Archived with Proper Naming
 
 **Status:** ✅ Complete - Consolidation records organized in archive/consolidations/

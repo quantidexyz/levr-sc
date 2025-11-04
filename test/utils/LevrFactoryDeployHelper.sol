@@ -8,11 +8,15 @@ import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
+import {MockClankerFactory} from '../mocks/MockClankerFactory.sol';
 
 /// @title Levr Factory Deployment Helper
 /// @notice Helper contract for deploying LevrFactory_v1 with all dependencies in tests
 /// @dev Handles the complex deployment sequence: forwarder → predict factory → deployer logic → factory
 contract LevrFactoryDeployHelper is Test {
+    /// @dev Store the mock Clanker factory address for use in tests
+    address internal mockClankerFactory;
+
     /// @notice Deploy a complete factory with forwarder and deployer logic
     /// @dev This handles the tricky nonce calculation to ensure deployer logic is authorized
     /// @param cfg Factory configuration
@@ -77,7 +81,7 @@ contract LevrFactoryDeployHelper is Test {
         }
     }
 
-    /// @notice Deploy factory with default Base mainnet Clanker factory
+    /// @notice Deploy factory with default Base mainnet Clanker factory (or mock for unit tests)
     /// @param cfg Factory configuration
     /// @param owner Factory owner address
     /// @return factory The deployed factory
@@ -90,9 +94,27 @@ contract LevrFactoryDeployHelper is Test {
         internal
         returns (LevrFactory_v1 factory, LevrForwarder_v1 forwarder, LevrDeployer_v1 levrDeployer)
     {
-        // Base mainnet Clanker factory
+        // Base mainnet Clanker factory address
         address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+
+        // If running in unit test mode (Clanker factory not deployed), deploy a mock factory
+        // In fork tests, the real Clanker factory will have code deployed
+        if (clankerFactory.code.length == 0) {
+            MockClankerFactory mockFactory = new MockClankerFactory();
+            clankerFactory = address(mockFactory);
+            mockClankerFactory = clankerFactory;
+        }
+
         return deployFactory(cfg, owner, clankerFactory);
+    }
+
+    /// @notice Register a token with the mock Clanker factory (for unit tests)
+    /// @dev This allows MockERC20 tokens to pass Clanker factory validation
+    /// @param token Token address to register
+    function registerTokenWithMockClanker(address token) internal {
+        if (mockClankerFactory != address(0)) {
+            MockClankerFactory(mockClankerFactory).registerToken(token);
+        }
     }
 
     /// @notice Create default factory configuration for tests
