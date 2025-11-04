@@ -2,20 +2,195 @@
 
 **Purpose:** Archive of critical bugs discovered and fixed during development  
 **Status:** All bugs documented here are FIXED ✅  
-**Last Updated:** November 2, 2025 (Dead Code Removal - Coverage Improvement)
+**Last Updated:** November 4, 2025 (Clanker Factory Validation Bypass Fix)
 
 ---
 
 ## Table of Contents
 
-1. [Dead Code Removal: calculateUnvested() (Nov 2, 2025)](#dead-code-removal-calculateunvested-nov-2-2025)
-2. [FeeSplitter Dust Recovery Logic Bug (Fixed Oct 30, 2025)](#feesplitter-dust-recovery-logic-bug-oct-30-2025)
-3. [VP Calculation Test Bug (Fixed Oct 30, 2025)](#vp-calculation-test-bug-oct-30-2025)
-4. [Clanker Token Trust - AUDIT 3 C-1 (Fixed Oct 30, 2025)](#clanker-token-trust-audit-3-c-1-oct-30-2025)
-5. [Fee-on-Transfer Accounting - AUDIT 3 C-2 (Fixed Oct 30, 2025)](#fee-on-transfer-accounting-audit-3-c-2-oct-30-2025)
-6. [Competitive Proposal Winner Manipulation - AUDIT 3 H-2 (Fixed Oct 30, 2025)](#competitive-proposal-winner-manipulation-audit-3-h-2-oct-30-2025)
-7. [Arbitrary Code Execution (Fixed Oct 30, 2025)](#arbitrary-code-execution-oct-30-2025)
-8. [Lessons Learned](#lessons-learned)
+1. [Clanker Factory Validation Bypass via extcodesize (Nov 4, 2025)](#clanker-factory-validation-bypass-via-extcodesize-nov-4-2025)
+2. [Dead Code Removal: calculateUnvested() (Nov 2, 2025)](#dead-code-removal-calculateunvested-nov-2-2025)
+3. [FeeSplitter Dust Recovery Logic Bug (Fixed Oct 30, 2025)](#feesplitter-dust-recovery-logic-bug-oct-30-2025)
+4. [VP Calculation Test Bug (Fixed Oct 30, 2025)](#vp-calculation-test-bug-oct-30-2025)
+5. [Clanker Token Trust - AUDIT 3 C-1 (Fixed Oct 30, 2025)](#clanker-token-trust-audit-3-c-1-oct-30-2025)
+6. [Fee-on-Transfer Accounting - AUDIT 3 C-2 (Fixed Oct 30, 2025)](#fee-on-transfer-accounting-audit-3-c-2-oct-30-2025)
+7. [Competitive Proposal Winner Manipulation - AUDIT 3 H-2 (Fixed Oct 30, 2025)](#competitive-proposal-winner-manipulation-audit-3-h-2-oct-30-2025)
+8. [Arbitrary Code Execution (Fixed Oct 30, 2025)](#arbitrary-code-execution-oct-30-2025)
+9. [Lessons Learned](#lessons-learned)
+
+---
+
+## Clanker Factory Validation Bypass via extcodesize (Nov 4, 2025)
+
+**Discovery Date:** November 4, 2025  
+**Severity:** CRITICAL  
+**Type:** Security Bypass / Validation Logic Bug  
+**Impact:** Complete bypass of Clanker factory validation allowing unauthorized token registration  
+**Status:** ✅ FIXED
+
+### Summary
+
+The `LevrFactory_v1.register()` function contained an `extcodesize` check that created a critical security bypass. If a whitelisted Clanker factory address had no code deployed, the validation would be completely skipped, allowing **any token** to be registered regardless of whether it was deployed by a trusted factory.
+
+### Root Cause Analysis
+
+**The Vulnerable Pattern:**
+
+```solidity
+// BEFORE (VULNERABLE)
+bool validFactory;
+bool hasDeployedFactory;
+
+for (uint256 i; i < _trustedClankerFactories.length; ++i) {
+    address factory = _trustedClankerFactories[i];
+    
+    // ❌ PROBLEM: Skip validation if factory has no code
+    uint256 size;
+    assembly {
+        size := extcodesize(factory)
+    }
+    if (size == 0) continue;  // ❌ BYPASS STARTS HERE
+    
+    hasDeployedFactory = true;
+    
+    try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (...) {
+        if (info.token == clankerToken) {
+            validFactory = true;
+            break;
+        }
+    } catch {}
+}
+
+// ❌ CRITICAL FLAW: Only reverts if hasDeployedFactory is true
+if (hasDeployedFactory && !validFactory) revert TokenNotTrusted();
+```
+
+**Why This is Critically Vulnerable:**
+
+1. **Scenario 1 - Pre-deployment bypass:**
+   - Admin adds Clanker factory address before it's deployed
+   - All factories in array have `extcodesize == 0`
+   - Loop skips all factories via `continue`
+   - `hasDeployedFactory` stays `false`
+   - Final check `if (hasDeployedFactory && !validFactory)` evaluates to `if (false && ...)` 
+   - **Never reverts** - any token can register!
+
+2. **Scenario 2 - Self-destruct attack:**
+   - Attacker compromises/controls a whitelisted factory
+   - Self-destructs the factory contract
+   - `extcodesize` becomes 0
+   - Same bypass as above
+
+3. **Scenario 3 - Race condition:**
+   - Factory temporarily has no code during upgrade
+   - Attacker front-runs to register malicious token
+   - Validation bypassed during upgrade window
+
+**Why This Pattern Was Used (Historical Context):**
+
+The `extcodesize` check was likely added to handle the case where:
+- Tests might add a non-contract address to the trusted factory list
+- Prevent external calls to non-contract addresses
+
+However, this created a **worse security problem** than it solved. The `try-catch` already handles non-contract addresses gracefully!
+
+### The Fix
+
+**Strategy:** Remove the unnecessary `extcodesize` check - `try-catch` handles everything.
+
+```solidity
+// AFTER (SECURE)
+bool validFactory;
+
+for (uint256 i; i < _trustedClankerFactories.length; ++i) {
+    address factory = _trustedClankerFactories[i];
+    
+    // ✅ try-catch handles non-contract addresses gracefully
+    try IClanker(factory).tokenDeploymentInfo(clankerToken) returns (
+        IClanker.DeploymentInfo memory info
+    ) {
+        if (info.token == clankerToken) {
+            validFactory = true;
+            break;
+        }
+    } catch {
+        // If factory has no code, catch block executes
+        // validFactory stays false - NO BYPASS
+    }
+}
+
+// ✅ ALWAYS enforces validation - no bypass possible
+if (!validFactory) revert TokenNotTrusted();
+```
+
+**Changes Made:**
+
+1. ✅ **Removed `extcodesize` assembly check** - Eliminated bypass vector
+2. ✅ **Removed `hasDeployedFactory` variable** - Simplified logic, no conditional validation
+3. ✅ **Simplified final check** - `if (!validFactory) revert` ALWAYS runs
+4. ✅ **Created `MockClankerFactory.sol`** - Test infrastructure for unit tests
+5. ✅ **Updated `LevrFactoryDeployHelper.sol`** - Auto-detects unit test vs fork mode
+
+**Why This Fix Works:**
+
+- When factory has no code, `try IClanker(factory).tokenDeploymentInfo(...)` hits the `catch` block
+- `validFactory` stays `false`
+- `if (!validFactory) revert TokenNotTrusted()` ALWAYS executes
+- No bypass path exists, even with non-contract addresses
+
+### Verification
+
+**Test Coverage:**
+- ✅ **768 unit tests** - All pass
+- ✅ **51 e2e tests** - All pass  
+- ✅ **819 total tests** - Complete verification
+
+**Security Tests Added:**
+```solidity
+// Verified unauthorized tokens are rejected
+test_rejectToken_notFromTrustedFactory() ✅
+
+// Verified authorized tokens are accepted
+test_acceptToken_fromTrustedFactory() ✅
+
+// Verified no bypass when factory list is empty
+test_removeAllFactories_blocksNewRegistrations() ✅
+
+// Verified no bypass with multiple factories
+test_multipleFactories_validInOne() ✅
+```
+
+**Production Impact:**
+- No functionality changes for valid use cases
+- Security hardening for edge cases
+- Cleaner, more auditable code
+
+### Lessons Learned
+
+1. **❌ Don't add special-case handling for edge cases that are already handled**
+   - The `extcodesize` check was redundant - `try-catch` handles it
+   - Adding it created a security vulnerability
+
+2. **✅ Trust Solidity's built-in error handling**
+   - `try-catch` gracefully handles external calls to non-contracts
+   - No manual checks needed
+
+3. **✅ Simpler code is more secure**
+   - Removing variables (`hasDeployedFactory`) and checks made code more secure
+   - Less code = less attack surface = easier to audit
+
+4. **✅ Always validate - no conditional checks**
+   - `if (condition && !isValid)` is dangerous - can bypass when `condition` is false
+   - `if (!isValid)` is bulletproof - always enforces validation
+
+5. **✅ Test infrastructure matters**
+   - Creating `MockClankerFactory` allows comprehensive unit testing
+   - Maintaining test quality is critical for catching these issues
+
+### Related Issues
+
+- See `spec/AUDIT.md` - [C-3] for complete security analysis
+- See `LevrFactory.ClankerValidation.t.sol` for validation test suite
 
 ---
 
