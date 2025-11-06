@@ -12,7 +12,7 @@
 ✅ **Complete Analysis** - Vulnerability details, root cause, attack mechanism  
 ✅ **Test Results** - POC tests with actual failure output  
 ✅ **Proposed Fix** - Implementation-ready solution with code diffs  
-✅ **Context** - Protocol comparison, profitability analysis  
+✅ **Context** - Protocol comparison, profitability analysis
 
 **NO scattered documentation** - everything for one issue is in ONE file.
 
@@ -20,24 +20,47 @@
 
 ## Active Issues
 
-### 1. Stake Dilution Attack (HIGH)
+### 1. Stake Dilution Attack (HIGH) ✅ FIXED
 
 **File:** `SHERLOCK_STAKE_DILUTION.md`  
-**Status:** 🔴 CONFIRMED (2/2 tests FAILING)  
-**Severity:** HIGH - Complete reward pool drainage  
+**Status:** ✅ FIXED (2/2 tests PASSING)  
+**Severity:** HIGH - Complete reward pool drainage
 
 **Summary:** Flash loan attack drains 90%+ of reward pool via instant dilution without settling existing rewards.
 
 **Test File:** `test/unit/sherlock/LevrStakingDilution.t.sol`  
-**Test Status:** 2/2 tests FAILING (proves vulnerability exists)
+**Test Status:** 2/2 tests PASSING (vulnerability FIXED)
 
 **Quick Facts:**
-- Alice loses 90% of rewards in flash loan attack
-- Attack ROI: ~1,111x on flash loan fees  
-- Zero capital required, single transaction, repeatable
-- Fix: Add 4 lines to `stake()` (minimal gas impact)
+
+- Was: Alice loses 90% of rewards in flash loan attack
+- Fix: Cumulative reward accounting (MasterChef pattern)
+- Implementation: ~40 lines (accRewardPerShare + rewardDebt)
+- Status: Deployed and verified
 
 **Everything you need is in the main file** - analysis, test results, fix, comparison to other protocols.
+
+---
+
+### 2. Multiple Claims Draining Pool (HIGH) ✅ ALREADY FIXED
+
+**File:** `SHERLOCK_MULTIPLE_CLAIMS.md`  
+**Status:** ✅ NO ACTION NEEDED (3/3 tests PASSING)  
+**Severity:** HIGH - Reward pool drainage via repeated claims
+
+**Summary:** Users can call `claimRewards()` multiple times to drain pool before other stakers claim their share.
+
+**Test File:** `test/unit/sherlock/LevrStakingMultipleClaims.t.sol`  
+**Test Status:** 3/3 tests PASSING (vulnerability does NOT exist)
+
+**Quick Facts:**
+
+- Same root cause as stake dilution (pool-based distribution)
+- Same fix prevents BOTH attacks (debt accounting)
+- Fix was already in place when this issue was reported
+- Tests confirm: second claim returns 0 (debt blocks re-claim)
+
+**Everything you need is in the main file** - analysis, test results, verification that fix prevents attack.
 
 ---
 
@@ -49,9 +72,17 @@ To run Sherlock audit tests:
 # All Sherlock tests
 FOUNDRY_PROFILE=dev forge test --match-path "test/unit/sherlock/*.t.sol" -vvv
 
-# Specific issue
-FOUNDRY_PROFILE=dev forge test --match-test "test_FlashLoanDilutionAttack" -vv
+# Stake dilution tests
+FOUNDRY_PROFILE=dev forge test --match-path "test/unit/sherlock/LevrStakingDilution.t.sol" -vv
+
+# Multiple claims tests
+FOUNDRY_PROFILE=dev forge test --match-path "test/unit/sherlock/LevrStakingMultipleClaims.t.sol" -vv
 ```
+
+**Expected Results (as of Nov 6, 2025):**
+
+- Dilution tests: 2/2 PASSING ✅ (vulnerability FIXED)
+- Multiple claims tests: 3/3 PASSING ✅ (vulnerability DOES NOT EXIST)
 
 ---
 
@@ -72,14 +103,16 @@ FOUNDRY_PROFILE=dev forge test --match-test "test_FlashLoanDilutionAttack" -vv
 ```
 spec/sherlock/
 ├── README.md                           # Index and workflow guide
-└── SHERLOCK_[ISSUE_NAME].md            # Self-sufficient issue analysis
-                                        # ↳ Contains: analysis, tests, fix, context
+├── SHERLOCK_STAKE_DILUTION.md          # Flash loan dilution attack (FIXED)
+└── SHERLOCK_MULTIPLE_CLAIMS.md         # Multiple claims attack (ALREADY FIXED)
 
 test/unit/sherlock/
-└── [IssueClass].t.sol                  # POC tests (referenced in issue .md)
+├── LevrStakingDilution.t.sol          # Dilution POC tests (2/2 PASSING)
+└── LevrStakingMultipleClaims.t.sol    # Multiple claims POC tests (3/3 PASSING)
 ```
 
-**Each SHERLOCK_*.md file contains:**
+**Each SHERLOCK\_\*.md file contains:**
+
 1. Executive Summary (impact, status, quick facts)
 2. Vulnerability Details (root cause, attack mechanism)
 3. Test Results (POC output, actual failures)
@@ -95,12 +128,14 @@ test/unit/sherlock/
 
 - **VALIDATING** - Tests being written, vulnerability analysis in progress
 - **CONFIRMED** - Vulnerability validated (tests FAILING as expected)
-- **REJECTED** - Tests prove issue is invalid (tests PASS with current code)
-- **FIXED** - Vulnerability patched and verified (tests now PASS)
+- **REJECTED** - Tests prove issue is invalid (tests PASS - never was vulnerable)
+- **FIXED** - Vulnerability was real, now patched and verified (tests now PASS)
+- **NO ACTION NEEDED** - Issue reported, but fix already in place (tests PASS)
 - **ARCHIVED** - Completed issue moved to `spec/archive/audits/sherlock/`
 
 ---
 
 **Last Updated:** November 6, 2025  
-**Maintainer:** Development Team
-
+**Maintainer:** Development Team  
+**Active Issues:** 2 (both resolved via debt accounting)  
+**Test Status:** 5/5 tests PASSING ✅
