@@ -453,22 +453,15 @@ contract LevrGovernor_StuckProcessTest is Test {
         // Verify marked as executed
         assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
 
-        console2.log('Execution marked as defeated due to insufficient balance');
+        console2.log('Execution completed (insufficient balance caught in try-catch)');
 
-        // FIX [OCT-31-CRITICAL-1]: Cycle does NOT advance (defeated proposals don't trigger new cycle)
+        // SIMPLIFICATION: Winner executes and auto-advances cycle (even if execution fails)
+        // execute() always calls _startNewCycle() at the end (line 207)
         uint256 cycleAfter = governor.currentCycleId();
-        assertEq(cycleAfter, 1, 'Cycle unchanged (defeated proposals dont advance cycle)');
+        assertEq(cycleAfter, 2, 'Cycle auto-advances after winner execution (even if failed)');
 
-        // Manual recovery: CAN start new cycle now (no executable proposals remain)
-        // FIX: Since proposal is marked as executed (defeated), no executable proposals block new cycle
-        governor.startNewCycle(); // Should succeed
-
-        assertEq(governor.currentCycleId(), 2, 'Should advance to cycle 2');
-
-        console2.log('SUCCESS: Can start new cycle - defeated proposal marked as executed');
-
-        console2.log('SUCCESS: Proposal executed after treasury refund');
-        assertEq(governor.currentCycleId(), 2, 'Cycle advances after execution');
+        console2.log('SUCCESS: Cycle advanced automatically');
+        console2.log('Insufficient balance handled via try-catch, governance continues');
     }
 
     /// @notice Test token-agnostic treasury depletion (WETH vs underlying)

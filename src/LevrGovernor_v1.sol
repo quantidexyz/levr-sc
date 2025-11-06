@@ -171,14 +171,6 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             return;
         }
 
-        // Defeat if treasury lacks sufficient balance
-        uint256 treasuryBalance = IERC20(proposal.token).balanceOf(treasury);
-        if (treasuryBalance < proposal.amount) {
-            proposal.executed = true;
-            emit ProposalDefeated(proposalId);
-            return;
-        }
-
         // Check this is the winner for the cycle
         uint256 winnerId = _getWinner(proposal.cycleId);
         if (winnerId != proposalId) {
@@ -206,12 +198,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             )
         {
             emit ProposalExecuted(proposalId, _msgSender());
-        } catch Error(string memory reason) {
-            emit ProposalExecutionFailed(proposalId, reason);
-        } catch (bytes memory) {
-            emit ProposalExecutionFailed(proposalId, 'execution_reverted');
+        } catch {
+            // Simplified catch: no revert data binding prevents revert bombs
+            emit ProposalExecutionFailed(proposalId, 'execution_failed');
         }
-
         // Automatically start new cycle after execution attempt (executor pays gas)
         _startNewCycle();
     }
@@ -519,7 +509,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         emit CycleStarted(cycleId, start, proposalEnd, voteEnd);
     }
 
-    /// @dev Prevent cycle advancement if executable proposals remain (prevents orphaning)
+    /// @dev Prevent cycle advancement if any active/executable proposals remain
     function _checkNoExecutableProposals() internal view {
         uint256[] memory proposals = _cycleProposals[_currentCycleId];
         for (uint256 i = 0; i < proposals.length; i++) {
@@ -528,7 +518,14 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
             if (proposal.executed) continue;
 
-            if (_state(pid) == ProposalState.Succeeded) {
+            ProposalState currentState = _state(pid);
+
+            // Prevent advancement if proposal is in any active state
+            if (
+                currentState == ProposalState.Pending ||
+                currentState == ProposalState.Active ||
+                currentState == ProposalState.Succeeded
+            ) {
                 revert ExecutableProposalsRemaining();
             }
         }
