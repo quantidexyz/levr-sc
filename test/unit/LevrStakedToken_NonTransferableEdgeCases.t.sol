@@ -362,31 +362,36 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 aliceClaimed = underlying.balanceOf(alice) - aliceBalBefore;
         assertApproxEqAbs(aliceClaimed, aliceClaimable, 1, 'Alice claims what was claimable');
 
-        // After Alice claims, pool is reduced
-        // Bob's NEW claimable is based on reduced pool (pool-based system!)
+        // DEBT ACCOUNTING: After Alice claims, Bob's claimable is INDEPENDENT
+        // With new accounting system, Bob's rewards don't depend on Alice's claim order
         uint256 bobClaimableAfterAlice = staking.claimableRewards(bob, address(underlying));
 
         vm.startPrank(bob);
         uint256 bobBalBefore = underlying.balanceOf(bob);
         staking.claimRewards(tokens, bob);
         uint256 bobClaimed = underlying.balanceOf(bob) - bobBalBefore;
+
+        // Bob gets his full share (1000) regardless of when Alice claimed
         assertApproxEqAbs(
             bobClaimed,
-            bobClaimableAfterAlice,
-            1,
-            'Bob claims his share of remaining pool'
+            1000 ether, // Bob gets 50% of total rewards (independent of claim order)
+            1 ether,
+            'Bob gets 50% of reduced pool'
         );
 
-        // POOL-BASED NOTE: Claim order creates timing dependency
-        // Alice claims 50% of pool (1000), Bob claims 50% of REMAINING pool (500)
-        // This leaves 500 in pool - users should claim together or use auto-claim on unstake
-        // Total distributed to users (not including pool remainder)
-        uint256 totalClaimedByUsers = aliceClaimed + bobClaimed;
-        uint256 poolRemainder = 2000 ether - totalClaimedByUsers;
+        // DEBT ACCOUNTING BENEFIT: No claim order dependency
+        // Both Alice and Bob get 1000 each (their debt was set when they staked)
+        // Total distributed: 2000 (all rewards claimed, nothing left in pool)
+        assertEq(aliceClaimed, 1000 ether, 'Alice gets 50% of total rewards');
+        assertEq(
+            bobClaimed,
+            1000 ether,
+            'Bob gets 50% of total rewards (independent of claim order)'
+        );
 
-        assertEq(aliceClaimed, 1000 ether, 'Alice gets 50% of original pool');
-        assertEq(bobClaimed, 500 ether, 'Bob gets 50% of reduced pool');
-        assertApproxEqAbs(poolRemainder, 500 ether, 1, 'Pool remainder from claim timing');
+        // With debt accounting, all rewards are distributed (no remainder from claim timing)
+        uint256 totalClaimedByUsers = aliceClaimed + bobClaimed;
+        assertEq(totalClaimedByUsers, 2000 ether, 'All rewards distributed fairly');
     }
 
     /// @notice Test multiple users with independent operations

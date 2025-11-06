@@ -600,17 +600,17 @@ contract LevrExternalAudit4ValidationTest is Test, LevrFactoryDeployHelper {
             '%'
         );
 
-        // Note: Pool-based rewards mean Alice CAN be diluted, but this is expected behavior
-        // After investigation, this is NOT a vulnerability (standard DeFi design)
-        // This test documents the behavior - dilution can happen but is not exploitable
-        // See: test/unit/LevrHigh4Investigation.t.sol for full analysis
+        // FIXED: With new debt accounting system, Alice is PROTECTED from dilution
+        // Alice staked before rewards accrued, so her debt was set before attacker joined
+        // Attacker's stake doesn't dilute Alice because rewards are tracked per-user via debt
+        // This fix prevents the flash loan attack documented in spec/sherlock/
 
-        // Alice gets diluted amount (this is expected in pool-based systems)
+        // Alice gets her FULL share (not diluted by attacker's front-run)
         assertApproxEqRel(
             aliceReceived,
-            55.5e18, // Alice's diluted share (500/9000 of 1000 WETH)
-            0.1e18,
-            'Alice receives diluted share (expected pool-based behavior)'
+            500e18, // Alice's protected share (50% of rewards, she staked before attacker)
+            0.01e18, // 1% tolerance for rounding
+            'Alice receives her full share (protected by debt accounting)'
         );
     }
 
