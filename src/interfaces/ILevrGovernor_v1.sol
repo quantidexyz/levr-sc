@@ -17,9 +17,9 @@ interface ILevrGovernor_v1 {
     enum ProposalState {
         Pending, // Created, voting not started
         Active, // Voting in progress
-        Succeeded, // Eligible for execution
+        Succeeded, // Eligible for execution (can be retried if previous attempts failed)
         Defeated, // Quorum or approval not met
-        Executed // Winner executed on-chain
+        Executed // Winner executed successfully (funds transferred)
     }
 
     // ============ Structs ============
@@ -39,7 +39,7 @@ interface ILevrGovernor_v1 {
         uint256 yesVotes; // Total yes votes (VP)
         uint256 noVotes; // Total no votes (VP)
         uint256 totalBalanceVoted; // Total sToken balance that voted (for quorum)
-        bool executed; // Whether proposal has been executed
+        bool executed; // Whether proposal was successfully executed (funds transferred)
         uint256 cycleId; // Governance cycle ID
         ProposalState state; // Current state (computed)
         bool meetsQuorum; // Whether quorum threshold met (computed)
@@ -111,6 +111,9 @@ interface ILevrGovernor_v1 {
 
     /// @notice Function is internal only (cannot be called directly)
     error InternalOnly();
+
+    /// @notice Proposal is not in the current cycle (cannot execute old proposals)
+    error ProposalNotInCurrentCycle();
 
     // ============ Events ============
 
@@ -244,6 +247,12 @@ interface ILevrGovernor_v1 {
     /// @notice Get the current active cycle ID
     /// @return cycleId The current cycle ID (0 if no active cycle)
     function currentCycleId() external view returns (uint256 cycleId);
+
+    /// @notice Get number of execution attempts for a proposal
+    /// @dev Used to determine if manual cycle advancement is allowed (requires 3+ attempts)
+    /// @param proposalId The proposal ID
+    /// @return Number of execution attempts (0 if never attempted)
+    function executionAttempts(uint256 proposalId) external view returns (uint256);
 
     /// @notice Get the winning proposal for a cycle
     /// @dev Returns the proposal with highest yes votes that met quorum + approval

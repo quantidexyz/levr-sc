@@ -263,57 +263,49 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         console2.log('Active count after successful execute:', countAfterSuccess);
         console2.log('(Should be 1: proposal 2 still active)');
 
-        // Try to execute proposal 2 - should fail quorum - FIX [OCT-31-CRITICAL-1]
-        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute proposal 2 - should fail (not in current cycle)
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
         governor.execute(pid2);
 
-        // Verify P2 marked as executed
-        assertTrue(governor.getProposal(pid2).executed, 'P2 should be executed');
+        // NEW BEHAVIOR: P2 NOT executed (can't execute old cycle proposals)
+        assertFalse(governor.getProposal(pid2).executed, 'P2 should NOT be executed (wrong cycle)');
 
         uint256 countAfterFailed = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
-        console2.log('Active count after failed execute:', countAfterFailed);
-
-        if (countAfterFailed == 1) {
-            console2.log('\nBUG: Count still = 1 even though proposal 2 defeated');
-            console2.log('Proposal 2 is blocking the slot permanently');
-        } else {
-            console2.log('\nSafe: Count decremented somehow');
-        }
+        console2.log('Active count after cycle advance:', countAfterFailed);
+        
+        // Count resets to 0 when cycle advances (from pid1 execution)
+        assertEq(countAfterFailed, 0, 'Count should be 0 (cycle advanced, count reset)');
+        
+        console2.log('\nSafe: Count reset to 0 when cycle advanced');
 
         // Can we create new proposals in cycle 2?
         console2.log('\nAttempting to create new proposals in cycle 2...');
 
+        // NEW BEHAVIOR: Count is 0, can create proposals in new cycle
         vm.prank(alice);
-        if (countAfterFailed < 2) {
-            governor.proposeBoost(address(underlying), 3000 ether);
-            console2.log('Created proposal 3: SUCCESS');
+        governor.proposeBoost(address(underlying), 3000 ether);
+        console2.log('Created proposal 3 in cycle 2: SUCCESS');
 
-            uint256 countNow = governor.activeProposalCount(
-                ILevrGovernor_v1.ProposalType.BoostStakingPool
-            );
-            console2.log('Active count now:', countNow);
+        uint256 countNow = governor.activeProposalCount(
+            ILevrGovernor_v1.ProposalType.BoostStakingPool
+        );
+        console2.log('Active count now:', countNow);
+        assertEq(countNow, 1, 'Count should be 1 (new proposal in cycle 2)');
 
-            if (countNow == 2) {
-                console2.log('Count incremented to 2');
+        // Can create another
+        vm.prank(bob);
+        governor.proposeBoost(address(underlying), 4000 ether);
+        console2.log('Created proposal 4 in cycle 2: SUCCESS');
+        
+        assertEq(
+            governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
+            2,
+            'Count should be 2 (two proposals in cycle 2)'
+        );
 
-                // Try to create 3rd
-                vm.prank(bob);
-                vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-                governor.proposeBoost(address(underlying), 4000 ether);
-                console2.log('Cannot create 4th: maxActiveProposals = 2');
-
-                console2.log(
-                    '\nCONCLUSION: Count is GLOBAL, defeated proposals DO block new ones!'
-                );
-            }
-        } else {
-            vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-            governor.proposeBoost(address(underlying), 3000 ether);
-            console2.log('BLOCKED: Cannot create new proposal');
-            console2.log('BUG CONFIRMED: Defeated proposal from cycle 1 blocks cycle 2');
-        }
+        console2.log('\nCONCLUSION: Count resets per cycle, no gridlock!');
     }
 
     /// @notice Test: What if ALL proposals in a cycle fail?

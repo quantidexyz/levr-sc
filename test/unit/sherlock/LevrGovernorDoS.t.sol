@@ -392,30 +392,38 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
         console2.log('ASSERTION: Should handle gracefully');
         console2.log('');
 
-        // Execute should handle large revert data
-        governor.execute(maliciousProposalId);
+        // Execute multiple times (will fail due to revert bomb but doesn't cause DoS)
+        governor.execute(maliciousProposalId); // Attempt 1
+        governor.execute(maliciousProposalId); // Attempt 2
+        governor.execute(maliciousProposalId); // Attempt 3
 
-        console2.log('Execute completed successfully');
+        console2.log('Execute completed 3 times (handled revert bomb)');
         console2.log('');
 
-        // ASSERTION: Proposal should be finalized
+        // NEW BEHAVIOR: Proposal stays in Succeeded (can retry)
         ILevrGovernor_v1.ProposalState stateAfter = governor.state(maliciousProposalId);
         console2.log('State after execute:', uint256(stateAfter));
 
-        assertTrue(
-            stateAfter == ILevrGovernor_v1.ProposalState.Executed ||
-                stateAfter == ILevrGovernor_v1.ProposalState.Defeated,
-            'Proposal should be finalized'
+        assertEq(
+            uint256(stateAfter),
+            uint256(ILevrGovernor_v1.ProposalState.Succeeded),
+            'Proposal should stay in Succeeded state (can retry)'
         );
+        
+        // Execution attempts tracked
+        assertEq(governor.executionAttempts(maliciousProposalId), 3, 'Should have 3 attempts');
 
-        // ASSERTION: Cycle should have advanced
-        uint256 cycleIdAfter = governor.currentCycleId();
-        assertGt(cycleIdAfter, 1, 'Cycle should have advanced');
+        // Cycle should NOT have auto-advanced (failed execution)
+        assertEq(governor.currentCycleId(), 1, 'Cycle should NOT auto-advance on failure');
+        
+        // Manual advance works (after 3 attempts)
+        governor.startNewCycle();
+        assertEq(governor.currentCycleId(), 2, 'Manual advance works');
 
         console2.log('');
         console2.log('[TEST PASSES - NOT VULNERABLE]');
         console2.log('Revert bomb handled correctly by catch blocks');
-        console2.log('No OOG during revert data copy');
+        console2.log('No DoS - governance can manually advance');
     }
 
     // ============================================================================

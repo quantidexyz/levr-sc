@@ -114,11 +114,11 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         // Move past voting window
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Execute once (should succeed)
+        // Execute once (should succeed and auto-advance to cycle 2)
         governor.execute(pid);
 
-        // Try to execute again (should revert)
-        vm.expectRevert(ILevrGovernor_v1.AlreadyExecuted.selector);
+        // Try to execute again (should revert - proposal from cycle 1, now in cycle 2)
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
         governor.execute(pid);
     }
 
@@ -473,11 +473,11 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         // Move past voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Execute winner (pid1) - this marks cycle as executed
+        // Execute winner (pid1) - this marks cycle as executed and auto-advances to cycle 2
         governor.execute(pid1);
 
-        // Try to execute loser (pid2) - should fail with NotWinner since only winner can execute
-        vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
+        // Try to execute loser (pid2) - now fails with ProposalNotInCurrentCycle (cycle advanced)
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
         governor.execute(pid2);
     }
 

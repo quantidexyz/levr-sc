@@ -567,13 +567,21 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         console2.log('\nTreasury drained to: 5000 tokens');
         console2.log('Proposal needs: 10000 tokens');
 
-        // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
-        // OLD: vm.expectRevert(ILevrGovernor_v1.InsufficientTreasuryBalance.selector);
-        governor.execute(pid);
+        // Execute multiple times (will fail in try-catch due to insufficient balance)
+        governor.execute(pid); // Attempt 1
+        governor.execute(pid); // Attempt 2
+        governor.execute(pid); // Attempt 3
 
-        // Verify marked as executed
-        assertTrue(governor.getProposal(pid).executed, 'Proposal should be executed');
+        // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
+        assertFalse(governor.getProposal(pid).executed, 'Proposal should NOT be executed');
+        
+        // Execution attempts tracked
+        assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
+        
+        // Manual cycle advance (after 3 attempts)
+        governor.startNewCycle();
+        assertEq(governor.currentCycleId(), 2, 'Cycle advances manually');
 
-        console2.log('SAFE: Treasury balance validated at execution, marked as defeated');
+        console2.log('SAFE: Insufficient balance caught in try-catch, allows retry + manual advance');
     }
 }

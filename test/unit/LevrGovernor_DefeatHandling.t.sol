@@ -129,9 +129,13 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
             'Count stays same (only resets at cycle start)'
         );
 
-        // Verify cannot retry (already executed)
-        vm.expectRevert(ILevrGovernor_v1.AlreadyExecuted.selector);
+        // NEW BEHAVIOR: Can call execute again (just returns early with ProposalDefeated event)
+        // No revert, but no state change either (already defeated)
         governor.execute(pid);
+        
+        // Verify still marked as executed
+        prop = governor.getProposal(pid);
+        assertTrue(prop.executed, 'Still marked as executed');
 
         console2.log('[PASS] No retry attack - proposal marked as executed');
     }
@@ -217,19 +221,30 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
             'tokens'
         );
 
-        // Execute (insufficient balance caught by try-catch)
-        governor.execute(pid);
+        // Execute multiple times (insufficient balance caught by try-catch)
+        governor.execute(pid); // Attempt 1
+        governor.execute(pid); // Attempt 2
+        governor.execute(pid); // Attempt 3
 
-        // SIMPLIFICATION: Insufficient balance proposals are marked Executed (failed)
-        // They don't emit ProposalDefeated anymore (balanceOf check removed)
-        // Count stays at 1 until cycle reset (proposal counts as executed)
+        // NEW BEHAVIOR: Failed execution doesn't auto-advance cycle
+        // Count stays at 1 because cycle hasn't advanced yet
+        assertEq(
+            governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
+            1,
+            'Count stays same (cycle has not advanced on failure)'
+        );
+        
+        // Manually advance cycle (after 3 attempts)
+        governor.startNewCycle();
+        
+        // NOW count resets to 0 after cycle advance
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
             0,
-            'Count resets at cycle start (cycle advanced after execute)'
+            'Count resets at cycle start (after manual advance)'
         );
 
-        console2.log('[PASS] Insufficient balance handled via try-catch, cycle advances');
+        console2.log('[PASS] Insufficient balance handled via try-catch, manual cycle advance works');
     }
 
     // ============================================================================
@@ -375,12 +390,16 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         vm.prank(address(governor));
         treasury.transfer(address(underlying), charlie, 99_000 ether);
 
-        // Execute all three - all should be defeated
-        governor.execute(pid1); // Quorum fail
-        governor.execute(pid2); // Approval fail
-        governor.execute(pid3); // Treasury fail
+        // Execute all three
+        governor.execute(pid1); // Quorum fail - early return, marks executed
+        governor.execute(pid2); // Approval fail - early return, marks executed
+        
+        // Execute pid3 three times (treasury fail - catch block, NOT marked executed)
+        governor.execute(pid3); // Attempt 1
+        governor.execute(pid3); // Attempt 2
+        governor.execute(pid3); // Attempt 3
 
-        // Verify all marked as executed
+        // Verify P1 and P2 marked as executed (defeated early)
         assertTrue(
             governor.getProposal(pid1).executed,
             'P1 should be executed (defeated - quorum)'
@@ -389,26 +408,42 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
             governor.getProposal(pid2).executed,
             'P2 should be executed (defeated - approval)'
         );
-        assertTrue(
+        
+        // NEW BEHAVIOR: P3 NOT marked executed (failed in try-catch, can retry)
+        assertFalse(
             governor.getProposal(pid3).executed,
-            'P3 should be executed (winner but failed)'
+            'P3 should NOT be executed (winner but failed - can retry)'
         );
 
-        // SIMPLIFICATION: pid3 was the winner (most YES votes) so it executed
-        // Even though insufficient balance, it's still the winner
-        // execute() on winner calls _startNewCycle(), resetting counts to 0
+        // NEW BEHAVIOR: Cycle did NOT auto-advance (failed execution)
+        // Counts stay at current values
+        assertEq(
+            governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
+            2,
+            'Boost count stays same (cycle has not advanced)'
+        );
+        assertEq(
+            governor.activeProposalCount(ILevrGovernor_v1.ProposalType.TransferToAddress),
+            1,
+            'Transfer count stays same (cycle has not advanced)'
+        );
+        
+        // Manual cycle advance (after 3 execution attempts)
+        governor.startNewCycle();
+        
+        // NOW counts reset
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
             0,
-            'Boost count resets to 0 (pid3 winner executed and advanced cycle)'
+            'Boost count resets after manual advance'
         );
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.TransferToAddress),
             0,
-            'Transfer count resets to 0 (cycle advanced)'
+            'Transfer count resets after manual advance'
         );
 
-        console2.log('[PASS] All defeat reasons handled, winner advanced cycle');
+        console2.log('[PASS] All defeat reasons handled, manual advance works');
     }
 
     // ============================================================================
@@ -456,18 +491,18 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         console2.log('Cycle 2: Count reset to 0');
 
-        // Execute old Cycle 1 proposal
-        // FIX: Should handle count > 0 check gracefully
+        // Execute old Cycle 1 proposal - should revert (not in current cycle)
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
         governor.execute(pid);
 
-        // Verify count STILL 0 (no underflow)
+        // Verify count STILL 0 (no underflow, proposal wasn't executed)
         assertEq(
             governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool),
             0,
-            'Count should still be 0 (underflow prevented)'
+            'Count should still be 0 (old proposal rejected)'
         );
 
-        console2.log('[PASS] Underflow protection working correctly');
+        console2.log('[PASS] Old proposals properly rejected, no underflow');
     }
 
     // ============================================================================

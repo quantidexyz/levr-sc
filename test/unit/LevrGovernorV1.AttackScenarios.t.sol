@@ -571,11 +571,11 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         assertEq(treasuryBalanceBefore - treasuryBalanceAfter, 50_000 ether, 'Treasury drained');
         assertEq(underlying.balanceOf(maliciousRecipient), 50_000 ether, 'Attacker received funds');
 
-        // Verify other proposals CANNOT execute (not winner)
-        vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
+        // Verify other proposals CANNOT execute (cycle advanced after winner executed)
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
         governor.execute(pid1);
 
-        vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
         governor.execute(pid3);
     }
 
