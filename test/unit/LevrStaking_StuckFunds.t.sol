@@ -27,16 +27,14 @@ contract LevrStaking_StuckFundsTest is Test {
         return address(0);
     }
 
-
     function streamWindowSeconds(address) external pure returns (uint32) {
         return 3 days;
     }
 
-
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         rewardToken = new MockERC20('Reward', 'RWD');
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(this));
         sToken = new LevrStakedToken_v1(
             'Staked Token',
             'sTKN',
@@ -45,7 +43,7 @@ contract LevrStaking_StuckFundsTest is Test {
             address(staking)
         );
 
-        staking.initialize(address(underlying), address(sToken), treasury, address(this), new address[](0));
+        staking.initialize(address(underlying), address(sToken), treasury, new address[](0));
     }
 
     // ============ Flow 22: Escrow Balance Mismatch Tests ============

@@ -29,12 +29,15 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @notice Minimum reward amount (prevents reward token slot DoS)
     uint256 public constant MIN_REWARD_AMOUNT = 1e15;
 
-    constructor(address trustedForwarder) ERC2771ContextBase(trustedForwarder) {}
+    constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
+        if (factory_ == address(0)) revert ZeroAddress();
+        factory = factory_;
+    }
 
     address public underlying;
     address public stakedToken;
     address public treasury;
-    address public factory;
+    address public immutable factory;
 
     uint256 private _totalStaked;
 
@@ -51,25 +54,19 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         address underlying_,
         address stakedToken_,
         address treasury_,
-        address factory_,
         address[] memory initialWhitelistedTokens
     ) external {
         // Ensure initialization only happens once
         if (underlying != address(0)) revert AlreadyInitialized();
-        if (
-            underlying_ == address(0) ||
-            stakedToken_ == address(0) ||
-            treasury_ == address(0) ||
-            factory_ == address(0)
-        ) revert ZeroAddress();
+        if (underlying_ == address(0) || stakedToken_ == address(0) || treasury_ == address(0))
+            revert ZeroAddress();
 
-        // Only factory can initialize
-        if (_msgSender() != factory_) revert OnlyFactory();
+        // Only factory can initialize (factory is immutable, set in constructor)
+        if (_msgSender() != factory) revert OnlyFactory();
 
         underlying = underlying_;
         stakedToken = stakedToken_;
         treasury = treasury_;
-        factory = factory_;
 
         // Initialize underlying token with pool-based state (ALWAYS whitelisted - separate from array)
         _tokenState[underlying_] = ILevrStaking_v1.RewardTokenState({

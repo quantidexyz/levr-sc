@@ -59,7 +59,7 @@ contract LevrStakingV1AprSpikeTest is Test {
         weth = new MockERC20('Wrapped ETH', 'WETH');
 
         // Deploy staking and staked token
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(factory));
         stakedToken = new LevrStakedToken_v1(
             'Staked Token',
             'sUND',
@@ -74,13 +74,7 @@ contract LevrStakingV1AprSpikeTest is Test {
         address[] memory rewardTokens = new address[](1);
         rewardTokens[0] = address(weth);
         vm.prank(address(factory));
-        staking.initialize(
-            address(underlying),
-            address(stakedToken),
-            treasury,
-            address(factory),
-            rewardTokens
-        );
+        staking.initialize(address(underlying), address(stakedToken), treasury, rewardTokens);
 
         // Setup alice with initial stake
         underlying.mint(alice, INITIAL_STAKE);
@@ -296,7 +290,7 @@ contract LevrStakingV1AprSpikeTest is Test {
         console2.log('=== APR WITH LOW TOTAL STAKE ===\n');
 
         // Create a new scenario with low stake
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
+        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0), address(factory));
         LevrStakedToken_v1 newStakedToken = new LevrStakedToken_v1(
             'Staked Token Low',
             'sUND2',
@@ -310,7 +304,6 @@ contract LevrStakingV1AprSpikeTest is Test {
             address(underlying),
             address(newStakedToken),
             treasury,
-            address(factory),
             new address[](0)
         );
 
@@ -352,7 +345,7 @@ contract LevrStakingV1AprSpikeTest is Test {
         // totalStaked = (1000 * 365 / 3 * 10_000) / 12500
         // totalStaked ≈ 97,333 tokens
 
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
+        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0), address(factory));
         LevrStakedToken_v1 newStakedToken = new LevrStakedToken_v1(
             'Staked Token 125',
             'sUND3',
@@ -366,7 +359,6 @@ contract LevrStakingV1AprSpikeTest is Test {
             address(underlying),
             address(newStakedToken),
             treasury,
-            address(factory),
             new address[](0)
         );
 

@@ -116,13 +116,12 @@ interface ILevrStaking_v1 {
     /// @param underlying The underlying token to stake (auto-whitelisted - not in array)
     /// @param stakedToken The staked token to mint/burn
     /// @param treasury The treasury address
-    /// @param factory The Levr factory instance
     /// @param initialWhitelistedTokens Initial whitelist (e.g., WETH - excludes underlying)
+    /// @dev Factory address is set immutably in constructor to prevent front-run attacks
     function initialize(
         address underlying,
         address stakedToken,
         address treasury,
-        address factory,
         address[] memory initialWhitelistedTokens
     ) external;
 

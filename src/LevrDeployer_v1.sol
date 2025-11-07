@@ -60,7 +60,6 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
             clankerToken,
             project.stakedToken,
             project.treasury,
-            factory_,
             initialWhitelistedTokens
         );
 

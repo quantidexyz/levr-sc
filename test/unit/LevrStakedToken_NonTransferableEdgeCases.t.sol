@@ -54,7 +54,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         );
         underlying = new MockERC20('Underlying', 'UND');
 
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(factory));
         stakedToken = new LevrStakedToken_v1(
             'Staked',
             'sUND',
@@ -77,7 +77,6 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
             address(underlying),
             address(stakedToken),
             address(treasury),
-            address(factory),
             new address[](0)
         );
 

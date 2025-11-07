@@ -156,7 +156,8 @@ contract LevrFactoryDeployHelper is Test {
     ) internal {
         // Initialize staking with reward tokens already whitelisted
         // Note: underlying is always whitelisted automatically, separate from the array
-        staking.initialize(underlying, stakedToken, treasury, factory, rewardTokens);
+        // Factory address is set in constructor, not in initialize
+        staking.initialize(underlying, stakedToken, treasury, rewardTokens);
     }
 
     /// @notice Helper to initialize staking with a single reward token whitelisted

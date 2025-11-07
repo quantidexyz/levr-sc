@@ -89,7 +89,7 @@ contract MockStaking is ILevrStaking_v1 {
         return 0;
     }
 
-    function initialize(address, address, address, address, address[] memory) external override {}
+    function initialize(address, address, address, address[] memory) external override {}
 
     function unwhitelistToken(address) external override {}
 

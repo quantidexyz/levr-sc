@@ -56,7 +56,7 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
         underlying = new MockERC20('Underlying', 'UND');
 
         // Create staking and staked token directly
-        staking = new LevrStaking_v1(address(forwarder));
+        staking = new LevrStaking_v1(address(forwarder), address(factory));
         stakedToken = new LevrStakedToken_v1(
             'Staked Token',
             'sUND',
@@ -70,7 +70,6 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
         staking.initialize(
             address(underlying),
             address(stakedToken),
-            address(factory),
             address(factory),
             new address[](0)
         );

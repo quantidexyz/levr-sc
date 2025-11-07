@@ -45,7 +45,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
 
         // Deploy treasury, staking, staked token
         treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(factory));
         stakedToken = new LevrStakedToken_v1(
             'Staked Token',
             'sUND',
@@ -60,7 +60,6 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
             address(underlying),
             address(stakedToken),
             address(treasury),
-            address(factory),
             new address[](0)
         );
 

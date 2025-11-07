@@ -68,7 +68,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         address deployer = _msgSender();
 
         treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
-        staking = address(new LevrStaking_v1(trustedForwarder()));
+        staking = address(new LevrStaking_v1(trustedForwarder(), address(this)));
 
         _preparedContracts[deployer] = ILevrFactory_v1.PreparedContracts({
             treasury: treasury,

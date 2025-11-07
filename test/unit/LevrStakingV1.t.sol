@@ -26,7 +26,7 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         // Pass address(0) for forwarder since we're not testing meta-transactions here
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(this));
         sToken = new LevrStakedToken_v1(
             'Staked Token',
             'sTKN',

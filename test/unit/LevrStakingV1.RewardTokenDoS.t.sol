@@ -22,7 +22,7 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         rewardToken = new MockERC20('Reward', 'RWD');
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(this));
         sToken = new LevrStakedToken_v1(
             'Staked Token',
             'sTKN',
@@ -34,7 +34,6 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             new address[](0)
         );
 

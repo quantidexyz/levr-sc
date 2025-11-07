@@ -60,7 +60,7 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         // Deploy contracts
         treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(factory));
         sToken = new LevrStakedToken_v1(
             'Staked Token',
             'sTKN',
@@ -86,7 +86,6 @@ contract LevrGovernor_StuckProcessTest is Test {
             address(underlying),
             address(sToken),
             address(treasury),
-            address(factory),
             new address[](0)
         );
 

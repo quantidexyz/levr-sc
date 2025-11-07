@@ -21,7 +21,7 @@ contract LevrStaking_InitialWhitelist_Validation is Test, LevrFactoryDeployHelpe
     function setUp() public {
         underlying = new MockERC20('Underlying', 'UND');
         rewardToken = new MockERC20('Reward', 'RWD');
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(this));
         sToken = new LevrStakedToken_v1(
             'Staked Token',
             'sTKN',
@@ -61,7 +61,6 @@ contract LevrStaking_InitialWhitelist_Validation is Test, LevrFactoryDeployHelpe
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             whitelist
         );
 
@@ -90,7 +89,6 @@ contract LevrStaking_InitialWhitelist_Validation is Test, LevrFactoryDeployHelpe
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             whitelist
         );
 
@@ -123,7 +121,6 @@ contract LevrStaking_InitialWhitelist_Validation is Test, LevrFactoryDeployHelpe
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             whitelist
         );
 
@@ -149,7 +146,6 @@ contract LevrStaking_InitialWhitelist_Validation is Test, LevrFactoryDeployHelpe
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             whitelist
         );
 
@@ -179,7 +175,6 @@ contract LevrStaking_InitialWhitelist_Validation is Test, LevrFactoryDeployHelpe
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             whitelist
         );
 

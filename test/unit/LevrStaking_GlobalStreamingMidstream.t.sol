@@ -55,7 +55,7 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         weth = new MockERC20('Wrapped Ether', 'WETH');
         usdc = new MockERC20('USD Coin', 'USDC');
 
-        staking = new LevrStaking_v1(address(0));
+        staking = new LevrStaking_v1(address(0), address(factory));
         stakedToken = new LevrStakedToken_v1(
             'Staked UND',
             'sUND',
@@ -74,7 +74,6 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
             address(underlying),
             address(stakedToken),
             address(this),
-            address(factory),
             rewardTokens
         );
 
