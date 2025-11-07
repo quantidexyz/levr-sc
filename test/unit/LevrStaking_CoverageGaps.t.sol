@@ -418,7 +418,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     // TEST 18: Stream Window Seconds - View Function
     // ============================================================================
     /// @dev Covers lines 394-395: streamWindowSeconds view function
-    function test_streamWindowSeconds_returnsCorrectValue() public {
+    function test_streamWindowSeconds_returnsCorrectValue() public view {
         uint32 window = staking.streamWindowSeconds();
         assertEq(window, 3 days, 'Should return 3 days');
     }

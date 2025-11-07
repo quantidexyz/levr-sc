@@ -139,9 +139,6 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
         uint256 amount,
         address recipient
     ) internal returns (uint256 proposalId) {
-        // Get current cycle
-        uint256 cycleId = governor.currentCycleId();
-
         // Attacker creates malicious proposal
         vm.prank(attacker);
         proposalId = governor.proposeTransfer(token, recipient, amount, 'Malicious Proposal');

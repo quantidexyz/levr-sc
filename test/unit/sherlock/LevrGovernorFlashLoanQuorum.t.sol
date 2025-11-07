@@ -457,4 +457,68 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
         console.log('Attack prevented: YES (VP ratio check)');
         console.log('This is the CRITICAL attack vector you mentioned - now blocked!');
     }
+
+    // ============ Test 9: CRITICAL - Legitimate Long-Term Stake + Flash Loan ============
+
+    /// @notice CRITICAL: MEV protection blocks flash loan even with substantial legitimate stake
+    /// @dev This is the most realistic attack: legit staker for 1 week tries flash loan
+    function test_MEV_CRITICAL_legitimateLongTermStake_thenFlashLoan_BLOCKED() public {
+        // Step 1: Attacker legitimately stakes 1,000 tokens
+        uint256 attackerLegitStake = 1000 ether;
+        underlying.mint(attacker, attackerLegitStake);
+        
+        vm.startPrank(attacker);
+        underlying.approve(address(staking), attackerLegitStake);
+        staking.stake(attackerLegitStake);
+        vm.stopPrank();
+
+        // Wait 1 week (accumulate substantial VP)
+        vm.warp(block.timestamp + 7 days);
+
+        uint256 attackerVPBefore = staking.getVotingPower(attacker);
+        
+        // Alice creates proposal
+        vm.prank(alice);
+        uint256 proposalId = governor.proposeTransfer(
+            address(underlying),
+            bob,
+            50 ether,
+            'Transfer to Bob'
+        );
+
+        // Advance to voting
+        vm.warp(block.timestamp + 3 days);
+
+        // Step 2: ATTACK - Flash loan 1,000,000 tokens (1000x their legit stake)
+        uint256 flashLoanAmount = 1_000_000 ether;
+        underlying.mint(attacker, flashLoanAmount);
+
+        vm.startPrank(attacker);
+        underlying.approve(address(staking), flashLoanAmount);
+        staking.stake(flashLoanAmount); // Flash loan staked!
+
+        uint256 attackerBalance = stakedToken.balanceOf(attacker);
+        uint256 attackerVPAfter = staking.getVotingPower(attacker);
+
+        // ✅ MEV PROTECTION: Vote should FAIL due to recent stake action
+        // Even though attacker has substantial VP from 1-week stake,
+        // the new stake() updated lastStakeTimestamp → must wait 1 minute
+        vm.expectRevert(ILevrGovernor_v1.StakeActionTooRecent.selector);
+        governor.vote(proposalId, true);
+
+        vm.stopPrank();
+
+        // Verify quorum was NOT inflated
+        ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(proposalId);
+        assertEq(proposal.totalBalanceVoted, 0, 'Quorum should be 0 (attack prevented)');
+
+        console.log('=== CRITICAL: 1-WEEK STAKE + FLASH LOAN ===');
+        console.log('Legit stake: 1,000 tokens for 1 week');
+        console.log('Attacker VP before flash: 7,000 token-days');
+        console.log('Flash loan: 1,000,000 tokens (1000x)');
+        console.log('Total balance after:', attackerBalance);
+        console.log('VP after flash:', attackerVPAfter);
+        console.log('MEV Protection: BLOCKED (stake updated timestamp)');
+        console.log('This is the UNGAMEABLE protection!');
+    }
 }
