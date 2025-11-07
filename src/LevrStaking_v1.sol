@@ -41,6 +41,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     // Voting power: tracks when each user started staking (time-weighted)
     mapping(address => uint256) public stakeStartTime;
 
+    // Anti-flash-loan: tracks last stake timestamp for each user (MEV protection)
+    mapping(address => uint256) private _lastStakeTimestamp;
+
     address[] private _rewardTokens;
     mapping(address => ILevrStaking_v1.RewardTokenState) private _tokenState;
 
@@ -138,6 +141,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         // Update voting power (weighted average preserves existing VP)
         stakeStartTime[staker] = _onStakeNewTimestamp(actualReceived);
+
+        // Track last stake timestamp (MEV protection - only stake inflates balance)
+        _lastStakeTimestamp[staker] = block.timestamp;
 
         // Update accounting
         _escrowBalance[underlying] += actualReceived;
@@ -634,6 +640,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     // ============ Governance Functions ============
+
+    /// @inheritdoc ILevrStaking_v1
+    function lastStakeTimestamp(address user) external view returns (uint256) {
+        return _lastStakeTimestamp[user];
+    }
 
     /// @inheritdoc ILevrStaking_v1
     function getVotingPower(address user) external view returns (uint256 votingPower) {

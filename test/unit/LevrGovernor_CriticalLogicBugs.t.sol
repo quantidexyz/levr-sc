@@ -274,7 +274,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
         underlying.mint(bob, 500 ether);
         underlying.approve(address(staking), type(uint256).max);
         staking.stake(333 ether); // Bob increases stake
-        vm.warp(block.timestamp + 1); // Small time for VP
+        vm.warp(block.timestamp + 121); // Wait 2 minutes for MEV protection
         governor.vote(pid1, false); // ~333 no
         vm.stopPrank();
 

@@ -38,7 +38,7 @@ interface ILevrGovernor_v1 {
         uint256 votingEndsAt; // Timestamp when voting ends
         uint256 yesVotes; // Total yes votes (VP)
         uint256 noVotes; // Total no votes (VP)
-        uint256 totalBalanceVoted; // Total sToken balance that voted (for quorum)
+        uint256 totalBalanceVoted; // Total voting power that voted (for quorum, flash loan protected)
         bool executed; // Whether proposal was successfully executed (funds transferred)
         uint256 cycleId; // Governance cycle ID
         ProposalState state; // Current state (computed)
@@ -96,6 +96,9 @@ interface ILevrGovernor_v1 {
 
     /// @notice Insufficient voting power to vote
     error InsufficientVotingPower();
+
+    /// @notice Stake or unstake action too recent (MEV protection)
+    error StakeActionTooRecent();
 
     /// @notice Cycle is still active, cannot start new one
     error CycleStillActive();

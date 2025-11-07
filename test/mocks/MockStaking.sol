@@ -85,6 +85,10 @@ contract MockStaking is ILevrStaking_v1 {
         return 0;
     }
 
+    function lastStakeTimestamp(address) external pure override returns (uint256) {
+        return 0;
+    }
+
     function getVotingPower(address) external pure override returns (uint256) {
         return 0;
     }
