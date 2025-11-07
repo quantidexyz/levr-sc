@@ -216,11 +216,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
                 proposal.recipient
             )
         {
-            // Execution succeeded: Mark as executed and auto-advance cycle
+            // Execution succeeded: Mark as executed (cycle advancement happens on next propose)
             proposal.executed = true;
             cycle.executed = true;
             emit ProposalExecuted(proposalId, _msgSender());
-            _startNewCycle();
         } catch {
             // Execution failed (OOG, token revert, insufficient balance, etc.)
             // Don't mark executed - allows immediate retry within same cycle
@@ -529,10 +528,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     }
 
     /// @notice Starts a new governance cycle
-    /// @dev Called in three scenarios:
-    ///      1. Bootstrap: First cycle initialization (currentCycleId == 0)
-    ///      2. Auto-advance: After successful proposal execution
-    ///      3. Manual: Via startNewCycle() after failed proposals (3+ attempts)
+    /// @dev Called in two scenarios:
+    ///      1. Auto-advance: From propose() when creating first proposal or after voting ends
+    ///      2. Manual: Via startNewCycle() after failed proposals (3+ attempts)
+    ///      Note: Cycles always start with at least one proposal to ensure proposal window is active
     function _startNewCycle() internal {
         uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds(underlying);
         uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds(underlying);
