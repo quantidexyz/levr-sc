@@ -31,8 +31,8 @@ contract MockStaking is ILevrStaking_v1 {
 
     // Minimal implementations for interface compliance
 
-    function PRECISION() external pure override returns (uint256) {
-        return 1e18;
+    function TARGET_DECIMALS() external pure override returns (uint256) {
+        return 18;
     }
 
     function SECONDS_PER_DAY() external pure override returns (uint256) {
@@ -41,10 +41,6 @@ contract MockStaking is ILevrStaking_v1 {
 
     function BASIS_POINTS() external pure override returns (uint256) {
         return 10_000;
-    }
-
-    function MIN_REWARD_AMOUNT() external pure override returns (uint256) {
-        return 1e15;
     }
 
     function underlying() external pure override returns (address) {
@@ -61,6 +57,14 @@ contract MockStaking is ILevrStaking_v1 {
 
     function factory() external pure override returns (address) {
         return address(0);
+    }
+
+    function underlyingDecimals() external pure override returns (uint8) {
+        return 18;
+    }
+
+    function precision() external pure override returns (uint256) {
+        return 1e18;
     }
 
     function stake(uint256) external override {}

@@ -6,17 +6,14 @@ pragma solidity 0.8.30;
 interface ILevrStaking_v1 {
     // ============ Constants ============
 
-    /// @notice Precision scale for token decimals in voting power calculations
-    function PRECISION() external view returns (uint256);
+    /// @notice Target decimals for normalization (18 decimals)
+    function TARGET_DECIMALS() external view returns (uint256);
 
     /// @notice Seconds per day (86400 seconds)
     function SECONDS_PER_DAY() external view returns (uint256);
 
     /// @notice Basis points for APR calculations (10000 = 100%)
     function BASIS_POINTS() external view returns (uint256);
-
-    /// @notice Minimum reward amount to prevent DoS attack
-    function MIN_REWARD_AMOUNT() external view returns (uint256);
 
     // ============ Structs ============
 
@@ -59,6 +56,7 @@ interface ILevrStaking_v1 {
     error RewardTooSmall();
     error TokenNotWhitelisted();
     error InsufficientAvailable();
+    error InvalidTokenDecimals();
 
     // ============ Events ============
 
@@ -109,6 +107,12 @@ interface ILevrStaking_v1 {
 
     /// @notice The Levr factory instance
     function factory() external view returns (address);
+
+    /// @notice Underlying token decimals (queried at initialization)
+    function underlyingDecimals() external view returns (uint8);
+
+    /// @notice Token precision: 10^underlyingDecimals (min reward = precision/1000)
+    function precision() external view returns (uint256);
 
     // ============ Functions ============
 
