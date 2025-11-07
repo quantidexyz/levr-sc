@@ -328,7 +328,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         // Auto-start new cycle if needed
         // During auto-advancement, check for Pending/Active proposals but skip 3-attempt requirement
-        if (_currentCycleId == 0 || _needsNewCycle()) {
+        if (_needsNewCycle()) {
             _checkNoExecutableProposals(false); // false = skip execution attempt check
             _startNewCycle();
         }
