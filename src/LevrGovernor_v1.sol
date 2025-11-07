@@ -154,13 +154,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     /// @inheritdoc ILevrGovernor_v1
     function startNewCycle() external {
-        if (_currentCycleId == 0) {
-            // Bootstrap: First cycle initialization (no proposals can exist yet)
-            _startNewCycle();
-        } else if (_needsNewCycle()) {
-            // Normal flow: Current cycle has ended, verify safety then advance
+        if (_needsNewCycle()) {
+            // Manual cycle advancement: Escape hatch when execution fails repeatedly
             // Safety check: Ensure no Pending/Active proposals, and Succeeded proposals have 3+ attempts
-            _checkNoExecutableProposals();
+            _checkNoExecutableProposals(true); // true = enforce 3-attempt requirement
             _startNewCycle();
         } else {
             revert CycleStillActive();
@@ -330,9 +327,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         address proposer = _msgSender();
 
-        // Auto-start new cycle if needed (prevents orphaning executable proposals)
+        // Auto-start new cycle if needed
+        // During auto-advancement, check for Pending/Active proposals but skip 3-attempt requirement
         if (_currentCycleId == 0 || _needsNewCycle()) {
-            _checkNoExecutableProposals();
+            _checkNoExecutableProposals(false); // false = skip execution attempt check
             _startNewCycle();
         }
 
@@ -558,15 +556,18 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         emit CycleStarted(cycleId, start, proposalEnd, voteEnd);
     }
 
-    /// @notice Validates that manual cycle advancement is safe
-    /// @dev Prevents advancing while proposals are still active or haven't been attempted
+    /// @notice Validates that cycle advancement is safe
+    /// @dev Prevents advancing while proposals are still active or haven't been executed
     /// @dev State-by-state logic:
     ///      - Executed: Skip (already finalized)
-    ///      - Pending/Active: Block (voting in progress)
-    ///      - Succeeded with <3 attempts: Block (must retry execution first)
-    ///      - Succeeded with >=3 attempts: Allow (community made genuine effort, can abandon)
+    ///      - Pending/Active: Block (voting in progress) - ALWAYS checked
+    ///      - Succeeded:
+    ///        * If enforceAttempts=false (auto): ALWAYS block (must execute first)
+    ///        * If enforceAttempts=true (manual): Block only if <3 attempts (escape hatch)
     ///      - Defeated: Allow (lost vote, nothing to do)
-    function _checkNoExecutableProposals() internal view {
+    /// @param enforceAttempts If true, allow manual advancement after 3+ attempts (escape hatch)
+    ///                        If false, block all Succeeded proposals (must execute first)
+    function _checkNoExecutableProposals(bool enforceAttempts) internal view {
         uint256[] memory proposals = _cycleProposals[_currentCycleId];
 
         for (uint256 i = 0; i < proposals.length; i++) {
@@ -578,18 +579,24 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
             ProposalState currentState = _state(pid);
 
-            // Block if voting is still in progress (Pending: not started, Active: ongoing)
+            // ALWAYS block if voting is still in progress (safety check)
             if (currentState == ProposalState.Pending || currentState == ProposalState.Active) {
                 revert ExecutableProposalsRemaining();
             }
 
-            // For winning proposals (Succeeded): Require 3 execution attempts before allowing skip
-            // Rationale: Ensures genuine effort to execute before community abandons proposal
+            // For winning proposals (Succeeded): Different logic for auto vs manual advancement
             if (currentState == ProposalState.Succeeded) {
-                if (_executionAttempts[pid] < 3) {
+                if (!enforceAttempts) {
+                    // Auto-advancement: ALWAYS block if Succeeded proposal exists
+                    // User must execute it first before proposing in next cycle
                     revert ExecutableProposalsRemaining();
+                } else {
+                    // Manual advancement: Only block if <3 attempts (escape hatch after failures)
+                    if (_executionAttempts[pid] < 3) {
+                        revert ExecutableProposalsRemaining();
+                    }
+                    // 3+ attempts made, proposal persistently fails, can skip
                 }
-                // 3+ attempts made, proposal persistently fails, can skip
             }
 
             // Defeated proposals: Fall through (lost vote, no action needed)
