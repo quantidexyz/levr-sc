@@ -448,6 +448,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     /// @notice Computes the current state of a proposal
     /// @dev State transitions: Pending → Active → (Succeeded|Defeated) → Executed
+    ///      In cycle-based governance, only the winner can succeed
     /// @param proposalId The proposal ID to check
     /// @return The current proposal state
     function _state(uint256 proposalId) internal view returns (ProposalState) {
@@ -464,6 +465,14 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         // Post-voting states: Check if proposal won (quorum + approval)
         if (!_meetsQuorum(proposalId) || !_meetsApproval(proposalId)) {
+            return ProposalState.Defeated;
+        }
+
+        // SHERLOCK #33 FIX: Only return Succeeded if this is the cycle winner
+        // In cycle-based governance, meeting thresholds is not enough - must win the cycle
+        uint256 winnerId = _getWinner(proposal.cycleId);
+        if (winnerId != proposalId) {
+            // Meets quorum + approval but lost the cycle competition
             return ProposalState.Defeated;
         }
 

@@ -844,12 +844,9 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         ILevrGovernor_v1.Proposal memory p1 = ILevrGovernor_v1(governor).getProposal(pid1);
         ILevrGovernor_v1.Proposal memory p2 = ILevrGovernor_v1(governor).getProposal(pid2);
 
-        assertEq(uint256(p1.state), 2, 'pid1 should be in Succeeded state');
-        assertEq(
-            uint256(p2.state),
-            2,
-            'pid2 should be in Succeeded state (non-winner but succeeded)'
-        );
+        assertEq(uint256(p1.state), 2, 'pid1 should be in Succeeded state (winner)');
+        // SHERLOCK #33 FIX: Non-winner now correctly shows as Defeated
+        assertEq(uint256(p2.state), 3, 'pid2 should be in Defeated state (non-winner)');
 
         // Try to start new cycle - should REVERT because pid1 is Succeeded
         vm.expectRevert(ILevrGovernor_v1.ExecutableProposalsRemaining.selector);
@@ -858,27 +855,34 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Execute the winning proposal
         ILevrGovernor_v1(governor).execute(pid1);
 
-        // Wait for the cycle to end (voting window must pass)
-        vm.warp(block.timestamp + 5 days + 1); // Wait for cycle 1 voting window to end
+        // SHERLOCK #33 FIX: Cycle does NOT auto-advance on execution (stays at 1)
+        // Advancement happens when next proposal is created
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            1,
+            'Cycle stays at 1 until next propose'
+        );
 
-        // Note: pid2 is still Succeeded but not the winner, so it blocks cycle advancement
-        // Since pid2 can't be executed (not winner), we need to wait for the cycle to fully end
-        // and then manually advance. However, pid2 being Succeeded will block manual advancement.
-        // The actual behavior is that non-winner Succeeded proposals block advancement.
-        // For this test, we'll verify that pid1 execution succeeded and cycle stays at 1
-        // until pid2 is somehow resolved (which in practice might require a config change
-        // or the proposal expiring). For now, let's verify the current state:
-        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 1, 'Cycle stays at 1 due to pid2');
-
-        // To advance, we'd need pid2 to be defeated or expired, but since it's Succeeded,
-        // it blocks. This is expected behavior - non-winner Succeeded proposals prevent
-        // cycle advancement. The test expectation was incorrect.
-
-        // Verify pid2 is orphaned in cycle 1 (cannot execute in new cycle)
+        // Verify pid2 is now Defeated (non-winner)
         ILevrGovernor_v1.Proposal memory p2After = ILevrGovernor_v1(governor).getProposal(pid2);
         assertEq(p2After.cycleId, 1, 'pid2 should still be in cycle 1');
-        assertEq(uint256(p2After.state), 2, 'pid2 still in Succeeded state but orphaned');
+        assertEq(uint256(p2After.state), 3, 'pid2 now correctly shows as Defeated (non-winner)');
         assertFalse(p2After.executed, 'pid2 should not be executed');
+
+        // SHERLOCK #33 FIX: Because pid2 now shows as Defeated (not Succeeded),
+        // we can propose a new proposal which will trigger cycle advancement
+        vm.prank(alice);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 25 ether);
+
+        // NOW the cycle advances to 2
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            2,
+            'Cycle advances to 2 on new propose'
+        );
+
+        ILevrGovernor_v1.Proposal memory p3 = ILevrGovernor_v1(governor).getProposal(pid3);
+        assertEq(p3.cycleId, 2, 'New proposal in cycle 2');
     }
 
     // ============ Test 13: Can Start New Cycle If Proposal Is Defeated ============
@@ -1233,7 +1237,16 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         assertTrue(prop2.meetsQuorum, 'Prop2 quorum met (20/10 = 200% of snapshot)');
 
         // Both proposals use their respective snapshots correctly
-        assertEq(uint256(prop1.state), 2, 'Prop1 Succeeded');
-        assertEq(uint256(prop2.state), 2, 'Prop2 Succeeded');
+        // SHERLOCK #33 FIX: Check which is the winner
+        uint256 winnerId = ILevrGovernor_v1(governor).getWinner(1);
+
+        // Winner shows as Succeeded, non-winner as Defeated
+        if (winnerId == pid1) {
+            assertEq(uint256(prop1.state), 2, 'Prop1 Succeeded (winner)');
+            assertEq(uint256(prop2.state), 3, 'Prop2 Defeated (non-winner)');
+        } else {
+            assertEq(uint256(prop2.state), 2, 'Prop2 Succeeded (winner)');
+            assertEq(uint256(prop1.state), 3, 'Prop1 Defeated (non-winner)');
+        }
     }
 }
