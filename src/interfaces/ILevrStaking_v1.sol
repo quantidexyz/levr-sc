@@ -229,10 +229,10 @@ interface ILevrStaking_v1 {
     /// @return timestamp The timestamp when staking started
     function stakeStartTime(address user) external view returns (uint256 timestamp);
 
-    /// @notice Get the timestamp of the last stake action (MEV/flash-loan protection)
+    /// @notice Get the block number of the last stake action (MEV/flash-loan protection)
     /// @param user The user address
-    /// @return timestamp The timestamp of the last stake (0 if never staked)
-    function lastStakeTimestamp(address user) external view returns (uint256 timestamp);
+    /// @return blockNumber The block number of the last stake (0 if never staked)
+    function lastStakeBlock(address user) external view returns (uint256 blockNumber);
 
     /// @notice Calculate voting power for a user
     /// @dev VP = (staked balance × time staked) / (1e18 × 86400)

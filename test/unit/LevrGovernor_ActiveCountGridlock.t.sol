@@ -117,6 +117,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
         // BOTH proposals fail quorum (only Alice votes, need 70%)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid1, true);
@@ -236,6 +237,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         );
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // BOTH vote on proposal 1 (meets quorum)
         vm.prank(alice);
@@ -253,9 +255,12 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
 
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Execute proposal 1 (succeeds, auto-starts cycle 2)
+        // Execute proposal 1 (succeeds)
         governor.execute(pid1);
-        console2.log('\nExecuted proposal 1 (auto-started cycle 2)');
+        console2.log('\nExecuted proposal 1');
+        
+        // Cycle does NOT auto-advance (advances on next propose)
+        assertEq(governor.currentCycleId(), 1, 'Cycle does NOT auto-advance');
 
         uint256 countAfterSuccess = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
@@ -263,30 +268,35 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         console2.log('Active count after successful execute:', countAfterSuccess);
         console2.log('(Should be 1: proposal 2 still active)');
 
-        // Try to execute proposal 2 - should fail (not in current cycle)
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
+        // Execute proposal 2 - doesn't meet quorum, so marked as executed (defeated) without revert
+        // (quorum check happens before cycle.executed check)
         governor.execute(pid2);
 
-        // NEW BEHAVIOR: P2 NOT executed (can't execute old cycle proposals)
-        assertFalse(governor.getProposal(pid2).executed, 'P2 should NOT be executed (wrong cycle)');
+        // P2 marked as executed (defeated) due to failed quorum
+        assertTrue(governor.getProposal(pid2).executed, 'P2 should be marked executed (defeated)');
 
         uint256 countAfterFailed = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
-        console2.log('Active count after cycle advance:', countAfterFailed);
+        console2.log('Active count after both executed:', countAfterFailed);
         
-        // Count resets to 0 when cycle advances (from pid1 execution)
-        assertEq(countAfterFailed, 0, 'Count should be 0 (cycle advanced, count reset)');
+        // Count is still 2 (both proposals still counted, count doesn't decrement on execution)
+        assertEq(countAfterFailed, 2, 'Count stays at 2 (does not decrement on execution)');
         
-        console2.log('\nSafe: Count reset to 0 when cycle advanced');
-
-        // Can we create new proposals in cycle 2?
-        console2.log('\nAttempting to create new proposals in cycle 2...');
-
-        // NEW BEHAVIOR: Count is 0, can create proposals in new cycle
+        // Create next proposal to trigger cycle advancement
+        console2.log('\nCreating next proposal to trigger cycle advancement...');
         vm.prank(alice);
-        governor.proposeBoost(address(underlying), 3000 ether);
-        console2.log('Created proposal 3 in cycle 2: SUCCESS');
+        uint256 pid3 = governor.proposeBoost(address(underlying), 3000 ether);
+        console2.log('Created proposal 3: SUCCESS');
+        
+        // Now cycle should have advanced
+        assertGt(governor.currentCycleId(), 1, 'Cycle should have advanced on next propose');
+        
+        uint256 countAfterAdvance = governor.activeProposalCount(
+            ILevrGovernor_v1.ProposalType.BoostStakingPool
+        );
+        console2.log('Active count after cycle advance:', countAfterAdvance);
+        assertEq(countAfterAdvance, 1, 'Count should be 1 (new proposal in cycle 2)');
 
         uint256 countNow = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool

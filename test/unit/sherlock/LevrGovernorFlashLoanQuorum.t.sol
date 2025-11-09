@@ -77,6 +77,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
 
         // Step 2: Advance to voting window and vote
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId1, true);
 
@@ -137,6 +138,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
         );
 
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId1, true);
 
@@ -237,6 +239,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
         // Step 2: Advance to voting window
         console.log('Step 2: Advancing to voting window');
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Step 3: Vote yes
         console.log('Step 3: Voting yes');
@@ -300,6 +303,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
         // Vote on proposal 1
         console.log('\nStep 2: Voting on proposal 1');
         vm.warp(proposal1.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId1, true);
 
@@ -365,6 +369,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
 
         ILevrGovernor_v1.Proposal memory proposal1 = governor.getProposal(proposalId1);
         vm.warp(proposal1.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId1, true);
 
@@ -495,6 +500,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
 
         ILevrGovernor_v1.Proposal memory proposal1 = governor.getProposal(prop1);
         vm.warp(proposal1.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(prop1, true);
 
@@ -542,6 +548,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
 
         ILevrGovernor_v1.Proposal memory proposal1 = governor.getProposal(prop1);
         vm.warp(proposal1.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(prop1, true);
         vm.warp(proposal1.votingEndsAt + 1);
@@ -579,6 +586,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
 
         ILevrGovernor_v1.Proposal memory proposal1 = governor.getProposal(prop1);
         vm.warp(proposal1.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(prop1, true);
         vm.warp(proposal1.votingEndsAt + 1);
@@ -619,6 +627,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
 
         ILevrGovernor_v1.Proposal memory proposal1 = governor.getProposal(prop1);
         vm.warp(proposal1.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote NO - proposal will be defeated
         vm.prank(alice);

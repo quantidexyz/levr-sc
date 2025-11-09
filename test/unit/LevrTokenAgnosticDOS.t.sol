@@ -103,6 +103,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
 
         // Fast forward to voting
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote
         governor.vote(proposalId, true);
@@ -152,6 +153,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         vm.startPrank(alice);
         uint256 proposalId = governor.proposeBoost(address(revertingToken), 50 ether);
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         governor.vote(proposalId, true);
         vm.warp(block.timestamp + 5.1 days);
         vm.stopPrank();
@@ -168,6 +170,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         vm.startPrank(alice);
         uint256 proposalId = governor.proposeBoost(address(weth), 50 ether);
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         governor.vote(proposalId, true);
         vm.warp(block.timestamp + 5.1 days);
         vm.stopPrank();
@@ -436,6 +439,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         // Create proposal to trigger accrueAll with many tokens
         uint256 proposalId = governor.proposeBoost(address(weth), 50 ether);
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         governor.vote(proposalId, true);
         vm.warp(block.timestamp + 5.1 days);
         vm.stopPrank();

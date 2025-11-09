@@ -134,6 +134,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
         // Wait for voting (time advances, VP increases!)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Get current VP (has increased due to time passing)
         uint256 aliceVPAtVote = staking.getVotingPower(alice);
@@ -183,6 +184,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (2000 tokens)
         governor.vote(pid, true);
@@ -216,6 +218,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         // Create proposal
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes
         governor.vote(pid, true);
@@ -627,6 +630,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote
         governor.vote(pid, true);

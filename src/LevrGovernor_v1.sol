@@ -127,13 +127,13 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         // Get balance for quorum
         uint256 voterBalance = IERC20(stakedToken).balanceOf(voter);
 
-        // Anti-flash-loan: Check last stake timestamp (MEV protection)
+        // Anti-flash-loan: Check last stake block (MEV protection)
         // Prevents flash loans from inflating balance regardless of pre-existing VP
-        // Flash loan: stake() → lastStake = now → elapsed = 0 → REJECT
-        // Legit voter: lastStake = days/weeks ago → elapsed > 1min → ACCEPT
-        uint256 lastStake = ILevrStaking_v1(staking).lastStakeTimestamp(voter);
-        uint256 minTimeSinceStake = 60; // 1 minute (ungameable - any stake resets timer)
-        if (block.timestamp < lastStake + minTimeSinceStake) revert StakeActionTooRecent();
+        // Flash loan: stake() → lastStake = now → blocksSince = 0 → REJECT
+        // Legit voter: lastStake = blocks ago → blocksSince > 0 → ACCEPT
+        uint256 lastStake = ILevrStaking_v1(staking).lastStakeBlock(voter);
+        uint256 minBlocksSinceStake = 1; // 1 block (flash loans cannot span multiple blocks)
+        if (block.number < lastStake + minBlocksSinceStake) revert StakeActionTooRecent();
 
         // Two-tier system: VP for approval (merit), balance for quorum (participation)
         if (support) {

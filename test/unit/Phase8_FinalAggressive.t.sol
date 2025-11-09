@@ -54,6 +54,7 @@ contract Phase8_FinalAggressive_Test is Test, LevrFactoryDeployHelper {
         vm.prank(u);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(u);
         governor.vote(pid, true);
         vm.warp(block.timestamp + 5 days + 1);
@@ -70,6 +71,7 @@ contract Phase8_FinalAggressive_Test is Test, LevrFactoryDeployHelper {
         vm.prank(u);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(u);
         governor.vote(pid, false);
         vm.warp(block.timestamp + 5 days + 1);
@@ -102,6 +104,7 @@ contract Phase8_FinalAggressive_Test is Test, LevrFactoryDeployHelper {
         vm.prank(us[0]);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(us[0]);
         governor.vote(pid, true);
         vm.prank(us[1]);

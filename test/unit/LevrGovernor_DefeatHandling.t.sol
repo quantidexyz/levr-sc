@@ -100,6 +100,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         // Only Alice votes - fails quorum (need 70%, only have 10%)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -161,6 +162,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         // Vote NO - meets quorum but fails approval
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, false); // Vote NO
 
@@ -206,6 +208,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         // Vote YES - meets quorum and approval
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -372,6 +375,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         );
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote on proposal 2 (NO) and 3 (YES)
         vm.prank(alice);
@@ -526,6 +530,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         // Vote NO
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, false);
 
@@ -574,6 +579,7 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         uint256 pid3 = governor.proposeTransfer(address(underlying), charlie, 500 ether, 'good');
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote: pid1 NO (both), pid2 NO votes, pid3 YES (both)
         vm.prank(alice);

@@ -205,6 +205,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
 
         // Fast forward to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote
         vm.prank(alice);

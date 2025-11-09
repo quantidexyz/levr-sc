@@ -64,6 +64,7 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
 
         // Vote
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId, true);
 
@@ -102,13 +103,24 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
                 'Funds transferred on retry'
             );
 
-            // Cycle should NOW advance (success)
-            assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on success');
+            // Cycle does NOT auto-advance (advances on next propose)
+            assertEq(governor.currentCycleId(), cycleIdBefore, 'Cycle does NOT auto-advance');
+            
+            // Create next proposal to trigger cycle advancement
+            vm.prank(alice);
+            uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+            assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
         } else {
             // 250k was enough - verify normal success path
             assertTrue(proposal1.executed, 'Proposal executed');
             assertEq(bobBalanceAfter1, bobBalanceBefore + 50 ether, 'Funds transferred');
-            assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advanced');
+            // Cycle does NOT auto-advance
+            assertEq(governor.currentCycleId(), cycleIdBefore, 'Cycle does NOT auto-advance');
+            
+            // Create next proposal to trigger cycle advancement
+            vm.prank(alice);
+            uint256 pid3 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+            assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
         }
     }
 
@@ -123,6 +135,7 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         );
 
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId, true);
 
@@ -138,12 +151,17 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         assertTrue(proposal.executed, 'Proposal should be executed');
         assertEq(underlying.balanceOf(bob), bobBalanceBefore + 50 ether, 'Funds transferred');
 
-        // Verify cycle auto-advanced on success
+        // Cycle does NOT auto-advance (advances on next propose)
         assertEq(
             governor.currentCycleId(),
-            cycleIdBefore + 1,
-            'Cycle should auto-advance on success'
+            cycleIdBefore,
+            'Cycle should NOT auto-advance (advances on next propose)'
         );
+        
+        // Create next proposal to trigger cycle advancement
+        vm.prank(alice);
+        uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+        assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
     }
 
     /// @notice FIXED: Old proposals become non-executable after manual cycle advance
@@ -162,6 +180,7 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
 
         // Vote
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId, true);
 
@@ -205,6 +224,7 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         );
 
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId, true);
 
@@ -254,6 +274,7 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         );
 
         vm.warp(block.timestamp + 3 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(proposalId, true);
 
@@ -265,10 +286,16 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         // The point is: can call execute() multiple times without error
         governor.execute{gas: 1000000}(proposalId);
 
-        // Eventually succeeds and advances
+        // Eventually succeeds
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(proposalId);
         assertTrue(proposal.executed, 'Should eventually execute');
-        assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on success');
+        // Cycle does NOT auto-advance (advances on next propose)
+        assertEq(governor.currentCycleId(), cycleIdBefore, 'Cycle does NOT auto-advance');
+        
+        // Create next proposal to trigger cycle advancement
+        vm.prank(alice);
+        uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+        assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
     }
 }
 

@@ -145,6 +145,7 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
 
         // Fast forward to voting period
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote FOR (51% approval)
         vm.prank(alice);
@@ -244,10 +245,15 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
             'Proposal should be Executed or Defeated, not stuck in Succeeded'
         );
 
-        // ASSERTION: Cycle should have advanced (execute() calls _startNewCycle internally)
+        // Cycle does NOT auto-advance (advances on next propose)
         uint256 cycleIdAfter = governor.currentCycleId();
         console2.log('Cycle ID after execute:', cycleIdAfter);
-        assertGt(cycleIdAfter, 1, 'Cycle should have advanced');
+        assertEq(cycleIdAfter, 1, 'Cycle does NOT auto-advance');
+        
+        // Create next proposal to trigger cycle advancement
+        vm.prank(attacker);
+        uint256 pid2 = governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
+        assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
 
         console2.log('');
         console2.log('[TEST SHOULD FAIL BEFORE FIX - Vulnerability exists]');
@@ -326,9 +332,14 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
             'Proposal should be finalized'
         );
 
-        // ASSERTION: Cycle should have advanced
+        // Cycle does NOT auto-advance (advances on next propose)
         uint256 cycleIdAfter = governor.currentCycleId();
-        assertGt(cycleIdAfter, 1, 'Cycle should have advanced');
+        assertEq(cycleIdAfter, 1, 'Cycle does NOT auto-advance');
+        
+        // Create next proposal to trigger cycle advancement
+        vm.prank(attacker);
+        uint256 pid2 = governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
+        assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
 
         console2.log('');
         console2.log('[TEST PASSES - NOT VULNERABLE]');
@@ -470,9 +481,14 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
         // Verify proposal executed
         assertTrue(governor.getProposal(winningProposal).executed, 'Winner should be executed');
 
-        // Verify cycle advanced automatically (execute calls _startNewCycle)
+        // Cycle does NOT auto-advance (advances on next propose)
         uint256 cycleAfter = governor.currentCycleId();
-        assertGt(cycleAfter, 1, 'Cycle should have auto-advanced after winner execution');
+        assertEq(cycleAfter, 1, 'Cycle does NOT auto-advance');
+        
+        // Create next proposal to trigger cycle advancement
+        vm.prank(attacker);
+        uint256 pid2 = governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
+        assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
 
         console2.log('Cycle auto-advanced to:', cycleAfter);
         console2.log('');

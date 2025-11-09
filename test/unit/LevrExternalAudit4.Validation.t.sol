@@ -208,6 +208,7 @@ contract LevrExternalAudit4ValidationTest is Test, LevrFactoryDeployHelper {
         // Wait for proposal window to close so voting can start
         uint32 proposalWindow = factory.proposalWindowSeconds(address(underlying));
         vm.warp(block.timestamp + proposalWindow + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes with her 5k tokens worth of VP
         // After 1 day, she has ~5000 token-days of voting power
@@ -500,6 +501,7 @@ contract LevrExternalAudit4ValidationTest is Test, LevrFactoryDeployHelper {
 
         // Wait for voting to start (use ORIGINAL timing from proposal, not new config)
         vm.warp(votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes (she has 1000e18 balance = 100% of supply)
         vm.prank(alice);

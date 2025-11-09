@@ -351,6 +351,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // During voting, change maxProposalAmountBps to 1% (would block this proposal if checked)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
@@ -423,6 +424,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
 
         // Alice's existing proposal should still be votable/executable
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid, true);

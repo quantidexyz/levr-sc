@@ -98,6 +98,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Advance to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (800 sTokens total)
         vm.prank(alice);
@@ -189,6 +190,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Only Alice and Bob vote (500 sTokens) - NOT enough for quorum (need 1050)
         vm.prank(alice);
@@ -265,6 +267,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
         );
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Proposal 1: 60% yes, 40% no
         vm.prank(alice);
@@ -275,6 +278,7 @@ contract LevrGovernor_CriticalLogicBugs_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), type(uint256).max);
         staking.stake(333 ether); // Bob increases stake
         vm.warp(block.timestamp + 121); // Wait 2 minutes for MEV protection
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         governor.vote(pid1, false); // ~333 no
         vm.stopPrank();
 

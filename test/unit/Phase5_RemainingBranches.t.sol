@@ -205,6 +205,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
         
         // Vote at exact boundary
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
     }
@@ -253,6 +254,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // Multiple votes
         for (uint256 i = 0; i < 3; i++) {
@@ -285,6 +287,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // Voter votes NO (defeats proposal)
         vm.prank(voter);

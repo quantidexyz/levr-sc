@@ -304,6 +304,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Vote and execute without meeting any thresholds
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -354,6 +355,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Vote with 100% participation and approval
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -492,6 +494,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Vote with alice (1000 balance = 100% participation)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -548,6 +551,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Vote: 60% yes, 40% no (meets 51% requirement)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true); // 50% yes
         vm.prank(bob);
@@ -614,6 +618,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Vote (100% participation)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -671,6 +676,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Only Alice votes (150 tokens = 1.5% participation, way below 70%)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -736,6 +742,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Vote: Prop1 gets 60% yes, Prop2 gets 100% yes but less total votes
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Prop 1: Alice YES, Bob YES, Charlie NO = 66% yes
         vm.prank(alice);
@@ -837,6 +844,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Alice votes (100% participation)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -884,6 +892,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Complete cycle 1
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid1, true);
         vm.warp(block.timestamp + 5 days + 1);
@@ -993,6 +1002,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Vote: Prop1 = most yes votes
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid1, true);
@@ -1165,6 +1175,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
         console2.log('Alice VP before waiting:', vpBefore);
 
         vm.warp(block.timestamp + 2 days + 1); // Voting starts
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         uint256 vpAtVote = staking.getVotingPower(alice);
         console2.log('Alice VP at vote time:', vpAtVote);

@@ -116,6 +116,7 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         // Wait to accumulate VP
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create proposals
         vm.prank(alice);
@@ -128,6 +129,7 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         // Move to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Only Bob votes (insufficient quorum - need 70% of 1100 = 770)
         vm.prank(bob);
@@ -172,6 +174,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create and fail a proposal
         vm.prank(alice);
@@ -213,12 +216,14 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create successful proposal (use Transfer instead of Boost to avoid factory dependency)
         vm.prank(alice);
         uint256 pid = governor.proposeTransfer(address(underlying), bob, 100 ether, 'Transfer');
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes yes (meets quorum and approval)
         vm.prank(alice);
@@ -235,9 +240,17 @@ contract LevrGovernor_StuckProcessTest is Test {
         // Execute the proposal first (will succeed - Transfer works)
         governor.execute(pid);
 
-        // Now new cycle should have auto-started (successful execution)
+        // NEW BEHAVIOR: Cycle does NOT auto-advance (must propose in new cycle to advance)
         uint256 currentCycle = governor.currentCycleId();
-        assertEq(currentCycle, 2, 'Cycle should advance after successful execution');
+        assertEq(currentCycle, 1, 'Cycle should still be 1 after execution');
+
+        // Proposal is executed, so we can now propose in next cycle (auto-advances)
+        vm.prank(alice);
+        uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 50 ether, 'Transfer 2');
+
+        // Verify cycle advanced
+        ILevrGovernor_v1.Proposal memory proposal2 = governor.getProposal(pid2);
+        assertEq(proposal2.cycleId, 2, 'New proposal should be in cycle 2');
     }
 
     /// @notice Test permissionless recovery (anyone can call startNewCycle)
@@ -252,6 +265,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
@@ -285,6 +299,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.proposeBoost(address(underlying), 100 ether);
@@ -317,12 +332,14 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create proposal for 4000 ether (treasury has 10000, max is 50% = 5000)
         vm.prank(alice);
         uint256 pid = governor.proposeTransfer(address(underlying), alice, 4000 ether, 'Test');
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes
         vm.prank(alice);
@@ -344,13 +361,13 @@ contract LevrGovernor_StuckProcessTest is Test {
         // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
         assertFalse(proposal.executed, 'Proposal should NOT be marked executed (can retry)');
-        
+
         // Execution attempt tracked
         assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
 
         // Manual cycle advance (after 3 attempts)
         governor.startNewCycle();
-        
+
         assertEq(governor.currentCycleId(), 2, 'Cycle advanced manually');
 
         console2.log('SUCCESS: Insufficient balance allows retry, then manual advance');
@@ -375,6 +392,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create two proposals (max is 50% of treasury = 5000)
         vm.prank(alice);
@@ -391,6 +409,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         console2.log('Created 2 proposals: 5000 ether and 1000 ether');
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Both vote yes on both
         vm.prank(alice);
@@ -429,6 +448,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create proposal that will fail balance check (max allowed is 5000)
         vm.prank(alice);
@@ -440,6 +460,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         );
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid, true);
@@ -458,19 +479,26 @@ contract LevrGovernor_StuckProcessTest is Test {
         governor.execute(pid); // Attempt 3
 
         // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
-        assertFalse(governor.getProposal(pid).executed, 'Proposal should NOT be executed (can retry)');
-        
+        assertFalse(
+            governor.getProposal(pid).executed,
+            'Proposal should NOT be executed (can retry)'
+        );
+
         // Execution attempt tracked
         assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
 
         console2.log('Execution failed (insufficient balance caught in try-catch)');
 
         // NEW BEHAVIOR: Cycle does NOT auto-advance on failure
-        assertEq(governor.currentCycleId(), 1, 'Cycle should still be 1 (no auto-advance on failure)');
-        
+        assertEq(
+            governor.currentCycleId(),
+            1,
+            'Cycle should still be 1 (no auto-advance on failure)'
+        );
+
         // Manual cycle advance (after 3 attempts)
         governor.startNewCycle();
-        
+
         assertEq(governor.currentCycleId(), 2, 'Cycle advances manually');
 
         console2.log('SUCCESS: Manual cycle advance works');
@@ -489,12 +517,14 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create WETH proposal (max is 50% of 5000 WETH = 2500)
         vm.prank(alice);
         uint256 pidWeth = governor.proposeTransfer(address(weth), alice, 2000 ether, 'WETH');
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pidWeth, true);
@@ -514,14 +544,14 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
         assertFalse(governor.getProposal(pidWeth).executed, 'WETH proposal should NOT be executed');
-        
+
         // Execution attempts tracked
         assertEq(governor.executionAttempts(pidWeth), 3, 'Should have 3 attempts');
 
         // Underlying balance unaffected - still 10000 ether
         uint256 underlyingBal = underlying.balanceOf(address(treasury));
         assertEq(underlyingBal, 10000 ether, 'Underlying balance unchanged');
-        
+
         // Manual cycle advance (after 3 attempts)
         governor.startNewCycle();
         assertEq(governor.currentCycleId(), 2, 'Cycle advances manually');
@@ -541,12 +571,14 @@ contract LevrGovernor_StuckProcessTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Create valid proposal
         vm.prank(alice);
         uint256 pid = governor.proposeBoost(address(underlying), 3000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid, true);
@@ -562,10 +594,10 @@ contract LevrGovernor_StuckProcessTest is Test {
         // NEW BEHAVIOR: Failed boost execution doesn't mark executed
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
         assertFalse(proposal.executed, 'Proposal should NOT be executed (applyBoost failed)');
-        
+
         // Attempts tracked
         assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
-        
+
         // Manual advance (after 3 attempts)
         governor.startNewCycle();
         assertEq(governor.currentCycleId(), 2, 'Cycle advances manually');

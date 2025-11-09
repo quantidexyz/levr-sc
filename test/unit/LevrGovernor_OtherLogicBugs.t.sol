@@ -93,6 +93,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         console2.log('Proposal 2 (Transfer):', pid2);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // FIX: Both users need to vote to meet 70% quorum requirement
         // Total supply = 1000 sTokens, need 700 to meet quorum
@@ -153,6 +154,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Vote and execute
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -163,7 +165,17 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
             ILevrGovernor_v1.ProposalType.BoostStakingPool
         );
         console2.log('Count after execution:', countAfterExecute);
-        assertEq(countAfterExecute, 0, 'Should decrement to 0');
+        // Count does NOT decrement on execution - only resets at cycle start
+        assertEq(countAfterExecute, 1, 'Count stays at 1 (only resets at cycle start)');
+        
+        // Create next proposal to trigger cycle advancement
+        vm.prank(alice);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 500 ether);
+        // Count resets to 0 when cycle advances, then increments to 1 for new proposal
+        uint256 countAfterAdvance = governor.activeProposalCount(
+            ILevrGovernor_v1.ProposalType.BoostStakingPool
+        );
+        assertEq(countAfterAdvance, 1, 'Count resets to 0 then increments to 1');
 
         console2.log('Active proposal count tracking: CORRECT');
     }
@@ -216,6 +228,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Only Alice votes (100 sTokens, need 700 for quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -264,6 +277,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -338,6 +352,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Only Alice votes - insufficient quorum
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -378,6 +393,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes (totalBalanceVoted = 1000)
         vm.prank(alice);
@@ -400,6 +416,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         // FIX: Bob CANNOT vote because he has 0 VP (just staked, no time accumulated)
         // This is the CORRECT, SAFE behavior - prevents gaming
         vm.warp(block.timestamp + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(bob);
         vm.expectRevert(ILevrGovernor_v1.InsufficientVotingPower.selector);
         governor.vote(pid, true);
@@ -437,6 +454,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         console2.log('Total supply:', sToken.totalSupply() / 1e18);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes (totalBalanceVoted += 1000)
         vm.prank(alice);
@@ -505,6 +523,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Only Alice votes - fails quorum
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -554,6 +573,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Vote and wait
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
