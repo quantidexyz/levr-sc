@@ -289,4 +289,5 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Optional project token address (0x0 = default config)
     /// @return Minimum quorum BPS (project override if verified, otherwise default)
     function minimumQuorumBps(address clankerToken) external view returns (uint16);
+
 }

@@ -589,14 +589,16 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
 
         // Execute multiple times (will fail in try-catch due to insufficient balance)
         governor.execute(pid); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 3
 
         // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
         assertFalse(governor.getProposal(pid).executed, 'Proposal should NOT be executed');
         
         // Execution attempts tracked
-        assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(pid).count, 3, 'Should have 3 attempts');
         
         // Manual cycle advance (after 3 attempts)
         governor.startNewCycle();

@@ -226,7 +226,9 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
 
         // Execute multiple times (insufficient balance caught by try-catch)
         governor.execute(pid); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 3
 
         // NEW BEHAVIOR: Failed execution doesn't auto-advance cycle
@@ -400,7 +402,9 @@ contract LevrGovernor_DefeatHandling_Test is Test, LevrFactoryDeployHelper {
         
         // Execute pid3 three times (treasury fail - catch block, NOT marked executed)
         governor.execute(pid3); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid3); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid3); // Attempt 3
 
         // Verify P1 and P2 marked as executed (defeated early)

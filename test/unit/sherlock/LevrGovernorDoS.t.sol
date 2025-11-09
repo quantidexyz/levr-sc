@@ -402,7 +402,9 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
 
         // Execute multiple times (will fail due to revert bomb but doesn't cause DoS)
         governor.execute(maliciousProposalId); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(maliciousProposalId); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(maliciousProposalId); // Attempt 3
 
         console2.log('Execute completed 3 times (handled revert bomb)');
@@ -419,7 +421,7 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
         );
         
         // Execution attempts tracked
-        assertEq(governor.executionAttempts(maliciousProposalId), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(maliciousProposalId).count, 3, 'Should have 3 attempts');
 
         // Cycle should NOT have auto-advanced (failed execution)
         assertEq(governor.currentCycleId(), 1, 'Cycle should NOT auto-advance on failure');

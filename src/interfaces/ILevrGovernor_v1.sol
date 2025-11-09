@@ -56,6 +56,12 @@ interface ILevrGovernor_v1 {
         uint256 votes; // Voting power used
     }
 
+    /// @notice Execution attempt info for a proposal
+    struct ExecutionAttemptInfo {
+        uint8 count; // Number of failed execution attempts
+        uint64 lastAttemptTime; // Timestamp of last attempt (0 if never attempted)
+    }
+
     // ============ Errors ============
 
     /// @notice Proposal window is not open
@@ -117,6 +123,9 @@ interface ILevrGovernor_v1 {
 
     /// @notice Proposal is not in the current cycle (cannot execute old proposals)
     error ProposalNotInCurrentCycle();
+
+    /// @notice Execution attempt too soon after previous attempt (anti-griefing delay)
+    error ExecutionAttemptTooSoon();
 
     // ============ Events ============
 
@@ -251,11 +260,13 @@ interface ILevrGovernor_v1 {
     /// @return cycleId The current cycle ID (0 if no active cycle)
     function currentCycleId() external view returns (uint256 cycleId);
 
-    /// @notice Get number of execution attempts for a proposal
+    /// @notice Get execution attempt info for a proposal
     /// @dev Used to determine if manual cycle advancement is allowed (requires 3+ attempts)
     /// @param proposalId The proposal ID
-    /// @return Number of execution attempts (0 if never attempted)
-    function executionAttempts(uint256 proposalId) external view returns (uint256);
+    /// @return info Execution attempt info (count and last attempt timestamp)
+    function executionAttempts(
+        uint256 proposalId
+    ) external view returns (ExecutionAttemptInfo memory info);
 
     /// @notice Get the winning proposal for a cycle
     /// @dev Returns the proposal with highest yes votes that met quorum + approval

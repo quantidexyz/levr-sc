@@ -116,7 +116,9 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
 
         // Execute multiple times (will fail due to reverting token)
         governor.execute(proposalId); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId); // Attempt 3
         console2.log('Executed 3 times (all failed due to reverting token)');
 
@@ -130,7 +132,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         assertFalse(proposal.executed, 'Proposal should NOT be marked executed');
         
         // Execution attempts tracked
-        assertEq(governor.executionAttempts(proposalId), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(proposalId).count, 3, 'Should have 3 attempts');
         
         // Manual cycle advance (after 3 attempts)
         governor.startNewCycle();

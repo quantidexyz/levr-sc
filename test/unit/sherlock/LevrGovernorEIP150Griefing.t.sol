@@ -188,13 +188,15 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
 
         // Attempt to execute multiple times (will fail each time)
         governor.execute(proposalId);
-        assertEq(governor.executionAttempts(proposalId), 1, 'Should have 1 attempt');
+        assertEq(governor.executionAttempts(proposalId).count, 1, 'Should have 1 attempt');
         
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
-        assertEq(governor.executionAttempts(proposalId), 2, 'Should have 2 attempts');
+        assertEq(governor.executionAttempts(proposalId).count, 2, 'Should have 2 attempts');
         
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
-        assertEq(governor.executionAttempts(proposalId), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(proposalId).count, 3, 'Should have 3 attempts');
 
         // Now manual advance is allowed (attempted 3 times)
         governor.startNewCycle();
@@ -234,13 +236,15 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
 
         // Execute multiple times - will fail due to reverting token
         governor.execute(proposalId);
-        assertEq(governor.executionAttempts(proposalId), 1, 'Should have 1 attempt');
+        assertEq(governor.executionAttempts(proposalId).count, 1, 'Should have 1 attempt');
         
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
-        assertEq(governor.executionAttempts(proposalId), 2, 'Should have 2 attempts');
+        assertEq(governor.executionAttempts(proposalId).count, 2, 'Should have 2 attempts');
         
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
-        assertEq(governor.executionAttempts(proposalId), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(proposalId).count, 3, 'Should have 3 attempts');
 
         // Verify proposal NOT marked executed (can retry)
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(proposalId);

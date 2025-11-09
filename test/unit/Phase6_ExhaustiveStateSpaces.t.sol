@@ -121,7 +121,9 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
             bool executed = governor.getProposal(pid).executed;
             if (!executed) {
                 // Failed execution - need 3 attempts before manual advance
+                vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
                 governor.execute(pid); // Attempt 2
+                vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
                 governor.execute(pid); // Attempt 3
                 // Manually advance cycle (after 3 attempts)
                 governor.startNewCycle();

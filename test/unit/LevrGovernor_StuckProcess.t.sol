@@ -355,7 +355,9 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         // Execute multiple times (fails in try-catch due to insufficient balance)
         governor.execute(pid); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 3
 
         // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
@@ -363,7 +365,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         assertFalse(proposal.executed, 'Proposal should NOT be marked executed (can retry)');
 
         // Execution attempt tracked
-        assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(pid).count, 3, 'Should have 3 attempts');
 
         // Manual cycle advance (after 3 attempts)
         governor.startNewCycle();
@@ -475,7 +477,9 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         // Execute multiple times (fails in try-catch due to insufficient balance)
         governor.execute(pid); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 3
 
         // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
@@ -485,7 +489,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         );
 
         // Execution attempt tracked
-        assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(pid).count, 3, 'Should have 3 attempts');
 
         console2.log('Execution failed (insufficient balance caught in try-catch)');
 
@@ -539,14 +543,16 @@ contract LevrGovernor_StuckProcessTest is Test {
 
         // WETH proposal fails in try-catch (insufficient WETH balance) - execute 3 times
         governor.execute(pidWeth); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pidWeth); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pidWeth); // Attempt 3
 
         // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
         assertFalse(governor.getProposal(pidWeth).executed, 'WETH proposal should NOT be executed');
 
         // Execution attempts tracked
-        assertEq(governor.executionAttempts(pidWeth), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(pidWeth).count, 3, 'Should have 3 attempts');
 
         // Underlying balance unaffected - still 10000 ether
         uint256 underlyingBal = underlying.balanceOf(address(treasury));
@@ -588,7 +594,9 @@ contract LevrGovernor_StuckProcessTest is Test {
         // Execute multiple times - will fail because factory returns zero address for staking
         // (test setup issue, not related to our balance checking)
         governor.execute(pid); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(pid); // Attempt 3
 
         // NEW BEHAVIOR: Failed boost execution doesn't mark executed
@@ -596,7 +604,7 @@ contract LevrGovernor_StuckProcessTest is Test {
         assertFalse(proposal.executed, 'Proposal should NOT be executed (applyBoost failed)');
 
         // Attempts tracked
-        assertEq(governor.executionAttempts(pid), 3, 'Should have 3 attempts');
+        assertEq(governor.executionAttempts(pid).count, 3, 'Should have 3 attempts');
 
         // Manual advance (after 3 attempts)
         governor.startNewCycle();

@@ -20,6 +20,13 @@ import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 ///      - Failed execution requires manual cycle advancement after 3 attempts
 ///      - Prevents EIP-150 gas griefing and malicious token DoS attacks
 contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBase {
+    // ============ Constants ============
+
+    /// @notice Minimum delay between execution attempts (10 minutes)
+    /// @dev Prevents batched failed attempts to prematurely advance cycle
+    ///      Gives DAO time to react and fix issues (e.g., send funds to treasury)
+    uint32 public constant EXECUTION_ATTEMPT_DELAY = 10 minutes;
+
     // ============ Immutable Storage ============
 
     address public immutable factory;
@@ -56,11 +63,11 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     mapping(uint256 => mapping(ILevrGovernor_v1.ProposalType => mapping(address => bool)))
         private _hasProposedInCycle;
 
-    // Execution attempt counter per proposal
+    // Execution attempt tracking per proposal
     // Incremented on each failed execution attempt (catch block)
     // Used to enforce 3-attempt minimum before allowing manual cycle advancement
-    // Prevents premature abandonment of legitimate proposals
-    mapping(uint256 => uint256) private _executionAttempts;
+    // Timestamp prevents batched griefing attempts (forces delay between retries)
+    mapping(uint256 => ILevrGovernor_v1.ExecutionAttemptInfo) private _executionAttempts;
 
     // ============ Constructor ============
 
@@ -179,6 +186,15 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert ProposalNotInCurrentCycle();
         }
 
+        // Anti-griefing: Enforce delay between execution attempts
+        // Prevents batching 3 failed attempts in one transaction to bypass escape hatch
+        ILevrGovernor_v1.ExecutionAttemptInfo storage attemptInfo = _executionAttempts[proposalId];
+        if (attemptInfo.lastAttemptTime > 0) {
+            if (block.timestamp < attemptInfo.lastAttemptTime + EXECUTION_ATTEMPT_DELAY) {
+                revert ExecutionAttemptTooSoon();
+            }
+        }
+
         // Early defeat: Quorum not met (mark as final to prevent retry spam)
         if (!_meetsQuorum(proposalId)) {
             proposal.executed = true;
@@ -222,9 +238,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             emit ProposalExecuted(proposalId, _msgSender());
         } catch {
             // Execution failed (OOG, token revert, insufficient balance, etc.)
-            // Don't mark executed - allows immediate retry within same cycle
-            // Track attempt - after 3 failed attempts, community can manually advance cycle
-            _executionAttempts[proposalId]++;
+            // Don't mark executed - allows retry after delay
+            // Track attempt - after 3 failed attempts (with delays), community can manually advance cycle
+            attemptInfo.count++;
+            attemptInfo.lastAttemptTime = uint64(block.timestamp);
             emit ProposalExecutionFailed(proposalId, 'execution_failed');
         }
     }
@@ -288,7 +305,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     }
 
     /// @inheritdoc ILevrGovernor_v1
-    function executionAttempts(uint256 proposalId) external view returns (uint256) {
+    function executionAttempts(
+        uint256 proposalId
+    ) external view returns (ExecutionAttemptInfo memory) {
         return _executionAttempts[proposalId];
     }
 
@@ -591,7 +610,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
                     revert ExecutableProposalsRemaining();
                 } else {
                     // Manual advancement: Only block if <3 attempts (escape hatch after failures)
-                    if (_executionAttempts[pid] < 3) {
+                    if (_executionAttempts[pid].count < 3) {
                         revert ExecutableProposalsRemaining();
                     }
                     // 3+ attempts made, proposal persistently fails, can skip
