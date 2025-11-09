@@ -216,9 +216,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
             _settlePoolForToken(token);
 
+            // Get effective debt (auto-resets stale debt from token removal/re-add)
+            uint256 effectiveDebt = _getEffectiveDebt(claimer, token);
+
             // Calculate pending rewards using debt accounting (prevents dilution attack)
             uint256 accumulatedRewards = (userBalance * accRewardPerShare[token]) / 1e18;
-            uint256 debtAmount = (userBalance * rewardDebt[claimer][token]) / 1e18;
+            uint256 debtAmount = (userBalance * effectiveDebt) / 1e18;
             uint256 pending = accumulatedRewards > debtAmount ? accumulatedRewards - debtAmount : 0;
 
             if (pending > 0) {
@@ -275,6 +278,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             tokenState.streamStart = 0;
             tokenState.streamEnd = 0;
             _rewardTokens.push(token);
+
+            // Reset accounting for clean start (fresh token OR re-added token after removal)
+            // This prevents corruption when tokens are removed and re-whitelisted
+            accRewardPerShare[token] = 0;
         }
 
         emit ILevrStaking_v1.TokenWhitelisted(token);
@@ -568,6 +575,30 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         return bal > accounted ? bal - accounted : 0;
     }
 
+    /// @notice Get effective debt for user, auto-resetting stale debt
+    /// @dev Detects stale debt from token removal/re-add by checking if debt > accRewardPerShare
+    /// @param user The user to check debt for
+    /// @param token The reward token
+    /// @return effectiveDebt The debt to use in claim calculations (reset if stale)
+    function _getEffectiveDebt(
+        address user,
+        address token
+    ) internal returns (uint256 effectiveDebt) {
+        uint256 debt = rewardDebt[user][token];
+        uint256 accReward = accRewardPerShare[token];
+
+        // Normal operation: debt <= accReward (user's debt tracks what they've accounted for)
+        // Stale debt: debt > accReward (only happens after accRewardPerShare reset on token re-add)
+        if (debt > accReward) {
+            // Stale debt detected - reset to prevent stuck funds
+            // This allows old users to participate in re-added token after one claim cycle
+            rewardDebt[user][token] = accReward;
+            return accReward;
+        }
+
+        return debt;
+    }
+
     /// @notice Auto-claim all rewards for a user (used in unstake)
     /// @param claimer The user claiming rewards
     /// @param to The address to send rewards to
@@ -584,10 +615,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             // Settle pool to latest (updates accRewardPerShare)
             _settlePoolForToken(token);
 
+            // Get effective debt (auto-resets stale debt from token removal/re-add)
+            uint256 effectiveDebt = _getEffectiveDebt(claimer, token);
+
             // Calculate pending rewards using debt accounting (prevents dilution attack)
             // pending = (userBalance × accRewardPerShare) - (userBalance × rewardDebt)
             uint256 accumulatedRewards = (userBalance * accRewardPerShare[token]) / 1e18;
-            uint256 debtAmount = (userBalance * rewardDebt[claimer][token]) / 1e18;
+            uint256 debtAmount = (userBalance * effectiveDebt) / 1e18;
             uint256 pending = accumulatedRewards > debtAmount ? accumulatedRewards - debtAmount : 0;
 
             if (pending > 0) {
