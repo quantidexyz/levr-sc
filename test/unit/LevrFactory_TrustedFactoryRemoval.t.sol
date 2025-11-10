@@ -76,9 +76,6 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test, LevrFactoryDeployHelper 
     ILevrFactory_v1.Project project1;
 
     function setUp() public {
-        // Deploy infrastructure
-        forwarder = new LevrForwarder_v1('Levr Forwarder');
-
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 50,
             streamWindowSeconds: 7 days,
@@ -93,18 +90,8 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test, LevrFactoryDeployHelper 
             minimumQuorumBps: 25
         });
 
-        // Predict factory address
-        uint64 nonce = vm.getNonce(address(this));
-        address predictedFactory = vm.computeCreateAddress(address(this), nonce + 1);
-
-        deployer = createDeployer(predictedFactory);
-        factory = new LevrFactory_v1(
-            config,
-            owner,
-            address(forwarder),
-            address(deployer),
-            new address[](0)
-        );
+        // Use the factory deployment helper to properly set up everything with correct nonce handling
+        (factory, forwarder, deployer) = deployFactory(config, address(this), address(0));
 
         // Deploy mock Clanker factory
         clankerFactory = new MockClankerFactory();

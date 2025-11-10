@@ -19,7 +19,7 @@ contract LevrContractHelper is Test {
     LevrStaking_v1 internal _stakingImpl;
     LevrGovernor_v1 internal _governorImpl;
     LevrStakedToken_v1 internal _stakedTokenImpl;
-    
+
     address internal _mockFactory;
     address internal _mockForwarder;
 
@@ -45,7 +45,7 @@ contract LevrContractHelper is Test {
         address staking
     ) internal returns (LevrStakedToken_v1) {
         if (address(_stakedTokenImpl) == address(0)) initializeHelper();
-        
+
         address clone = Clones.clone(address(_stakedTokenImpl));
         LevrStakedToken_v1(clone).initialize(name, symbol, decimals, underlying, staking);
         return LevrStakedToken_v1(clone);
@@ -60,8 +60,10 @@ contract LevrContractHelper is Test {
         address underlying
     ) internal returns (LevrGovernor_v1) {
         if (address(_governorImpl) == address(0)) initializeHelper();
-        
+
         address clone = Clones.clone(address(_governorImpl));
+        // Only factory can initialize - use prank to initialize as factory
+        vm.prank(_mockFactory);
         LevrGovernor_v1(clone).initialize(treasury, staking, stakedToken, underlying);
         return LevrGovernor_v1(clone);
     }
@@ -75,7 +77,7 @@ contract LevrContractHelper is Test {
         address[] memory initialWhitelist
     ) internal returns (LevrStaking_v1) {
         if (address(_stakingImpl) == address(0)) initializeHelper();
-        
+
         address clone = Clones.clone(address(_stakingImpl));
         LevrStaking_v1(clone).initialize(underlying, stakedToken, treasury, initialWhitelist);
         return LevrStaking_v1(clone);
@@ -88,10 +90,9 @@ contract LevrContractHelper is Test {
         address underlying
     ) internal returns (LevrTreasury_v1) {
         if (address(_treasuryImpl) == address(0)) initializeHelper();
-        
+
         address clone = Clones.clone(address(_treasuryImpl));
         LevrTreasury_v1(clone).initialize(governor, underlying);
         return LevrTreasury_v1(clone);
     }
 }
-

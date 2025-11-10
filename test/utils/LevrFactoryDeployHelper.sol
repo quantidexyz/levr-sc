@@ -273,6 +273,8 @@ contract LevrFactoryDeployHelper is Test {
         }
 
         address clone = Clones.clone(address(_governorImpl));
+        // Only factory can initialize - use prank to initialize as factory
+        vm.prank(factory);
         LevrGovernor_v1(clone).initialize(treasury, staking, stakedToken, underlying);
         return LevrGovernor_v1(clone);
     }
@@ -309,7 +311,7 @@ contract LevrFactoryDeployHelper is Test {
         LevrStaking_v1 si = new LevrStaking_v1(address(0), factory);
         LevrGovernor_v1 gi = new LevrGovernor_v1(address(0), factory);
         LevrStakedToken_v1 sti = new LevrStakedToken_v1(factory);
-        
+
         return new LevrDeployer_v1(factory, address(ti), address(si), address(gi), address(sti));
     }
 }

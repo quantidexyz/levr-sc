@@ -142,7 +142,7 @@ contract LevrCloneSecurityTest is Test {
 
         // Attacker tries to frontrun initialization
         vm.prank(attacker);
-        vm.expectRevert(ILevrGovernor_v1.InternalOnly.selector);
+        vm.expectRevert(ILevrGovernor_v1.OnlyFactory.selector);
         LevrGovernor_v1(governorClone).initialize(
             attacker, // malicious treasury
             address(1),
