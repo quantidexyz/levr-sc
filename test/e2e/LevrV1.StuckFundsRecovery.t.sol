@@ -64,9 +64,9 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             new address[](0)
         );
 
-        // Deploy contracts
+        // Deploy contracts (factory = address(factory) to match initialization prank)
         treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0), address(this));
+        staking = new LevrStaking_v1(address(0), address(factory)); // factory matches prank below
         sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
         governor = new LevrGovernor_v1(
             address(factory),
