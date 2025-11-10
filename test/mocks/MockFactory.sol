@@ -14,7 +14,7 @@ contract MockFactory {
     mapping(address => uint32) private _streamWindows;
 
     /// @notice Set project addresses
-    function setProject(address _clankerToken, address _staking, address _lpLocker) external {
+    function setProject(address _clankerToken, address _staking, address /* _lpLocker */) external {
         clankerToken = _clankerToken;
         staking = _staking;
     }

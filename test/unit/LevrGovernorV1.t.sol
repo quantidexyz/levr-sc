@@ -107,6 +107,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Vote on first proposal to make it winner
         vm.warp(block.timestamp + 2 days + 1); // In voting window
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(u);
         g.vote(1, true);
 
@@ -137,6 +138,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Get proposal in active state
         proposal = governor.getProposal(pid);
@@ -249,6 +251,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Only Alice votes (40% participation < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         g.vote(pid, true);
 
@@ -304,6 +307,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Vote first
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
 
@@ -456,6 +460,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -472,6 +477,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         staking.stake(1_000 ether);
         vm.stopPrank();
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Bob votes before voting window closes
         // Check voting window hasn't closed
@@ -509,6 +515,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes
         vm.prank(alice);
@@ -536,6 +543,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Try to vote after execution
         vm.warp(block.timestamp + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         vm.expectRevert();
         governor.vote(pid, true);
@@ -589,6 +597,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid2 = governor.proposeBoost(address(underlying), 200 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Both vote yes - VP may differ slightly due to timing
         vm.prank(alice);
@@ -618,6 +627,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Vote
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
 
@@ -651,6 +661,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Vote first
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
 
@@ -705,6 +716,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             
             // Vote and execute
             vm.warp(block.timestamp + 2 days + 1);
+            vm.roll(block.number + 1); // Advance blocks for voting eligibility
             vm.prank(user);
             governor.vote(pid, true);
             
@@ -732,6 +744,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Try to vote without power - should succeed but vote counted as 0
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         try governor.vote(pid, true) {
             // May succeed with 0 weight or fail
@@ -746,6 +759,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
 
@@ -764,6 +778,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // Vote yes
         vm.prank(user);
@@ -795,6 +810,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
 
@@ -852,6 +868,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // All three vote
         vm.prank(user);
@@ -888,6 +905,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     function test_phase2_003_voteBeforeProposalWindow() public {
         // Propose at very start
         vm.warp(block.timestamp + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
 
@@ -904,6 +922,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Jump past voting window end
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(user);
         vm.expectRevert();
@@ -1023,6 +1042,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // voter1 votes yes
         vm.prank(voter1);
@@ -1061,6 +1081,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         vm.prank(whale);
         governor.vote(pid, true);

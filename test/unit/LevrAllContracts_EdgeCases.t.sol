@@ -99,6 +99,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid, true);
@@ -161,6 +162,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (700 sTokens)
         vm.prank(alice);
@@ -297,6 +299,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Try to vote at exactly votingStartsAt (should succeed)
         vm.warp(votingStarts);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         console2.log('At exact voting start time');
 
         vm.prank(alice);
@@ -318,6 +321,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Try to vote at exactly votingEndsAt (boundary check: <= vs <)
         vm.warp(votingEnds);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         console2.log('\nAt exact voting end time');
 
         vm.prank(bob);
@@ -329,6 +333,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         // Try one second after
         vm.warp(votingEnds + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.VotingNotActive.selector);
@@ -466,6 +471,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // BOTH vote (1000 sTokens = 100% participation)
         vm.prank(alice);
@@ -548,6 +554,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         // Alice's existing proposal should still be valid
         // But she cannot create NEW proposals
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid, true);
@@ -589,6 +596,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes
         vm.prank(alice);
@@ -780,6 +788,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         uint256 pid1 = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid1, true);
 

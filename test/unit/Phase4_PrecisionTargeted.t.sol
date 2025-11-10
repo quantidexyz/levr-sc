@@ -236,6 +236,7 @@ contract Phase4_PrecisionTargeted_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         vm.prank(user);
         vm.expectRevert();
@@ -255,6 +256,7 @@ contract Phase4_PrecisionTargeted_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         vm.prank(user);
         governor.vote(pid, true);

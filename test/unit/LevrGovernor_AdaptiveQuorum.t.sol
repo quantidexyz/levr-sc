@@ -123,6 +123,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // ONLY Alice votes (0.1% of current supply!)
         vm.prank(alice);
@@ -181,6 +182,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // ONLY Alice votes (1% of current supply)
         vm.prank(alice);
@@ -255,6 +257,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (20 tokens total)
         vm.prank(alice);
@@ -326,6 +329,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Remaining users vote (100% participation!)
         vm.prank(alice);
@@ -402,6 +406,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Remaining users vote (100% participation)
         vm.prank(alice);
@@ -467,6 +472,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (20 tokens)
         vm.prank(alice);
@@ -537,6 +543,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Only Alice votes (5 tokens = 4.8% of current)
         vm.prank(alice);
@@ -597,6 +604,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes (only remaining staker)
         vm.prank(alice);

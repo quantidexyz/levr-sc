@@ -133,6 +133,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Vote to make it winner (quorum=0, approval=0 for this test config)
         vm.warp(block.timestamp + 2 days + 1); // In voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         ILevrGovernor_v1(governor).vote(proposalId, true);
 
         vm.warp(block.timestamp + 5 days + 1); // Past voting window

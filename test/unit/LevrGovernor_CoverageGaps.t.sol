@@ -106,6 +106,7 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Move to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote yes to pass
         vm.prank(alice);
@@ -116,8 +117,11 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Execute once (should succeed)
         governor.execute(pid);
+        
+        // Cycle does NOT auto-advance (advances on next propose)
+        assertEq(governor.currentCycleId(), 1, 'Cycle does NOT auto-advance');
 
-        // Try to execute again (should revert)
+        // Try to execute again (should revert - AlreadyExecuted)
         vm.expectRevert(ILevrGovernor_v1.AlreadyExecuted.selector);
         governor.execute(pid);
     }
@@ -307,6 +311,7 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Move to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // All vote yes on all proposals (100% approval each)
         for (uint256 i = 0; i < users.length; i++) {
@@ -372,6 +377,7 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Vote to pass
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -385,9 +391,14 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         // Execute the proposal first
         governor.execute(pid);
 
-        // Now starting new cycle should work (execute auto-starts it actually)
+        // Cycle does NOT auto-advance (advances on next propose)
         uint256 cycleId = governor.currentCycleId();
-        assertGt(cycleId, 1, 'Cycle should have advanced after execution');
+        assertEq(cycleId, 1, 'Cycle does NOT auto-advance');
+        
+        // Create next proposal to trigger cycle advancement
+        vm.prank(alice);
+        uint256 pid2 = governor.proposeBoost(address(underlying), 500 ether);
+        assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
     }
 
     // ============================================================================
@@ -460,6 +471,7 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Vote - make pid1 winner with more approval
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Both vote yes on both, but pid1 gets more total votes
         vm.prank(alice);
@@ -475,8 +487,11 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Execute winner (pid1) - this marks cycle as executed
         governor.execute(pid1);
+        
+        // Cycle does NOT auto-advance (advances on next propose)
+        assertEq(governor.currentCycleId(), 1, 'Cycle does NOT auto-advance');
 
-        // Try to execute loser (pid2) - should fail with NotWinner since only winner can execute
+        // Try to execute loser (pid2) - fails with NotWinner (cycle hasn't advanced yet)
         vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
         governor.execute(pid2);
     }
@@ -510,6 +525,7 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Vote - make pid1 winner
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid1, true);

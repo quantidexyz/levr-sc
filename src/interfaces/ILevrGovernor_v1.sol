@@ -17,9 +17,9 @@ interface ILevrGovernor_v1 {
     enum ProposalState {
         Pending, // Created, voting not started
         Active, // Voting in progress
-        Succeeded, // Eligible for execution
+        Succeeded, // Eligible for execution (can be retried if previous attempts failed)
         Defeated, // Quorum or approval not met
-        Executed // Winner executed on-chain
+        Executed // Winner executed successfully (funds transferred)
     }
 
     // ============ Structs ============
@@ -38,8 +38,8 @@ interface ILevrGovernor_v1 {
         uint256 votingEndsAt; // Timestamp when voting ends
         uint256 yesVotes; // Total yes votes (VP)
         uint256 noVotes; // Total no votes (VP)
-        uint256 totalBalanceVoted; // Total sToken balance that voted (for quorum)
-        bool executed; // Whether proposal has been executed
+        uint256 totalBalanceVoted; // Total voting power that voted (for quorum, flash loan protected)
+        bool executed; // Whether proposal was successfully executed (funds transferred)
         uint256 cycleId; // Governance cycle ID
         ProposalState state; // Current state (computed)
         bool meetsQuorum; // Whether quorum threshold met (computed)
@@ -54,6 +54,12 @@ interface ILevrGovernor_v1 {
         bool hasVoted; // Whether user has voted
         bool support; // True = yes, false = no
         uint256 votes; // Voting power used
+    }
+
+    /// @notice Execution attempt info for a proposal
+    struct ExecutionAttemptInfo {
+        uint8 count; // Number of failed execution attempts
+        uint64 lastAttemptTime; // Timestamp of last attempt (0 if never attempted)
     }
 
     // ============ Errors ============
@@ -97,6 +103,9 @@ interface ILevrGovernor_v1 {
     /// @notice Insufficient voting power to vote
     error InsufficientVotingPower();
 
+    /// @notice Stake or unstake action too recent (MEV protection)
+    error StakeActionTooRecent();
+
     /// @notice Cycle is still active, cannot start new one
     error CycleStillActive();
 
@@ -111,6 +120,12 @@ interface ILevrGovernor_v1 {
 
     /// @notice Function is internal only (cannot be called directly)
     error InternalOnly();
+
+    /// @notice Proposal is not in the current cycle (cannot execute old proposals)
+    error ProposalNotInCurrentCycle();
+
+    /// @notice Execution attempt too soon after previous attempt (anti-griefing delay)
+    error ExecutionAttemptTooSoon();
 
     // ============ Events ============
 
@@ -244,6 +259,14 @@ interface ILevrGovernor_v1 {
     /// @notice Get the current active cycle ID
     /// @return cycleId The current cycle ID (0 if no active cycle)
     function currentCycleId() external view returns (uint256 cycleId);
+
+    /// @notice Get execution attempt info for a proposal
+    /// @dev Used to determine if manual cycle advancement is allowed (requires 3+ attempts)
+    /// @param proposalId The proposal ID
+    /// @return info Execution attempt info (count and last attempt timestamp)
+    function executionAttempts(
+        uint256 proposalId
+    ) external view returns (ExecutionAttemptInfo memory info);
 
     /// @notice Get the winning proposal for a cycle
     /// @dev Returns the proposal with highest yes votes that met quorum + approval

@@ -195,12 +195,14 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
         vm.stopPrank();
 
         vm.warp(block.timestamp + 10 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice creates and votes on proposal
         vm.prank(alice);
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid, true);

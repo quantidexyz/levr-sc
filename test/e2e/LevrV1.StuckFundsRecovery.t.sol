@@ -143,6 +143,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         // 3. Voting window - only Bob votes (insufficient quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         vm.prank(bob);
         governor.vote(pid1, false); // Bob votes no (to create a failed proposal)
@@ -341,6 +342,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         // 3. Both vote - but vote differently to ensure clear winner/loser
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Both vote YES on pidLarge (winner)
         vm.prank(alice);
@@ -363,20 +365,34 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         vm.warp(block.timestamp + 5 days);
 
         // 5. Large proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
-        // OLD: vm.expectRevert();
-        governor.execute(pidLarge);
+        // Execute 3 times to allow manual cycle advance (with explicit timing)
+        uint256 attemptDelay = 12 minutes; // 720 seconds, > 10 minute requirement
+        uint256 time1 = block.timestamp;
+        governor.execute(pidLarge); // Attempt 1
 
-        // Verify marked as executed (defeated)
+        uint256 time2 = time1 + attemptDelay;
+        vm.warp(time2);
+        governor.execute(pidLarge); // Attempt 2
+
+        uint256 time3 = time2 + attemptDelay;
+        vm.warp(time3);
+        governor.execute(pidLarge); // Attempt 3
+
+        // Verify NOT marked as executed (can retry, but allows manual advance after 3 attempts)
         assertEq(
             governor.getProposal(pidLarge).executed,
-            true,
-            'Large proposal should be executed'
+            false,
+            'Large proposal should NOT be executed (allows retry)'
         );
 
-        console2.log('Large proposal failed (insufficient balance, marked as defeated)');
+        console2.log('Large proposal failed 3 times (insufficient balance, allows manual advance)');
 
-        // 6. FIX [OCT-31-CRITICAL-1]: Cycle does NOT advance (defeated proposals don't trigger new cycle)
-        assertEq(governor.currentCycleId(), 1, 'Cycle unchanged (defeated proposals dont advance)');
+        // 6. FIX [OCT-31-CRITICAL-1]: Cycle does NOT auto-advance (failed proposals don't trigger new cycle)
+        assertEq(
+            governor.currentCycleId(),
+            1,
+            'Cycle unchanged (failed proposals dont auto-advance)'
+        );
 
         // Winner is pidLarge (only one that got YES votes)
         uint256 winner = governor.getWinner(1);
