@@ -590,10 +590,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Normal operation: debt <= accReward (user's debt tracks what they've accounted for)
         // Stale debt: debt > accReward (only happens after accRewardPerShare reset on token re-add)
         if (debt > accReward) {
-            // Stale debt detected - reset to prevent stuck funds
-            // This allows old users to participate in re-added token after one claim cycle
-            rewardDebt[user][token] = accReward;
-            return accReward;
+            // Stale debt detected - reset to 0 to allow user to claim all rewards from re-whitelist point
+            // Returning accReward would cause user to lose all accumulated rewards in current cycle
+            rewardDebt[user][token] = 0;
+            return 0;
         }
 
         return debt;

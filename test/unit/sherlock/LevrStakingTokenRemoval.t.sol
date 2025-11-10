@@ -239,25 +239,20 @@ contract LevrStakingTokenRemovalTest is Test, LevrFactoryDeployHelper {
         staking.claimRewards(tokens, bob);
 
         // Check that rewards are claimable
-        // Note: Alice's first claim was 0 (debt reset), so she only got rewards from second round
+        // After fix: Alice gets fair share in both rounds (50 + 50 = 100)
         uint256 totalClaimed = rewardTokenX.balanceOf(alice) +
             rewardTokenX.balanceOf(bob) -
             1000e18;
         assertApproxEqRel(
             totalClaimed,
-            150e18,
+            200e18,
             0.01e18,
-            'Should have claimed 150 (Bob: 50+50, Alice: 0+50)'
+            'Should have claimed 200 (Bob: 50+50, Alice: 50+50)'
         );
 
-        // Verify Alice earns normally after debt reset (got 0 first round, 50 second round)
+        // Verify Alice earns fairly with fixed stale debt (got 50 first round, 50 second round)
         uint256 aliceTotal = rewardTokenX.balanceOf(alice) - 1000e18; // Subtract first 1000
-        assertApproxEqRel(
-            aliceTotal,
-            50e18,
-            0.02e18,
-            'Alice should earn ~50 from second round only'
-        );
+        assertApproxEqRel(aliceTotal, 100e18, 0.02e18, 'Alice should earn ~100 from both rounds');
     }
 
     /// @notice Test multiple users with different stake times
@@ -312,18 +307,18 @@ contract LevrStakingTokenRemovalTest is Test, LevrFactoryDeployHelper {
         vm.prank(carol);
         staking.claimRewards(tokens, carol);
 
-        // Alice gets 0 (debt reset), Bob and Carol get ~50 each
+        // After fix: All users get fair share (~50 each)
         uint256 aliceClaimed = rewardTokenX.balanceOf(alice) - 1000e18;
         uint256 bobClaimed = rewardTokenX.balanceOf(bob);
         uint256 carolClaimed = rewardTokenX.balanceOf(carol);
 
-        assertEq(aliceClaimed, 0, 'Alice gets 0 (debt just reset)');
+        assertApproxEqRel(aliceClaimed, 50e18, 0.02e18, 'Alice gets ~50 (debt reset to 0)');
         assertApproxEqRel(bobClaimed, 50e18, 0.02e18, 'Bob should get ~50');
         assertApproxEqRel(carolClaimed, 50e18, 0.02e18, 'Carol should get ~50');
 
-        // Verify total equals what was claimable (100, not 150, since Alice's share is delayed)
+        // Verify total equals full distribution (150 total)
         uint256 totalClaimed = aliceClaimed + bobClaimed + carolClaimed;
-        assertApproxEqRel(totalClaimed, 100e18, 0.02e18, 'Total should be ~100 (Alice delayed)');
+        assertApproxEqRel(totalClaimed, 150e18, 0.02e18, 'Total should be ~150 (all users fair)');
     }
 
     /// @notice Test normal operation is unaffected (debt <= accReward)
@@ -534,28 +529,29 @@ contract LevrStakingTokenRemovalTest is Test, LevrFactoryDeployHelper {
         vm.prank(tokenAdmin);
         staking.whitelistToken(address(rewardTokenX));
 
-        // Phase 3: First batch of rewards (Alice will get 0, debt resets)
+        // Phase 3: First batch of rewards after re-whitelist
         rewardTokenX.mint(address(staking), 100e18);
         staking.accrueRewards(address(rewardTokenX));
         vm.warp(block.timestamp + 1 days);
 
-        // Trigger debt reset by claiming (Alice gets 0, debt is reset)
+        // Phase 4: First claim after re-whitelist (Alice gets fair share with fixed stale debt)
         vm.prank(alice);
         staking.claimRewards(tokens, alice);
 
         uint256 aliceBalanceAfterFirstClaim = rewardTokenX.balanceOf(alice);
-        assertEq(
+        assertApproxEqRel(
             aliceBalanceAfterFirstClaim,
-            1000e18,
-            'Alice gets 0 new rewards (debt just reset)'
+            1100e18,
+            0.02e18,
+            'Alice gets 100 new rewards (debt reset to 0, not accReward)'
         );
 
-        // Phase 4: Second batch of rewards (Alice can now earn normally)
+        // Phase 5: Second batch of rewards (Alice continues earning normally)
         rewardTokenX.mint(address(staking), 100e18);
         staking.accrueRewards(address(rewardTokenX));
         vm.warp(block.timestamp + 1 days);
 
-        // Phase 5: Unstake (triggers _claimAllRewards, Alice should get rewards now)
+        // Phase 6: Unstake (triggers _claimAllRewards, Alice should get second batch too)
         uint256 balanceBefore = rewardTokenX.balanceOf(alice);
 
         vm.prank(alice);
@@ -564,8 +560,8 @@ contract LevrStakingTokenRemovalTest is Test, LevrFactoryDeployHelper {
         uint256 balanceAfter = rewardTokenX.balanceOf(alice);
         uint256 claimed = balanceAfter - balanceBefore;
 
-        // Alice should get her share from second batch (debt was already reset in phase 3)
-        assertGt(claimed, 0, 'Alice should claim rewards on unstake after debt reset');
+        // Alice should get her share from second batch
+        assertGt(claimed, 0, 'Alice should claim rewards on unstake');
         assertApproxEqRel(claimed, 100e18, 0.02e18, 'Alice should get ~100 from second batch');
     }
 }
