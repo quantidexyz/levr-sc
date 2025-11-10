@@ -76,7 +76,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         address underlying_
     ) external {
         if (_initialized) revert AlreadyInitialized();
-        if (_msgSender() != factory) revert InternalOnly();
+        if (_msgSender() != factory) revert ILevrGovernor_v1.OnlyFactory();
         if (treasury_ == address(0)) revert InvalidRecipient();
         if (staking_ == address(0)) revert InvalidRecipient();
         if (stakedToken_ == address(0)) revert InvalidRecipient();

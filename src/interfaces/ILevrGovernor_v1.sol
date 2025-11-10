@@ -121,6 +121,9 @@ interface ILevrGovernor_v1 {
     /// @notice Function is internal only (cannot be called directly)
     error InternalOnly();
 
+    /// @notice Only the factory can call this function
+    error OnlyFactory();
+
     /// @notice Proposal is not in the current cycle (cannot execute old proposals)
     error ProposalNotInCurrentCycle();
 
