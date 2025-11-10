@@ -65,9 +65,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @dev Separates user deposits from rewards for accurate accounting
     mapping(address => uint256) private _escrowBalance;
 
-    /// @inheritdoc ILevrStaking_v1
-    /// @dev Can only be called once by the factory address set in constructor
-    ///      Queries token decimals and sets precision for decimal-aware operations
+    // Reward accounting: prevents dilution attack (MasterChef pattern)
+    // Tracks cumulative rewards per staked token (scaled by 1e18, never decreases)
+    mapping(address => uint256) public accRewardPerShare;
+    // Tracks user's reward debt per token (what they've already accounted for)
+    mapping(address => mapping(address => uint256)) public rewardDebt;
+
     function initialize(
         address underlying_,
         address stakedToken_,
@@ -137,7 +140,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Settle all reward pools to latest state
         _settleAllPools();
 
-        // First staker: resume all paused streams (streaming pauses when totalStaked = 0)
+        // Auto-claim existing rewards before staking more (prevents self-dilution)
+        uint256 existingBalance = ILevrStakedToken_v1(stakedToken).balanceOf(staker);
+        if (existingBalance > 0) {
+            _claimAllRewards(staker, staker);
+        }
+
+        // First staker: restart paused streams
         if (isFirstStaker) {
             uint256 len = _rewardTokens.length;
             for (uint256 i = 0; i < len; i++) {
@@ -169,6 +178,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         _escrowBalance[underlying] += actualReceived;
         _totalStaked += actualReceived;
         ILevrStakedToken_v1(stakedToken).mint(staker, actualReceived);
+
+        // Update reward debt for all tokens (prevents dilution on future claims)
+        uint256 len = _rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address token = _rewardTokens[i];
+            rewardDebt[staker][token] = accRewardPerShare[token];
+        }
 
         emit Staked(staker, actualReceived);
     }
@@ -224,10 +240,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 userBalance = ILevrStakedToken_v1(stakedToken).balanceOf(claimer);
         if (userBalance == 0) return;
 
-        uint256 cachedTotalStaked = _totalStaked;
-        if (cachedTotalStaked == 0) return;
-
-        // Claim rewards for each specified token
         for (uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
             ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
@@ -236,18 +248,24 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             // Settle to move vested stream rewards into available pool
             _settlePoolForToken(token);
 
-            // Calculate proportional claim: (userBalance / totalStaked) × available pool
-            // Works for any token decimals (USDC 6, WBTC 8, DAI 18)
-            uint256 claimable = RewardMath.calculateProportionalClaim(
+            // Get effective debt (auto-resets stale debt from token removal/re-add)
+            uint256 effectiveDebt = _getEffectiveDebt(claimer, token);
+
+            // Calculate pending rewards using debt accounting (prevents dilution attack)
+            uint256 pending = RewardMath.calculatePendingRewards(
                 userBalance,
-                cachedTotalStaked,
-                tokenState.availablePool
+                accRewardPerShare[token],
+                effectiveDebt
             );
 
-            if (claimable > 0) {
-                tokenState.availablePool -= claimable;
-                IERC20(token).safeTransfer(to, claimable);
-                emit RewardsClaimed(claimer, to, token, claimable);
+            if (pending > 0) {
+                tokenState.availablePool -= pending;
+
+                // Update user's debt to current accumulated
+                rewardDebt[claimer][token] = accRewardPerShare[token];
+
+                IERC20(token).safeTransfer(to, pending);
+                emit RewardsClaimed(claimer, to, token, pending);
             }
         }
     }
@@ -299,6 +317,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             tokenState.streamStart = 0;
             tokenState.streamEnd = 0;
             _rewardTokens.push(token);
+
+            // Reset accounting for clean start (fresh token OR re-added token after removal)
+            // This prevents corruption when tokens are removed and re-whitelisted
+            accRewardPerShare[token] = 0;
         }
 
         emit ILevrStaking_v1.TokenWhitelisted(token);
@@ -375,9 +397,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         if (!tokenState.exists) return 0;
 
-        // Calculate current pool including vested rewards using library (CRITICAL-3 fix: use per-token window)
-        uint256 currentPool = RewardMath.calculateCurrentPool(
-            tokenState.availablePool,
+        // Calculate what accRewardPerShare would be if we settled now
+        uint256 currentAccRewardPerShare = accRewardPerShare[token];
+
+        // Add any pending vested rewards
+        (uint256 vestAmount, ) = RewardMath.calculateVestedAmount(
             tokenState.streamTotal,
             tokenState.streamStart,
             tokenState.streamEnd,
@@ -385,11 +409,15 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             uint64(block.timestamp)
         );
 
-        // Calculate proportional claim (simple pool-based)
-        claimable = RewardMath.calculateProportionalClaim(
+        if (vestAmount > 0 && cachedTotalStaked > 0) {
+            currentAccRewardPerShare += (vestAmount * 1e18) / cachedTotalStaked;
+        }
+
+        // Calculate pending using debt accounting (prevents dilution attack)
+        claimable = RewardMath.calculatePendingRewards(
             userBalance,
-            cachedTotalStaked,
-            currentPool
+            currentAccRewardPerShare,
+            rewardDebt[account][token]
         );
     }
 
@@ -606,16 +634,36 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         return bal > accounted ? bal - accounted : 0;
     }
 
-    /// @notice Auto-claim all rewards for a user (called during unstake)
-    /// @dev Claims ALL registered reward tokens to prevent user losing unclaimed rewards
+    /// @notice Get effective debt for user, auto-resetting stale debt
+    /// @dev Detects stale debt from token removal/re-add by checking if debt > accRewardPerShare
+    /// @param user The user to check debt for
+    /// @param token The reward token
+    /// @return effectiveDebt The debt to use in claim calculations (reset if stale)
+    function _getEffectiveDebt(
+        address user,
+        address token
+    ) internal returns (uint256 effectiveDebt) {
+        uint256 debt = rewardDebt[user][token];
+        uint256 accReward = accRewardPerShare[token];
+
+        // Normal operation: debt <= accReward (user's debt tracks what they've accounted for)
+        // Stale debt: debt > accReward (only happens after accRewardPerShare reset on token re-add)
+        if (debt > accReward) {
+            // Stale debt detected - reset to 0 to allow user to claim all rewards from re-whitelist point
+            // Returning accReward would cause user to lose all accumulated rewards in current cycle
+            rewardDebt[user][token] = 0;
+            return 0;
+        }
+
+        return debt;
+    }
+
+    /// @notice Auto-claim all rewards for a user (used in unstake)
     /// @param claimer The user claiming rewards
     /// @param to The address to send rewards to
     function _claimAllRewards(address claimer, address to) internal {
         uint256 userBalance = ILevrStakedToken_v1(stakedToken).balanceOf(claimer);
         if (userBalance == 0) return;
-
-        uint256 cachedTotalStaked = _totalStaked;
-        if (cachedTotalStaked == 0) return;
 
         uint256 len = _rewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
@@ -623,23 +671,29 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
             if (!tokenState.exists) continue;
 
-            // Settle pool to latest
+            // Settle pool to latest (updates accRewardPerShare)
             _settlePoolForToken(token);
 
-            // Calculate proportional share
-            uint256 claimable = RewardMath.calculateProportionalClaim(
+            // Get effective debt (auto-resets stale debt from token removal/re-add)
+            uint256 effectiveDebt = _getEffectiveDebt(claimer, token);
+
+            // Calculate pending rewards using debt accounting (prevents dilution attack)
+            uint256 pending = RewardMath.calculatePendingRewards(
                 userBalance,
-                cachedTotalStaked,
-                tokenState.availablePool
+                accRewardPerShare[token],
+                effectiveDebt
             );
 
-            if (claimable > 0) {
+            if (pending > 0) {
                 // Reduce pool
-                tokenState.availablePool -= claimable;
+                tokenState.availablePool -= pending;
+
+                // Update user's debt to current accumulated
+                rewardDebt[claimer][token] = accRewardPerShare[token];
 
                 // Transfer rewards
-                IERC20(token).safeTransfer(to, claimable);
-                emit RewardsClaimed(claimer, to, token, claimable);
+                IERC20(token).safeTransfer(to, pending);
+                emit RewardsClaimed(claimer, to, token, pending);
             }
         }
     }
@@ -694,6 +748,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (vestAmount > 0) {
             tokenState.availablePool += vestAmount;
             tokenState.streamTotal -= vestAmount;
+
+            // Update cumulative rewards per share (prevents dilution attack)
+            // accRewardPerShare tracks total rewards per staked token (scaled by 1e18)
+            accRewardPerShare[token] += (vestAmount * 1e18) / _totalStaked;
         }
 
         tokenState.lastUpdate = newLast;

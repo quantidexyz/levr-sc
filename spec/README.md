@@ -32,6 +32,7 @@
 | Document                                                                | Purpose                        | Priority                    |
 | ----------------------------------------------------------------------- | ------------------------------ | --------------------------- |
 | **[AUDIT_STATUS.md](./AUDIT_STATUS.md)**                                | Current audit dashboard        | ⭐ **Read First**           |
+| **[sherlock/](./sherlock/)** 🆕                                         | Sherlock audit POCs & analysis | 🔴 **ACTIVE VALIDATION**    |
 | **[EXTERNAL_AUDIT_4_ACTIONS.md](./EXTERNAL_AUDIT_4_ACTIONS.md)** 🆕     | Latest action plan (17 items)  | 🔴 **URGENT - Active Work** |
 | **[SECURITY_AUDIT_OCT_31_2025.md](./SECURITY_AUDIT_OCT_31_2025.md)** 🆕 | Source audit report            | 📖 **Fresh Perspective**    |
 | **[EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)**        | Previous work (Phase 1 done)   | ✅ Reference                |

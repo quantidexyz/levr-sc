@@ -38,40 +38,26 @@ library RewardMath {
         newLast = to;
     }
 
-    /// @notice Calculate user's proportional share of pool
+    /// @notice Calculate pending rewards using debt accounting (MasterChef pattern)
+    /// @dev Prevents dilution attacks by tracking what user has already accounted for
     /// @param userBalance User's staked token balance
-    /// @param totalStaked Total staked token supply
-    /// @param availablePool Total claimable pool for this token
-    /// @return claimable User's claimable amount
-    function calculateProportionalClaim(
+    /// @param accRewardPerShare Accumulated rewards per share (scaled by 1e18)
+    /// @param userDebt User's reward debt (what they've already accounted for)
+    /// @return pending User's pending claimable amount
+    function calculatePendingRewards(
         uint256 userBalance,
-        uint256 totalStaked,
-        uint256 availablePool
-    ) internal pure returns (uint256 claimable) {
-        if (userBalance == 0 || totalStaked == 0 || availablePool == 0) return 0;
+        uint256 accRewardPerShare,
+        uint256 userDebt
+    ) internal pure returns (uint256 pending) {
+        if (userBalance == 0) return 0;
 
-        // User's share = (userBalance / totalStaked) × availablePool
-        // This is mathematically perfect: sum of all claims = pool
-        return (availablePool * userBalance) / totalStaked;
-    }
+        // Calculate accumulated rewards based on current accRewardPerShare
+        uint256 accumulatedRewards = (userBalance * accRewardPerShare) / 1e18;
 
-    /// @notice Calculate current available pool including vested rewards
-    /// @param basePool Current pool amount
-    /// @param streamTotal Total amount streaming
-    /// @param start Stream start timestamp
-    /// @param end Stream end timestamp
-    /// @param last Last update timestamp
-    /// @param current Current timestamp
-    /// @return totalPool Base pool + newly vested amount
-    function calculateCurrentPool(
-        uint256 basePool,
-        uint256 streamTotal,
-        uint64 start,
-        uint64 end,
-        uint64 last,
-        uint64 current
-    ) internal pure returns (uint256 totalPool) {
-        (uint256 vested, ) = calculateVestedAmount(streamTotal, start, end, last, current);
-        return basePool + vested;
+        // Subtract what user has already accounted for (debt)
+        uint256 debtAmount = (userBalance * userDebt) / 1e18;
+
+        // Pending = accumulated - debt (prevents dilution on stake/claim operations)
+        return accumulatedRewards > debtAmount ? accumulatedRewards - debtAmount : 0;
     }
 }

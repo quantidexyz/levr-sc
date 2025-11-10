@@ -29,43 +29,57 @@ contract RewardMath_DivisionSafety_Test is Test {
         assertEq(newLast, current, 'New last should be current time');
     }
 
-    /// @notice Test calculateProportionalClaim works correctly
-    function test_calculateProportionalClaim_calculatesCorrectly() public pure {
+    /// @notice Test calculatePendingRewards works correctly (debt accounting pattern)
+    function test_calculatePendingRewards_calculatesCorrectly() public pure {
         uint256 userBalance = 100 ether;
-        uint256 totalStaked = 1000 ether;
-        uint256 availablePool = 500 ether;
+        uint256 accRewardPerShare = 5e18; // 5 rewards per share (scaled by 1e18)
+        uint256 userDebt = 2e18; // User already accounted for 2 rewards per share
 
-        uint256 claimable = RewardMath.calculateProportionalClaim(
+        uint256 pending = RewardMath.calculatePendingRewards(
             userBalance,
-            totalStaked,
-            availablePool
+            accRewardPerShare,
+            userDebt
         );
 
-        // Should be (100 / 1000) × 500 = 50
-        uint256 expected = 50 ether;
-        assertEq(claimable, expected, 'Should calculate proportional share');
+        // pending = (100 ether × 5e18) / 1e18 - (100 ether × 2e18) / 1e18
+        //         = 500 ether - 200 ether = 300 ether
+        uint256 expected = 300 ether;
+        assertEq(pending, expected, 'Should calculate pending with debt accounting');
     }
 
-    /// @notice Test calculateCurrentPool includes vested amount
-    function test_calculateCurrentPool_includesVested() public pure {
-        uint256 basePool = 100 ether;
-        uint256 streamTotal = 1000 ether;
-        uint64 start = 1000;
-        uint64 end = 1000 + 7 days;
-        uint64 last = 1000;
-        uint64 current = 1000 + 1 days; // 1/7 through stream
+    /// @notice Test calculatePendingRewards returns 0 when debt equals accumulated
+    function test_calculatePendingRewards_zeroWhenDebtEqualsAccumulated() public pure {
+        uint256 userBalance = 100 ether;
+        uint256 accRewardPerShare = 5e18;
+        uint256 userDebt = 5e18; // Debt equals accumulated
 
-        uint256 currentPool = RewardMath.calculateCurrentPool(
-            basePool,
-            streamTotal,
-            start,
-            end,
-            last,
-            current
+        uint256 pending = RewardMath.calculatePendingRewards(
+            userBalance,
+            accRewardPerShare,
+            userDebt
         );
 
-        // Should be basePool + vested ~= 100 + (1000/7) ~= 242.857
-        assertGt(currentPool, basePool, 'Pool should include vested amount');
-        assertLt(currentPool, basePool + streamTotal, 'Pool should not include unvested');
+        assertEq(pending, 0, 'Should return 0 when debt equals accumulated');
+    }
+
+    /// @notice Test calculatePendingRewards returns 0 when debt exceeds accumulated
+    function test_calculatePendingRewards_zeroWhenDebtExceedsAccumulated() public pure {
+        uint256 userBalance = 100 ether;
+        uint256 accRewardPerShare = 3e18;
+        uint256 userDebt = 5e18; // Debt > accumulated (stale debt scenario)
+
+        uint256 pending = RewardMath.calculatePendingRewards(
+            userBalance,
+            accRewardPerShare,
+            userDebt
+        );
+
+        assertEq(pending, 0, 'Should return 0 when debt exceeds accumulated (stale debt)');
+    }
+
+    /// @notice Test calculatePendingRewards returns 0 for zero balance
+    function test_calculatePendingRewards_zeroForZeroBalance() public pure {
+        uint256 pending = RewardMath.calculatePendingRewards(0, 5e18, 0);
+        assertEq(pending, 0, 'Should return 0 for zero balance');
     }
 }
