@@ -34,11 +34,11 @@ contract DeployLevrFactoryDevnetTest is Test, LevrFactoryDeployHelper {
         });
 
         // Deploy factory with forwarder and deployer logic using helper
-        (
-            LevrFactory_v1 factory,
-            LevrForwarder_v1 forwarder,
-            LevrDeployer_v1 levrDeployer
-        ) = deployFactory(config, address(this), 0xE85A59c628F7d27878ACeB4bf3b35733630083a9);
+        (LevrFactory_v1 factory, , ) = deployFactory(
+            config,
+            address(this),
+            0xE85A59c628F7d27878ACeB4bf3b35733630083a9
+        );
 
         // Verify configuration
         assertEq(factory.protocolFeeBps(), protocolFeeBps);
