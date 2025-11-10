@@ -59,7 +59,6 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
             address(underlying),
             address(sToken),
             treasury,
-            factory,
             new address[](0)
         );
 

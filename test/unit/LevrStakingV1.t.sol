@@ -34,7 +34,6 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             new address[](0)
         );
 

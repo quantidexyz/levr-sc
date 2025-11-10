@@ -286,7 +286,7 @@ contract LevrGovernor_ActiveCountGridlock_Test is Test, LevrFactoryDeployHelper 
         // Create next proposal to trigger cycle advancement
         console2.log('\nCreating next proposal to trigger cycle advancement...');
         vm.prank(alice);
-        uint256 pid3 = governor.proposeBoost(address(underlying), 3000 ether);
+        governor.proposeBoost(address(underlying), 3000 ether);
         console2.log('Created proposal 3: SUCCESS');
         
         // Now cycle should have advanced

@@ -30,7 +30,7 @@ interface ILevrDeployer_v1 {
     /// @dev Called via delegatecall from factory during register()
     ///      During delegatecall, address(this) is the calling contract's address
     ///      This function reverts if address(this) != authorizedFactory
-    ///      Factory and forwarder are set in implementation constructors (inherited by clones)
+    ///      Governor, treasury, and staking use clones; stakedToken is deployed as new instance
     /// @param clankerToken The underlying Clanker token address
     /// @param treasury_ Pre-deployed treasury address from prepareContracts()
     /// @param staking_ Pre-deployed staking address from prepareContracts()

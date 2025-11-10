@@ -397,7 +397,7 @@ contract LevrGovernor_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         
         // Create next proposal to trigger cycle advancement
         vm.prank(alice);
-        uint256 pid2 = governor.proposeBoost(address(underlying), 500 ether);
+        governor.proposeBoost(address(underlying), 500 ether);
         assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
     }
 

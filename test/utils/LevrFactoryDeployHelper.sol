@@ -25,7 +25,6 @@ contract LevrFactoryDeployHelper is Test {
     LevrTreasury_v1 internal _treasuryImpl;
     LevrStaking_v1 internal _stakingImpl;
     LevrGovernor_v1 internal _governorImpl;
-    LevrStakedToken_v1 internal _stakedTokenImpl;
 
     /// @notice Deploy a complete factory with forwarder and deployer logic
     /// @dev This handles the tricky nonce calculation to ensure deployer logic is authorized
@@ -47,23 +46,22 @@ contract LevrFactoryDeployHelper is Test {
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
         // Step 2: Calculate factory address (will be deployed after implementations and deployer)
-        // Current nonce is after forwarder, +4 implementations, +1 deployer logic, +1 for factory
+        // Current nonce is after forwarder, +3 implementations, +1 deployer logic, +1 for factory
         uint64 currentNonce = vm.getNonce(address(this));
-        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 5);
+        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 4);
 
         // Step 3: Deploy implementation contracts with predicted factory
         LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
         LevrStaking_v1 stakingImpl = new LevrStaking_v1(address(forwarder), predictedFactory);
         LevrGovernor_v1 governorImpl = new LevrGovernor_v1(address(forwarder), predictedFactory);
-        LevrStakedToken_v1 stakedTokenImpl = new LevrStakedToken_v1(predictedFactory);
 
         // Step 4: Deploy deployer logic with predicted factory address and implementations
+        // Note: StakedToken is deployed as new instance per project, not cloned
         levrDeployer = new LevrDeployer_v1(
             predictedFactory,
             address(treasuryImpl),
             address(stakingImpl),
-            address(governorImpl),
-            address(stakedTokenImpl)
+            address(governorImpl)
         );
 
         // Step 5: Deploy mock WETH at hardcoded Base WETH address (if not already deployed)
@@ -165,7 +163,6 @@ contract LevrFactoryDeployHelper is Test {
     /// @param underlying The underlying token address
     /// @param stakedToken The staked token address
     /// @param treasury The treasury address
-    /// @param factory The factory address (or test contract address for tests)
     /// @param rewardTokens Array of reward tokens to whitelist (e.g., WETH, USDC)
     /// @dev This initializes staking with reward tokens automatically whitelisted via initialWhitelistedTokens
     function initializeStakingWithRewardTokens(
@@ -173,7 +170,6 @@ contract LevrFactoryDeployHelper is Test {
         address underlying,
         address stakedToken,
         address treasury,
-        address factory,
         address[] memory rewardTokens
     ) internal {
         // Initialize staking with reward tokens already whitelisted
@@ -187,7 +183,6 @@ contract LevrFactoryDeployHelper is Test {
     /// @param underlying The underlying token address
     /// @param stakedToken The staked token address
     /// @param treasury The treasury address
-    /// @param factory The factory address (or test contract address for tests)
     /// @param rewardToken Single reward token to whitelist (e.g., WETH)
     /// @dev Convenience wrapper for single token case
     function initializeStakingWithRewardToken(
@@ -195,7 +190,6 @@ contract LevrFactoryDeployHelper is Test {
         address underlying,
         address stakedToken,
         address treasury,
-        address factory,
         address rewardToken
     ) internal {
         address[] memory rewardTokens = new address[](1);
@@ -205,7 +199,6 @@ contract LevrFactoryDeployHelper is Test {
             underlying,
             stakedToken,
             treasury,
-            factory,
             rewardTokens
         );
     }
@@ -238,8 +231,8 @@ contract LevrFactoryDeployHelper is Test {
         whitelistRewardToken(staking, token, tokenAdmin);
     }
 
-    /// @notice Create an initialized staked token for unit tests
-    /// @dev Uses clone pattern with cached implementations. Creates implementation on first call.
+    /// @notice Create a staked token for unit tests
+    /// @dev Deploys a new instance per call (not cloned)
     function createStakedToken(
         string memory name,
         string memory symbol,
@@ -247,14 +240,8 @@ contract LevrFactoryDeployHelper is Test {
         address underlying,
         address staking
     ) internal returns (LevrStakedToken_v1) {
-        // Deploy implementation if not yet created
-        if (address(_stakedTokenImpl) == address(0)) {
-            _stakedTokenImpl = new LevrStakedToken_v1(address(this));
-        }
-
-        address clone = Clones.clone(address(_stakedTokenImpl));
-        LevrStakedToken_v1(clone).initialize(name, symbol, decimals, underlying, staking);
-        return LevrStakedToken_v1(clone);
+        // Deploy new instance directly (no clone pattern)
+        return new LevrStakedToken_v1(name, symbol, decimals, underlying, staking);
     }
 
     /// @notice Create an initialized governor for unit tests
@@ -310,8 +297,7 @@ contract LevrFactoryDeployHelper is Test {
         LevrTreasury_v1 ti = new LevrTreasury_v1(factory, address(0));
         LevrStaking_v1 si = new LevrStaking_v1(address(0), factory);
         LevrGovernor_v1 gi = new LevrGovernor_v1(address(0), factory);
-        LevrStakedToken_v1 sti = new LevrStakedToken_v1(factory);
 
-        return new LevrDeployer_v1(factory, address(ti), address(si), address(gi), address(sti));
+        return new LevrDeployer_v1(factory, address(ti), address(si), address(gi));
     }
 }

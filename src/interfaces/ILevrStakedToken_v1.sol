@@ -8,11 +8,8 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 interface ILevrStakedToken_v1 is IERC20 {
     // ============ Errors ============
 
-    /// @notice Revert if already initialized (double initialization prevented)
-    error AlreadyInitialized();
-
-    /// @notice Revert if caller is not the deployer/factory
-    error OnlyFactory();
+    /// @notice Revert if caller is not the staking contract
+    error OnlyStaking();
 
     /// @notice Revert if zero address provided
     error ZeroAddress();
@@ -29,15 +26,6 @@ interface ILevrStakedToken_v1 is IERC20 {
     event Burn(address indexed from, uint256 amount);
 
     // ============ Functions ============
-
-    /// @notice Initialize the cloned staked token (clone-only, called once).
-    function initialize(
-        string memory name_,
-        string memory symbol_,
-        uint8 decimals_,
-        address underlying_,
-        address staking_
-    ) external;
 
     /// @notice Mint staked tokens (staking-only).
     function mint(address to, uint256 amount) external;

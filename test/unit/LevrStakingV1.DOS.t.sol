@@ -60,7 +60,6 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
             address(underlying),
             address(sToken),
             treasury,
-            address(this),
             new address[](0)
         );
 
@@ -222,7 +221,6 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
             address(underlying),
             address(testSToken),
             treasury,
-            address(this),
             new address[](0)
         );
 

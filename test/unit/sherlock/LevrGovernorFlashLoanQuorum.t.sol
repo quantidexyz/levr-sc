@@ -109,7 +109,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
 
         // Step 6: Now we can propose in cycle 2 (auto-advancement after execution)
         vm.prank(alice);
-        uint256 proposalId2 = governor.proposeTransfer(
+        governor.proposeTransfer(
             address(underlying),
             bob,
             100 ether,
@@ -524,7 +524,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
         // Now can propose
         console.log('Now trying to propose after execution...');
         vm.prank(alice);
-        uint256 prop2 = governor.proposeBoost(address(underlying), 50 ether);
+        governor.proposeBoost(address(underlying), 50 ether);
 
         console.log('SUCCESS: Can propose after execution');
         console.log('New cycle:', governor.currentCycleId());
@@ -642,7 +642,7 @@ contract LevrGovernorFlashLoanQuorumTest is Test, LevrFactoryDeployHelper {
         // Should be able to propose in new cycle
         console.log('Trying to propose in new cycle...');
         vm.prank(bob);
-        uint256 prop2 = governor.proposeBoost(address(underlying), 50 ether);
+        governor.proposeBoost(address(underlying), 50 ether);
 
         console.log('SUCCESS: Can propose after all proposals defeated');
         console.log('New cycle:', governor.currentCycleId());

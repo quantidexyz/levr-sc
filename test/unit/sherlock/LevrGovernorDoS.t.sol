@@ -252,7 +252,7 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
         
         // Create next proposal to trigger cycle advancement
         vm.prank(attacker);
-        uint256 pid2 = governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
+        governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
         assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
 
         console2.log('');
@@ -338,7 +338,7 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
         
         // Create next proposal to trigger cycle advancement
         vm.prank(attacker);
-        uint256 pid2 = governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
+        governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
         assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
 
         console2.log('');
@@ -489,7 +489,7 @@ contract LevrGovernorDoS_Test is Test, LevrFactoryDeployHelper {
         
         // Create next proposal to trigger cycle advancement
         vm.prank(attacker);
-        uint256 pid2 = governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
+        governor.proposeTransfer(address(underlying), alice, 10 ether, 'Next');
         assertGt(governor.currentCycleId(), 1, 'Cycle advances on next propose');
 
         console2.log('Cycle auto-advanced to:', cycleAfter);

@@ -354,7 +354,6 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeploy
 
         // DEBT ACCOUNTING: After Alice claims, Bob's claimable is INDEPENDENT
         // With new accounting system, Bob's rewards don't depend on Alice's claim order
-        uint256 bobClaimableAfterAlice = staking.claimableRewards(bob, address(underlying));
 
         vm.startPrank(bob);
         uint256 bobBalBefore = underlying.balanceOf(bob);

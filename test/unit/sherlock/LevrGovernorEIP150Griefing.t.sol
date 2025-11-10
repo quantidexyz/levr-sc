@@ -105,22 +105,30 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
 
             // Cycle does NOT auto-advance (advances on next propose)
             assertEq(governor.currentCycleId(), cycleIdBefore, 'Cycle does NOT auto-advance');
-            
+
             // Create next proposal to trigger cycle advancement
             vm.prank(alice);
-            uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
-            assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
+            governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+            assertEq(
+                governor.currentCycleId(),
+                cycleIdBefore + 1,
+                'Cycle advances on next propose'
+            );
         } else {
             // 250k was enough - verify normal success path
             assertTrue(proposal1.executed, 'Proposal executed');
             assertEq(bobBalanceAfter1, bobBalanceBefore + 50 ether, 'Funds transferred');
             // Cycle does NOT auto-advance
             assertEq(governor.currentCycleId(), cycleIdBefore, 'Cycle does NOT auto-advance');
-            
+
             // Create next proposal to trigger cycle advancement
             vm.prank(alice);
-            uint256 pid3 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
-            assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
+            governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+            assertEq(
+                governor.currentCycleId(),
+                cycleIdBefore + 1,
+                'Cycle advances on next propose'
+            );
         }
     }
 
@@ -157,10 +165,10 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
             cycleIdBefore,
             'Cycle should NOT auto-advance (advances on next propose)'
         );
-        
+
         // Create next proposal to trigger cycle advancement
         vm.prank(alice);
-        uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+        governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
         assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
     }
 
@@ -189,11 +197,11 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         // Attempt to execute multiple times (will fail each time)
         governor.execute(proposalId);
         assertEq(governor.executionAttempts(proposalId).count, 1, 'Should have 1 attempt');
-        
+
         vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
         assertEq(governor.executionAttempts(proposalId).count, 2, 'Should have 2 attempts');
-        
+
         vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
         assertEq(governor.executionAttempts(proposalId).count, 3, 'Should have 3 attempts');
@@ -237,11 +245,11 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         // Execute multiple times - will fail due to reverting token
         governor.execute(proposalId);
         assertEq(governor.executionAttempts(proposalId).count, 1, 'Should have 1 attempt');
-        
+
         vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
         assertEq(governor.executionAttempts(proposalId).count, 2, 'Should have 2 attempts');
-        
+
         vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
         governor.execute(proposalId);
         assertEq(governor.executionAttempts(proposalId).count, 3, 'Should have 3 attempts');
@@ -259,7 +267,11 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
 
         // Manual advance should work after 3 attempts
         governor.startNewCycle();
-        assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Manual advance should work after 3 attempts');
+        assertEq(
+            governor.currentCycleId(),
+            cycleIdBefore + 1,
+            'Manual advance should work after 3 attempts'
+        );
 
         // Now old proposal is non-executable
         vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
@@ -295,10 +307,10 @@ contract LevrGovernorEIP150GriefingTest is Test, LevrFactoryDeployHelper {
         assertTrue(proposal.executed, 'Should eventually execute');
         // Cycle does NOT auto-advance (advances on next propose)
         assertEq(governor.currentCycleId(), cycleIdBefore, 'Cycle does NOT auto-advance');
-        
+
         // Create next proposal to trigger cycle advancement
         vm.prank(alice);
-        uint256 pid2 = governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
+        governor.proposeTransfer(address(underlying), bob, 10 ether, 'Next');
         assertEq(governor.currentCycleId(), cycleIdBefore + 1, 'Cycle advances on next propose');
     }
 }

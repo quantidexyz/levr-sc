@@ -35,7 +35,6 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
             address(underlying),
             address(sToken),
             address(0xBEEF),
-            address(this),
             rewardTokens
         );
 

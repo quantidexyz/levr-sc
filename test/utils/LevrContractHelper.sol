@@ -18,7 +18,6 @@ contract LevrContractHelper is Test {
     LevrTreasury_v1 internal _treasuryImpl;
     LevrStaking_v1 internal _stakingImpl;
     LevrGovernor_v1 internal _governorImpl;
-    LevrStakedToken_v1 internal _stakedTokenImpl;
 
     address internal _mockFactory;
     address internal _mockForwarder;
@@ -28,15 +27,14 @@ contract LevrContractHelper is Test {
         _mockFactory = address(this); // Use test contract as mock factory
         _mockForwarder = address(0x999); // Mock forwarder
 
-        // Deploy implementation contracts
+        // Deploy implementation contracts (stakedToken deployed directly, not cloned)
         _treasuryImpl = new LevrTreasury_v1(_mockFactory, _mockForwarder);
         _stakingImpl = new LevrStaking_v1(_mockForwarder, _mockFactory);
         _governorImpl = new LevrGovernor_v1(_mockForwarder, _mockFactory);
-        _stakedTokenImpl = new LevrStakedToken_v1(_mockFactory);
     }
 
-    /// @notice Create an initialized staked token instance
-    /// @dev Uses clone pattern: clone implementation → initialize
+    /// @notice Create a staked token instance
+    /// @dev Deploys new instance (not cloned)
     function createStakedToken(
         string memory name,
         string memory symbol,
@@ -44,11 +42,8 @@ contract LevrContractHelper is Test {
         address underlying,
         address staking
     ) internal returns (LevrStakedToken_v1) {
-        if (address(_stakedTokenImpl) == address(0)) initializeHelper();
-
-        address clone = Clones.clone(address(_stakedTokenImpl));
-        LevrStakedToken_v1(clone).initialize(name, symbol, decimals, underlying, staking);
-        return LevrStakedToken_v1(clone);
+        // Deploy new instance directly
+        return new LevrStakedToken_v1(name, symbol, decimals, underlying, staking);
     }
 
     /// @notice Create an initialized governor instance

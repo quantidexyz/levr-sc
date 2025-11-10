@@ -170,7 +170,7 @@ contract LevrGovernor_OtherLogicBugs_Test is Test, LevrFactoryDeployHelper {
         
         // Create next proposal to trigger cycle advancement
         vm.prank(alice);
-        uint256 pid2 = governor.proposeBoost(address(underlying), 500 ether);
+        governor.proposeBoost(address(underlying), 500 ether);
         // Count resets to 0 when cycle advances, then increments to 1 for new proposal
         uint256 countAfterAdvance = governor.activeProposalCount(
             ILevrGovernor_v1.ProposalType.BoostStakingPool

@@ -393,7 +393,7 @@ contract LevrStakingLowDecimalsTest is Test, LevrFactoryDeployHelper {
      * @notice Test Vector 7: Minimum reward is precision/1000 (0.001 tokens)
      * @dev Tests that precision is correctly set and min reward is reasonable
      */
-    function test_precision_and_minReward() public {
+    function test_precision_and_minReward() public view {
         console2.log('\n=== Test Vector 7: Precision & Min Reward (0.001 tokens) ===');
 
         // Check precision
