@@ -2,10 +2,14 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
+import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
+import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
+import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {MockClankerFactory} from '../mocks/MockClankerFactory.sol';
@@ -16,6 +20,12 @@ import {MockClankerFactory} from '../mocks/MockClankerFactory.sol';
 contract LevrFactoryDeployHelper is Test {
     /// @dev Store the mock Clanker factory address for use in tests
     address internal mockClankerFactory;
+
+    /// @dev Cached implementations for creating test instances
+    LevrTreasury_v1 internal _treasuryImpl;
+    LevrStaking_v1 internal _stakingImpl;
+    LevrGovernor_v1 internal _governorImpl;
+    LevrStakedToken_v1 internal _stakedTokenImpl;
 
     /// @notice Deploy a complete factory with forwarder and deployer logic
     /// @dev This handles the tricky nonce calculation to ensure deployer logic is authorized
@@ -36,26 +46,38 @@ contract LevrFactoryDeployHelper is Test {
         // Step 1: Deploy forwarder
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
-        // Step 2: Calculate factory address (will be deployed at next nonce + 1)
-        // Current nonce is after forwarder, +1 for deployer logic, +1 for factory
+        // Step 2: Calculate factory address (will be deployed after implementations and deployer)
+        // Current nonce is after forwarder, +4 implementations, +1 deployer logic, +1 for factory
         uint64 currentNonce = vm.getNonce(address(this));
-        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 1);
+        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 5);
 
-        // Step 3: Deploy deployer logic with predicted factory address
-        levrDeployer = new LevrDeployer_v1(predictedFactory);
+        // Step 3: Deploy implementation contracts with predicted factory
+        LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
+        LevrStaking_v1 stakingImpl = new LevrStaking_v1(address(forwarder), predictedFactory);
+        LevrGovernor_v1 governorImpl = new LevrGovernor_v1(address(forwarder), predictedFactory);
+        LevrStakedToken_v1 stakedTokenImpl = new LevrStakedToken_v1(predictedFactory);
 
-        // Step 4: Deploy mock WETH at hardcoded Base WETH address (if not already deployed)
+        // Step 4: Deploy deployer logic with predicted factory address and implementations
+        levrDeployer = new LevrDeployer_v1(
+            predictedFactory,
+            address(treasuryImpl),
+            address(stakingImpl),
+            address(governorImpl),
+            address(stakedTokenImpl)
+        );
+
+        // Step 5: Deploy mock WETH at hardcoded Base WETH address (if not already deployed)
         address weth = 0x4200000000000000000000000000000000000006; // Base WETH
         if (weth.code.length == 0) {
             // Deploy MockERC20 at this address using deployCodeTo
             deployCodeTo('MockERC20', abi.encode('Wrapped Ether', 'WETH'), weth);
         }
 
-        // Step 5: Build initial whitelist (WETH for Base)
+        // Step 6: Build initial whitelist (WETH for Base)
         address[] memory initialWhitelist = new address[](1);
         initialWhitelist[0] = weth;
 
-        // Step 6: Deploy factory with initial whitelist
+        // Step 7: Deploy factory with initial whitelist
         factory = new LevrFactory_v1(
             cfg,
             owner,
@@ -64,7 +86,7 @@ contract LevrFactoryDeployHelper is Test {
             initialWhitelist
         );
 
-        // Step 7: Verify factory was deployed at predicted address
+        // Step 8: Verify factory was deployed at predicted address
         require(
             address(factory) == predictedFactory,
             'LevrFactoryDeployHelper: Factory address mismatch'
@@ -74,7 +96,7 @@ contract LevrFactoryDeployHelper is Test {
             'LevrFactoryDeployHelper: Deployer authorization failed'
         );
 
-        // Step 8: Add Clanker factory to trusted list if provided
+        // Step 9: Add Clanker factory to trusted list if provided
         if (clankerFactory != address(0)) {
             vm.prank(owner);
             factory.addTrustedClankerFactory(clankerFactory);
@@ -214,5 +236,80 @@ contract LevrFactoryDeployHelper is Test {
         address tokenAdmin
     ) internal {
         whitelistRewardToken(staking, token, tokenAdmin);
+    }
+
+    /// @notice Create an initialized staked token for unit tests
+    /// @dev Uses clone pattern with cached implementations. Creates implementation on first call.
+    function createStakedToken(
+        string memory name,
+        string memory symbol,
+        uint8 decimals,
+        address underlying,
+        address staking
+    ) internal returns (LevrStakedToken_v1) {
+        // Deploy implementation if not yet created
+        if (address(_stakedTokenImpl) == address(0)) {
+            _stakedTokenImpl = new LevrStakedToken_v1(address(this));
+        }
+
+        address clone = Clones.clone(address(_stakedTokenImpl));
+        LevrStakedToken_v1(clone).initialize(name, symbol, decimals, underlying, staking);
+        return LevrStakedToken_v1(clone);
+    }
+
+    /// @notice Create an initialized governor for unit tests
+    /// @dev Uses clone pattern with cached implementations. Creates implementation on first call.
+    function createGovernor(
+        address forwarder,
+        address factory,
+        address treasury,
+        address staking,
+        address stakedToken,
+        address underlying
+    ) internal returns (LevrGovernor_v1) {
+        // Deploy implementation if not yet created
+        if (address(_governorImpl) == address(0)) {
+            _governorImpl = new LevrGovernor_v1(forwarder, factory);
+        }
+
+        address clone = Clones.clone(address(_governorImpl));
+        LevrGovernor_v1(clone).initialize(treasury, staking, stakedToken, underlying);
+        return LevrGovernor_v1(clone);
+    }
+
+    /// @notice Create an initialized staking contract for unit tests
+    /// @dev Uses clone pattern with cached implementations. Creates implementation on first call.
+    function createStaking(address forwarder, address factory) internal returns (LevrStaking_v1) {
+        // Deploy implementation if not yet created
+        if (address(_stakingImpl) == address(0)) {
+            _stakingImpl = new LevrStaking_v1(forwarder, factory);
+        }
+
+        address clone = Clones.clone(address(_stakingImpl));
+        return LevrStaking_v1(clone);
+    }
+
+    /// @notice Create an initialized treasury contract for unit tests
+    /// @dev Uses clone pattern with cached implementations. Creates implementation on first call.
+    function createTreasury(address forwarder, address factory) internal returns (LevrTreasury_v1) {
+        // Deploy implementation if not yet created
+        if (address(_treasuryImpl) == address(0)) {
+            _treasuryImpl = new LevrTreasury_v1(factory, forwarder);
+        }
+
+        address clone = Clones.clone(address(_treasuryImpl));
+        return LevrTreasury_v1(clone);
+    }
+
+    /// @notice Create a deployer for tests (handles test cases that need deployer directly)
+    /// @dev For tests that validate deployer behavior
+    function createDeployer(address factory) internal returns (LevrDeployer_v1) {
+        // For test deployer, use mock implementations
+        LevrTreasury_v1 ti = new LevrTreasury_v1(factory, address(0));
+        LevrStaking_v1 si = new LevrStaking_v1(address(0), factory);
+        LevrGovernor_v1 gi = new LevrGovernor_v1(address(0), factory);
+        LevrStakedToken_v1 sti = new LevrStakedToken_v1(factory);
+        
+        return new LevrDeployer_v1(factory, address(ti), address(si), address(gi), address(sti));
     }
 }

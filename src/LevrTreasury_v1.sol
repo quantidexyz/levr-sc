@@ -26,10 +26,9 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         if (governor != address(0)) revert ILevrTreasury_v1.AlreadyInitialized();
         if (_msgSender() != factory) revert ILevrTreasury_v1.OnlyFactory();
         if (governor_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
-        if (underlying == address(0)) {
-            if (underlying_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
-            underlying = underlying_;
-        }
+        if (underlying_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
+
+        underlying = underlying_;
         governor = governor_;
         emit Initialized(underlying, governor_);
     }

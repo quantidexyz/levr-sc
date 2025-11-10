@@ -11,9 +11,6 @@ import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {IClankerToken} from './interfaces/external/IClankerToken.sol';
 import {IClanker} from './interfaces/external/IClanker.sol';
 
-import {LevrTreasury_v1} from './LevrTreasury_v1.sol';
-import {LevrStaking_v1} from './LevrStaking_v1.sol';
-
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Context {
     uint16 private _protocolFeeBps;
     uint32 private _streamWindowSeconds;
@@ -67,8 +64,13 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     function prepareForDeployment() external override returns (address treasury, address staking) {
         address deployer = _msgSender();
 
-        treasury = address(new LevrTreasury_v1(address(this), trustedForwarder()));
-        staking = address(new LevrStaking_v1(trustedForwarder(), address(this)));
+        // Deploy via delegatecall to reduce factory bytecode size
+        (bool success, bytes memory returnData) = levrDeployer.delegatecall(
+            abi.encodeWithSignature('prepareContracts()')
+        );
+        if (!success) revert DeployFailed();
+
+        (treasury, staking) = abi.decode(returnData, (address, address));
 
         _preparedContracts[deployer] = ILevrFactory_v1.PreparedContracts({
             treasury: treasury,
@@ -113,12 +115,10 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         // Deploy via delegatecall
         (bool success, bytes memory returnData) = levrDeployer.delegatecall(
             abi.encodeWithSignature(
-                'deployProject(address,address,address,address,address,address[])',
+                'deployProject(address,address,address,address[])',
                 clankerToken,
                 prepared.treasury,
                 prepared.staking,
-                address(this),
-                trustedForwarder(),
                 _initialWhitelistedTokens
             )
         );

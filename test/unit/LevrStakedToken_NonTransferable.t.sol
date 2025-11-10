@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
@@ -14,7 +15,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Verifies that staked tokens cannot be transferred between users
  * @dev Simplified design: Tokens are non-transferable to avoid complex VP/reward accounting
  */
-contract LevrStakedToken_NonTransferableTest is Test {
+contract LevrStakedToken_NonTransferableTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
@@ -47,14 +48,8 @@ contract LevrStakedToken_NonTransferableTest is Test {
         );
         underlying = new MockERC20('Underlying', 'UND');
 
-        staking = new LevrStaking_v1(address(0), address(factory));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked', 'sUND', 18, address(underlying), address(staking));
 
         vm.prank(address(factory));
         staking.initialize(

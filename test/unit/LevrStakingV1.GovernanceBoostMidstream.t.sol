@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console2} from 'forge-std/console2.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -15,7 +16,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Verify that governance boost doesn't lose rewards when called mid-stream
  * @dev The boost path also calls _creditRewards(), so it had the same bug
  */
-contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
+contract LevrStakingV1GovernanceBoostMidstreamTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
@@ -44,15 +45,9 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
         underlying = new MockERC20('Underlying Token', 'UND');
 
         // Deploy treasury, staking, staked token
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0), address(factory));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        treasury = createTreasury(address(0), address(factory));
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked Token', 'sUND', 18, address(underlying), address(staking));
 
         // Initialize contracts
         vm.prank(address(factory));

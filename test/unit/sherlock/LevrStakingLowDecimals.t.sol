@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../../utils/LevrFactoryDeployHelper.sol";
 import {console2} from 'forge-std/console2.sol';
 
 import {LevrFactory_v1} from '../../../src/LevrFactory_v1.sol';
@@ -61,7 +62,7 @@ contract MockFactoryWithConfig {
  * @dev Tests validate that the token-aware precision fix allows staking to work
  *      correctly for tokens with various decimals (6, 8, 18) and provides fair voting power.
  */
-contract LevrStakingLowDecimalsTest is Test {
+contract LevrStakingLowDecimalsTest is Test, LevrFactoryDeployHelper {
     MockFactoryWithConfig public factory;
     LevrStaking_v1 public staking6; // USDC (6 decimals)
     LevrStaking_v1 public staking8; // WBTC (8 decimals)
@@ -103,27 +104,9 @@ contract LevrStakingLowDecimalsTest is Test {
         staking18 = new LevrStaking_v1(trustedForwarder, address(factory));
 
         // Deploy staked tokens
-        stakedToken6 = new LevrStakedToken_v1(
-            'Staked USDC',
-            'sUSDC',
-            6,
-            address(usdc),
-            address(staking6)
-        );
-        stakedToken8 = new LevrStakedToken_v1(
-            'Staked WBTC',
-            'sWBTC',
-            8,
-            address(wbtc),
-            address(staking8)
-        );
-        stakedToken18 = new LevrStakedToken_v1(
-            'Staked DAI',
-            'sDAI',
-            18,
-            address(dai),
-            address(staking18)
-        );
+        stakedToken6 = createStakedToken('Staked USDC', 'sUSDC', 6, address(usdc), address(staking6));
+        stakedToken8 = createStakedToken('Staked WBTC', 'sWBTC', 8, address(wbtc), address(staking8));
+        stakedToken18 = createStakedToken('Staked DAI', 'sDAI', 18, address(dai), address(staking18));
 
         // Initialize staking contracts
         address[] memory emptyWhitelist = new address[](0);
@@ -373,13 +356,7 @@ contract LevrStakingLowDecimalsTest is Test {
 
         LevrStaking_v1 stakingGusd = new LevrStaking_v1(trustedForwarder, address(factory));
 
-        LevrStakedToken_v1 stakedGusd = new LevrStakedToken_v1(
-            'Staked GUSD',
-            'sGUSD',
-            2,
-            address(gusd),
-            address(stakingGusd)
-        );
+        LevrStakedToken_v1 stakedGusd = createStakedToken('Staked GUSD', 'sGUSD', 2, address(gusd), address(stakingGusd));
 
         address[] memory emptyWhitelist = new address[](0);
         vm.prank(address(factory));

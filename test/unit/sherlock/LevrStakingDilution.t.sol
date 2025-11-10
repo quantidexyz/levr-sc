@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../../utils/LevrFactoryDeployHelper.sol";
 import {console} from 'forge-std/console.sol';
 
 import {LevrStaking_v1} from '../../../src/LevrStaking_v1.sol';
@@ -22,7 +23,7 @@ import {MockFactory} from '../../mocks/MockFactory.sol';
  * Each test asserts the CORRECT behavior (what should happen).
  * When vulnerability exists, assertions fail because attack succeeds.
  */
-contract LevrStakingDilutionTest is Test {
+contract LevrStakingDilutionTest is Test, LevrFactoryDeployHelper {
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
     MockERC20 underlying;
@@ -45,16 +46,10 @@ contract LevrStakingDilutionTest is Test {
         factory.setStreamWindowSeconds(address(underlying), uint32(STREAM_WINDOW));
 
         // Deploy staking contract first (needed for staked token)
-        staking = new LevrStaking_v1(address(0), address(factory)); // no forwarder, factory address
+        staking = createStaking(address(0), address(factory)); // no forwarder, factory address
 
         // Deploy staked token with all required parameters
-        stakedToken = new LevrStakedToken_v1(
-            'Staked Test Token',
-            'sTEST',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        stakedToken = createStakedToken('Staked Test Token', 'sTEST', 18, address(underlying), address(staking));
 
         // Initialize staking (must be called by factory)
         treasury = address(0x999);

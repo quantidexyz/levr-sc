@@ -7,12 +7,13 @@ import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
 import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
 import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
+import {LevrFactoryDeployHelper} from './utils/LevrFactoryDeployHelper.sol';
 
 /**
  * @title DeployLevrFeeSplitter Test
  * @notice Tests for the LevrFeeSplitter deployment script
  */
-contract DeployLevrFeeSplitterTest is Test {
+contract DeployLevrFeeSplitterTest is Test, LevrFactoryDeployHelper {
     DeployLevrFeeSplitter internal deployScript;
     LevrFactory_v1 internal factory;
     LevrForwarder_v1 internal forwarder;
@@ -28,7 +29,7 @@ contract DeployLevrFeeSplitterTest is Test {
         address deployer = address(this);
         uint64 nonce = vm.getNonce(deployer);
         address predictedFactory = vm.computeCreateAddress(deployer, nonce + 1);
-        LevrDeployer_v1 levrDeployer = new LevrDeployer_v1(predictedFactory);
+        LevrDeployer_v1 levrDeployer = createDeployer(predictedFactory);
 
         // Deploy factory
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({

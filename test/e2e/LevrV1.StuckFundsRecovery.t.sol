@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -20,7 +21,7 @@ import {MockClankerToken} from '../mocks/MockClankerToken.sol';
  * @notice End-to-end tests for stuck-funds scenarios and recovery paths
  * @dev Tests multi-contract interactions and complete recovery flows
  */
-contract LevrV1_StuckFundsRecoveryTest is Test {
+contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrGovernor_v1 internal governor;
     LevrStaking_v1 internal staking;
@@ -65,16 +66,16 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         );
 
         // Deploy contracts (factory = address(factory) to match initialization prank)
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0), address(factory)); // factory matches prank below
-        sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
-        governor = new LevrGovernor_v1(
+        treasury = createTreasury(address(0), address(factory));
+        staking = createStaking(address(0), address(factory)); // factory matches prank below
+        sToken = createStakedToken('sTKN', 'sTKN', 18, address(underlying), address(staking));
+        governor = createGovernor(
+            address(0),
             address(factory),
             address(treasury),
             address(staking),
             address(sToken),
-            address(underlying),
-            address(0)
+            address(underlying)
         );
         feeSplitter = new LevrFeeSplitter_v1(address(clankerToken), address(this), address(0));
 

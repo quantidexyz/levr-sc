@@ -51,14 +51,8 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
         tokenAdmin = address(this); // Test contract is admin for simplicity
 
         // Deploy staking contracts (constructor requires trustedForwarder and factory)
-        staking = new LevrStaking_v1(address(0), address(this)); // no forwarder, factory = test contract
-        sToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sTKN',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(this)); // no forwarder, factory = test contract
+        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
 
         // Initialize staking
         initializeStakingWithRewardTokens(
@@ -220,14 +214,8 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
         uint256 count = 10;
 
         // Create fresh staking instance
-        LevrStaking_v1 testStaking = new LevrStaking_v1(address(0), address(this));
-        LevrStakedToken_v1 testSToken = new LevrStakedToken_v1(
-            'Test Staked',
-            'tSTK',
-            18,
-            address(underlying),
-            address(testStaking)
-        );
+        LevrStaking_v1 testStaking = createStaking(address(0), address(this));
+        LevrStakedToken_v1 testSToken = createStakedToken('Test Staked', 'tSTK', 18, address(underlying), address(testStaking));
 
         initializeStakingWithRewardTokens(
             testStaking,

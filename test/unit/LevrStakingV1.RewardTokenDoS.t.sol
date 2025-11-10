@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
@@ -11,7 +12,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 /// @title LevrStakingV1.RewardTokenDoS Test
 /// @notice Tests MEDIUM-2 fix: Minimum reward amount validation
 /// @dev Verifies that dust amounts are rejected to prevent DoS attacks
-contract LevrStakingV1_RewardTokenDoS_Test is Test {
+contract LevrStakingV1_RewardTokenDoS_Test is Test, LevrFactoryDeployHelper {
     MockERC20 internal underlying;
     MockERC20 internal rewardToken;
     LevrStakedToken_v1 internal sToken;
@@ -22,14 +23,8 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test {
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         rewardToken = new MockERC20('Reward', 'RWD');
-        staking = new LevrStaking_v1(address(0), address(this));
-        sToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sTKN',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(this));
+        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
         staking.initialize(
             address(underlying),
             address(sToken),

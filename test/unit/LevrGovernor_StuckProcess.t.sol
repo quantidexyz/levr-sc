@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -16,7 +17,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Tests for governance process deadlock and recovery scenarios
  * @dev Tests scenarios from USER_FLOWS.md Flow 27-28
  */
-contract LevrGovernor_StuckProcessTest is Test {
+contract LevrGovernor_StuckProcessTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrGovernor_v1 internal governor;
     LevrStaking_v1 internal staking;
@@ -59,23 +60,10 @@ contract LevrGovernor_StuckProcessTest is Test {
         );
 
         // Deploy contracts
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0), address(factory));
-        sToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sTKN',
-            18,
-            address(underlying),
-            address(staking)
-        );
-        governor = new LevrGovernor_v1(
-            address(factory),
-            address(treasury),
-            address(staking),
-            address(sToken),
-            address(underlying),
-            address(0)
-        );
+        treasury = createTreasury(address(0), address(factory));
+        staking = createStaking(address(0), address(factory));
+        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
+        governor = createGovernor(address(0), address(factory), address(treasury), address(staking), address(sToken), address(underlying));
 
         // Initialize (must be called by factory)
         vm.prank(address(factory));

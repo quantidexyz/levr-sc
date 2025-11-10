@@ -3,6 +3,7 @@ pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
 import {console2} from 'forge-std/console2.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
@@ -61,7 +62,7 @@ contract MockClankerFactory {
 
 /// @title Trusted Factory Removal Test
 /// @notice Tests that removing a Clanker factory from trusted list doesn't break existing projects
-contract LevrFactory_TrustedFactoryRemovalTest is Test {
+contract LevrFactory_TrustedFactoryRemovalTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrDeployer_v1 deployer;
     LevrForwarder_v1 forwarder;
@@ -96,7 +97,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
         uint64 nonce = vm.getNonce(address(this));
         address predictedFactory = vm.computeCreateAddress(address(this), nonce + 1);
 
-        deployer = new LevrDeployer_v1(predictedFactory);
+        deployer = createDeployer(predictedFactory);
         factory = new LevrFactory_v1(
             config,
             owner,

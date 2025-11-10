@@ -19,23 +19,27 @@ interface ILevrDeployer_v1 {
     /// @return The authorized factory address
     function authorizedFactory() external view returns (address);
 
-    /// @notice Deploy all project contracts (governor and stakedToken, optionally treasury and staking)
+    /// @notice Prepare treasury and staking contracts (called via delegatecall)
+    /// @dev Executed in factory context to reduce factory bytecode size
+    ///      Uses minimal proxy clones to reduce deployment gas and bytecode
+    /// @return treasury The cloned treasury address
+    /// @return staking The cloned staking address
+    function prepareContracts() external returns (address treasury, address staking);
+
+    /// @notice Deploy all project contracts (governor and stakedToken)
     /// @dev Called via delegatecall from factory during register()
     ///      During delegatecall, address(this) is the calling contract's address
     ///      This function reverts if address(this) != authorizedFactory
+    ///      Factory and forwarder are set in implementation constructors (inherited by clones)
     /// @param clankerToken The underlying Clanker token address
-    /// @param treasury_ Pre-deployed treasury address (or address(0) to deploy new)
-    /// @param staking_ Pre-deployed staking address (or address(0) to deploy new)
-    /// @param factory_ The factory address (for initialization)
-    /// @param trustedForwarder The ERC2771 forwarder address
+    /// @param treasury_ Pre-deployed treasury address from prepareContracts()
+    /// @param staking_ Pre-deployed staking address from prepareContracts()
     /// @param initialWhitelistedTokens Initial whitelist for reward tokens (e.g., WETH - underlying is auto-whitelisted)
     /// @return project The deployed project contract addresses
     function deployProject(
         address clankerToken,
         address treasury_,
         address staking_,
-        address factory_,
-        address trustedForwarder,
         address[] memory initialWhitelistedTokens
     ) external returns (ILevrFactory_v1.Project memory project);
 }

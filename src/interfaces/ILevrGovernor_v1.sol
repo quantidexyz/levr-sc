@@ -124,6 +124,9 @@ interface ILevrGovernor_v1 {
     /// @notice Proposal is not in the current cycle (cannot execute old proposals)
     error ProposalNotInCurrentCycle();
 
+    /// @notice Contract is already initialized (double initialization prevented)
+    error AlreadyInitialized();
+
     /// @notice Execution attempt too soon after previous attempt (anti-griefing delay)
     error ExecutionAttemptTooSoon();
 
@@ -181,6 +184,14 @@ interface ILevrGovernor_v1 {
     );
 
     // ============ Functions ============
+
+    /// @notice Initialize the cloned governor (clone-only, called once by factory).
+    function initialize(
+        address treasury_,
+        address staking_,
+        address stakedToken_,
+        address underlying_
+    ) external;
 
     /// @notice Create a proposal to boost the staking pool
     /// @dev Requires minimum staked balance (minSTokenBpsToSubmit)

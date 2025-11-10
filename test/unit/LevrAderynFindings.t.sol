@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
 import {console2} from 'forge-std/console2.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
@@ -24,7 +25,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  *      Real Issues Fixed: 5 (H-2 partial, L-2, L-6, L-7, L-13)
  *      False Positives: 16 (documented)
  */
-contract LevrAderynFindingsTest is Test {
+contract LevrAderynFindingsTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrTreasury_v1 treasury;
     LevrDeployer_v1 deployer;
@@ -51,7 +52,7 @@ contract LevrAderynFindingsTest is Test {
         
         // Deploy factory and deployer
         factory = new LevrFactory_v1(config, address(this), trustedForwarder, address(0), new address[](0));
-        deployer = new LevrDeployer_v1(address(factory));
+        deployer = createDeployer(address(factory));
         
         // Deploy mock token
         token = new MockERC20('Test', 'TEST');
@@ -173,7 +174,7 @@ contract LevrAderynFindingsTest is Test {
     function test_aderyn_L6_customErrors_deployer_zeroAddress() public {
         // Try to deploy with zero address - should revert with custom error
         vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
-        new LevrDeployer_v1(address(0));
+        createDeployer(address(0));
         
         console2.log("[OK] Deployer constructor uses ZeroAddress custom error");
     }

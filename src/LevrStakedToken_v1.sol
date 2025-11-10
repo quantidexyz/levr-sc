@@ -6,22 +6,48 @@ import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 
 contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
-    address public immutable override underlying;
-    address public immutable override staking;
-    uint8 private immutable _decimals;
+    address public override underlying;
+    address public override staking;
+    uint8 private _decimalsValue;
+    bool private _initialized;
+    string private _tokenName;
+    string private _tokenSymbol;
+    address private immutable _deployer;
 
-    constructor(
+    constructor(address deployer_) ERC20('', '') {
+        _deployer = deployer_;
+    }
+
+    /// @notice Initialize the cloned staked token
+    /// @dev Can only be called once per clone. Only callable by deployer to prevent frontrunning.
+    function initialize(
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
         address underlying_,
         address staking_
-    ) ERC20(name_, symbol_) {
+    ) external {
+        if (_initialized) revert ILevrStaking_v1.AlreadyInitialized();
+        if (msg.sender != _deployer) revert ILevrStaking_v1.OnlyFactory();
         if (underlying_ == address(0) || staking_ == address(0))
             revert ILevrStaking_v1.ZeroAddress();
+        
+        _initialized = true;
         underlying = underlying_;
         staking = staking_;
-        _decimals = decimals_;
+        _decimalsValue = decimals_;
+        _tokenName = name_;
+        _tokenSymbol = symbol_;
+    }
+
+    /// @notice Override name to return initialized value
+    function name() public view override returns (string memory) {
+        return _tokenName;
+    }
+
+    /// @notice Override symbol to return initialized value
+    function symbol() public view override returns (string memory) {
+        return _tokenSymbol;
     }
 
     /// @inheritdoc ILevrStakedToken_v1
@@ -40,7 +66,7 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
 
     /// @inheritdoc ILevrStakedToken_v1
     function decimals() public view override(ERC20, ILevrStakedToken_v1) returns (uint8) {
-        return _decimals;
+        return _decimalsValue;
     }
 
     /// @notice Block transfers (staked tokens are non-transferable positions)

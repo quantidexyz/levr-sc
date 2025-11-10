@@ -41,14 +41,8 @@ contract LevrStakingTokenRemovalTest is Test, LevrFactoryDeployHelper {
         underlying = new MockClankerToken('Underlying', 'UND', tokenAdmin);
 
         // Deploy staking and staked token
-        staking = new LevrStaking_v1(address(0), address(this)); // no forwarder, factory = test contract
-        sToken = new LevrStakedToken_v1(
-            'Staked UND',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(this)); // no forwarder, factory = test contract
+        sToken = createStakedToken('Staked UND', 'sUND', 18, address(underlying), address(staking));
 
         // Initialize staking
         initializeStakingWithRewardTokens(

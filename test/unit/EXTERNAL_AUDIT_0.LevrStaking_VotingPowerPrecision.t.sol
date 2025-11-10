@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console} from 'forge-std/console.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -13,7 +14,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 /// @title EXTERNAL_AUDIT_0 HIGH-1: Voting Power Precision Loss Tests
 /// @notice Tests for [HIGH-1] Voting Power Precision Loss on Large Unstakes
 /// @dev Issue: Integer division rounding can cause complete loss of voting power
-contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
+contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test, LevrFactoryDeployHelper {
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
     LevrFactory_v1 factory;
@@ -56,14 +57,8 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
         underlying = new MockERC20('Underlying', 'UND');
 
         // Create staking and staked token directly
-        staking = new LevrStaking_v1(address(forwarder), address(factory));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(forwarder), address(factory));
+        stakedToken = createStakedToken('Staked Token', 'sUND', 18, address(underlying), address(staking));
 
         // Initialize staking
         vm.prank(address(factory));

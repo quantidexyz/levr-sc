@@ -7,6 +7,10 @@ import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
 import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
+import {LevrTreasury_v1} from '../src/LevrTreasury_v1.sol';
+import {LevrStaking_v1} from '../src/LevrStaking_v1.sol';
+import {LevrGovernor_v1} from '../src/LevrGovernor_v1.sol';
+import {LevrStakedToken_v1} from '../src/LevrStakedToken_v1.sol';
 
 /**
  * @title DeployLevrFactoryDevnet
@@ -100,17 +104,34 @@ contract DeployLevrFactoryDevnet is Script {
         LevrForwarder_v1 forwarder = new LevrForwarder_v1('LevrForwarder_v1');
         console.log('Forwarder deployed at:', address(forwarder));
 
-        // Calculate the factory address before deploying deployer logic
-        // The factory will be deployed at nonce = vm.getNonce(deployer) + 1
-        // (current nonce is after forwarder, +1 for deployer logic, +1 for factory)
+        // Calculate the factory address BEFORE deploying implementations
+        // The factory will be deployed at nonce = vm.getNonce(deployer) + 5
+        // (current nonce + forwarder=1, +4 implementations, +1 deployer logic, +1 factory)
         uint64 currentNonce = vm.getNonce(deployer);
-        address predictedFactory = vm.computeCreateAddress(deployer, currentNonce + 1);
+        address predictedFactory = vm.computeCreateAddress(deployer, currentNonce + 5);
         console.log('Predicted Factory Address:', predictedFactory);
         console.log('Current Deployer Nonce:', currentNonce);
 
-        // Deploy the deployer logic contract with predicted factory address
+        // Deploy implementation contracts with real factory and forwarder addresses
+        console.log('Deploying implementation contracts...');
+        LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
+        LevrStaking_v1 stakingImpl = new LevrStaking_v1(address(forwarder), predictedFactory);
+        LevrGovernor_v1 governorImpl = new LevrGovernor_v1(address(forwarder), predictedFactory);
+        LevrStakedToken_v1 stakedTokenImpl = new LevrStakedToken_v1(predictedFactory);
+        console.log('Treasury Implementation:', address(treasuryImpl));
+        console.log('Staking Implementation:', address(stakingImpl));
+        console.log('Governor Implementation:', address(governorImpl));
+        console.log('StakedToken Implementation:', address(stakedTokenImpl));
+
+        // Deploy the deployer logic contract with predicted factory address and implementations
         // This ensures only the predicted factory can use this deployer logic
-        LevrDeployer_v1 levrDeployer = new LevrDeployer_v1(predictedFactory);
+        LevrDeployer_v1 levrDeployer = new LevrDeployer_v1(
+            predictedFactory,
+            address(treasuryImpl),
+            address(stakingImpl),
+            address(governorImpl),
+            address(stakedTokenImpl)
+        );
         console.log('Deployer Logic deployed at:', address(levrDeployer));
         console.log('Authorized Factory:', levrDeployer.authorizedFactory());
 

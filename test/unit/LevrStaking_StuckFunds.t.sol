@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
@@ -13,7 +14,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Comprehensive tests for stuck-funds scenarios in staking contract
  * @dev Tests scenarios from USER_FLOWS.md Flow 22-25, 29
  */
-contract LevrStaking_StuckFundsTest is Test {
+contract LevrStaking_StuckFundsTest is Test, LevrFactoryDeployHelper {
     MockERC20 internal underlying;
     MockERC20 internal rewardToken;
     LevrStakedToken_v1 internal sToken;
@@ -34,14 +35,8 @@ contract LevrStaking_StuckFundsTest is Test {
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         rewardToken = new MockERC20('Reward', 'RWD');
-        staking = new LevrStaking_v1(address(0), address(this));
-        sToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sTKN',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(this));
+        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
 
         staking.initialize(address(underlying), address(sToken), treasury, new address[](0));
     }

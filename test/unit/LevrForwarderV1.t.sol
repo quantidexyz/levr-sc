@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {ILevrForwarder_v1} from '../../src/interfaces/ILevrForwarder_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
@@ -10,7 +11,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 
 /// @notice Unit tests for LevrForwarder_v1 security
 /// @dev Tests security of executeTransaction and prevents address impersonation attacks
-contract LevrForwarderV1_UnitTest is Test {
+contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     LevrForwarder_v1 internal forwarder;
     LevrTreasury_v1 internal treasury;
     MockERC20 internal token;
@@ -28,7 +29,7 @@ contract LevrForwarderV1_UnitTest is Test {
         token = new MockERC20('Token', 'TKN');
 
         // Deploy treasury (uses forwarder)
-        treasury = new LevrTreasury_v1(address(this), address(forwarder));
+        treasury = createTreasury(address(forwarder), address(this));
 
         // Initialize treasury with governor
         treasury.initialize(governor, address(token));

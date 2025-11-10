@@ -30,12 +30,14 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     // ============ Immutable Storage ============
 
     address public immutable factory;
-    address public immutable treasury;
-    address public immutable staking;
-    address public immutable stakedToken;
-    address public immutable underlying;
 
     // ============ Mutable Storage ============
+
+    address public treasury;
+    address public staking;
+    address public stakedToken;
+    address public underlying;
+    bool private _initialized;
 
     uint256 private _proposalCount;
     uint256 private _currentCycleId;
@@ -60,21 +62,27 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     // ============ Constructor ============
 
-    constructor(
-        address factory_,
+    constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
+        if (factory_ == address(0)) revert InvalidRecipient();
+        factory = factory_;
+    }
+
+    /// @notice Initialize the cloned governor
+    /// @dev Can only be called once per clone. Only callable by factory to prevent frontrunning.
+    function initialize(
         address treasury_,
         address staking_,
         address stakedToken_,
-        address underlying_,
-        address trustedForwarder
-    ) ERC2771ContextBase(trustedForwarder) {
-        if (factory_ == address(0)) revert InvalidRecipient();
+        address underlying_
+    ) external {
+        if (_initialized) revert AlreadyInitialized();
+        if (_msgSender() != factory) revert InternalOnly();
         if (treasury_ == address(0)) revert InvalidRecipient();
         if (staking_ == address(0)) revert InvalidRecipient();
         if (stakedToken_ == address(0)) revert InvalidRecipient();
         if (underlying_ == address(0)) revert InvalidRecipient();
 
-        factory = factory_;
+        _initialized = true;
         treasury = treasury_;
         staking = staking_;
         stakedToken = stakedToken_;

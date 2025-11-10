@@ -24,8 +24,8 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         weth = new MockERC20('WETH', 'WETH');
-        staking = new LevrStaking_v1(address(0), address(this));
-        sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
+        staking = createStaking(address(0x999), address(this));
+        sToken = createStakedToken('sTKN', 'sTKN', 18, address(underlying), address(staking));
 
         // Initialize staking with WETH already whitelisted
         address[] memory rewardTokens = new address[](1);

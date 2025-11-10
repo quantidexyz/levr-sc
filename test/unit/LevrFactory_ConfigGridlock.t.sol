@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -17,7 +18,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Tests if factory config changes can break processes or cause gridlocks
  * @dev Tests cleanup operations, recovery mechanisms, and extreme config values
  */
-contract LevrFactory_ConfigGridlockTest is Test {
+contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrGovernor_v1 internal governor;
     LevrStaking_v1 internal staking;
@@ -57,16 +58,16 @@ contract LevrFactory_ConfigGridlockTest is Test {
         );
 
         // Deploy contracts
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0), address(factory));
-        sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
-        governor = new LevrGovernor_v1(
+        treasury = createTreasury(address(0), address(factory));
+        staking = createStaking(address(0), address(factory));
+        sToken = createStakedToken('sTKN', 'sTKN', 18, address(underlying), address(staking));
+        governor = createGovernor(
+            address(0),
             address(factory),
             address(treasury),
             address(staking),
             address(sToken),
-            address(underlying),
-            address(0)
+            address(underlying)
         );
 
         // Initialize

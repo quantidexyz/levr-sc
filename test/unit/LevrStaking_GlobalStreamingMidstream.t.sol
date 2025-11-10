@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console} from 'forge-std/console.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -14,7 +15,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Comprehensive tests for global streaming with midstream accruals
  * @dev CRITICAL: Verifies no fund loss when multiple tokens accrue at different times
  */
-contract LevrStaking_GlobalStreamingMidstreamTest is Test {
+contract LevrStaking_GlobalStreamingMidstreamTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
@@ -55,14 +56,8 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         weth = new MockERC20('Wrapped Ether', 'WETH');
         usdc = new MockERC20('USD Coin', 'USDC');
 
-        staking = new LevrStaking_v1(address(0), address(factory));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked UND',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked UND', 'sUND', 18, address(underlying), address(staking));
 
         // Initialize staking with reward tokens already whitelisted
         address[] memory rewardTokens = new address[](2);

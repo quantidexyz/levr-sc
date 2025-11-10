@@ -16,6 +16,15 @@ interface ILevrStakedToken_v1 is IERC20 {
 
     // ============ Functions ============
 
+    /// @notice Initialize the cloned staked token (clone-only, called once).
+    function initialize(
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        address underlying_,
+        address staking_
+    ) external;
+
     /// @notice Mint staked tokens (staking-only).
     function mint(address to, uint256 amount) external;
 

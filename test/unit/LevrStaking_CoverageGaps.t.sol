@@ -50,14 +50,8 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         rewardToken = new MockERC20('Reward', 'RWD');
         factory = address(this);
 
-        staking = new LevrStaking_v1(address(0), address(this));
-        sToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sTKN',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(this));
+        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
 
         // Initialize with empty whitelist
         initializeStakingWithRewardTokens(
@@ -96,7 +90,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     /// @dev Covers line 67: Only factory can initialize
     function test_initialize_onlyFactory_whenNotFactory_reverts() public {
         // Deploy new staking contract
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0), address(this));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         // Try to initialize from non-factory address
         vm.prank(alice);
@@ -114,21 +108,21 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     // ============================================================================
     /// @dev Covers lines 59-64: Zero address checks
     function test_initialize_zeroAddressUnderlying_reverts() public {
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0), address(this));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
         newStaking.initialize(address(0), address(sToken), treasury, new address[](0));
     }
 
     function test_initialize_zeroAddressStakedToken_reverts() public {
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0), address(this));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
         newStaking.initialize(address(underlying), address(0), treasury, new address[](0));
     }
 
     function test_initialize_zeroAddressTreasury_reverts() public {
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0), address(this));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
         newStaking.initialize(

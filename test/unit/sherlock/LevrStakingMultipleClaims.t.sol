@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../../utils/LevrFactoryDeployHelper.sol";
 import {console2} from 'forge-std/console2.sol';
 
 import {LevrStaking_v1} from '../../../src/LevrStaking_v1.sol';
@@ -29,7 +30,7 @@ import {MockFactory} from '../../mocks/MockFactory.sol';
  * - Same fix: debt accounting (accRewardPerShare + rewardDebt)
  * - This test verifies the fix ALSO prevents multiple claims
  */
-contract LevrStakingMultipleClaimsTest is Test {
+contract LevrStakingMultipleClaimsTest is Test, LevrFactoryDeployHelper {
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
     MockERC20 underlying;
@@ -53,16 +54,10 @@ contract LevrStakingMultipleClaimsTest is Test {
         factory.setStreamWindowSeconds(address(underlying), uint32(STREAM_WINDOW));
 
         // Deploy staking contract (factory = MockFactory for streamWindowSeconds)
-        staking = new LevrStaking_v1(address(0), address(factory)); // no forwarder, factory = MockFactory
+        staking = createStaking(address(0), address(factory)); // no forwarder, factory = MockFactory
 
         // Deploy staked token
-        stakedToken = new LevrStakedToken_v1(
-            'Staked Test Token',
-            'sTEST',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        stakedToken = createStakedToken('Staked Test Token', 'sTEST', 18, address(underlying), address(staking));
 
         // Initialize staking (must be called by factory - MockFactory)
         treasury = address(0x999);

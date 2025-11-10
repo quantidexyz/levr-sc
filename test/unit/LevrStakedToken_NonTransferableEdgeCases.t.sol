@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console} from 'forge-std/console.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -18,7 +19,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Comprehensive tests for non-transferable design edge cases
  * @dev Tests all scenarios that could break with transfer blocking
  */
-contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
+contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
@@ -54,23 +55,10 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         );
         underlying = new MockERC20('Underlying', 'UND');
 
-        staking = new LevrStaking_v1(address(0), address(factory));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        governor = new LevrGovernor_v1(
-            address(factory),
-            address(treasury),
-            address(staking),
-            address(stakedToken),
-            address(underlying),
-            address(0)
-        );
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked', 'sUND', 18, address(underlying), address(staking));
+        treasury = createTreasury(address(0), address(factory));
+        governor = createGovernor(address(0), address(factory), address(treasury), address(staking), address(stakedToken), address(underlying));
 
         vm.prank(address(factory));
         staking.initialize(
