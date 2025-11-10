@@ -22,6 +22,7 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         factory = factory_;
     }
 
+    /// @inheritdoc ILevrTreasury_v1
     function initialize(address governor_, address underlying_) external {
         if (governor != address(0)) revert ILevrTreasury_v1.AlreadyInitialized();
         if (_msgSender() != factory) revert ILevrTreasury_v1.OnlyFactory();
@@ -38,6 +39,7 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         _;
     }
 
+    /// @inheritdoc ILevrTreasury_v1
     function transfer(
         address token,
         address to,
@@ -59,6 +61,7 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         IERC20(token).forceApprove(project.staking, 0);
     }
 
+    /// @inheritdoc ILevrTreasury_v1
     function getUnderlyingBalance() external view returns (uint256) {
         return IERC20(underlying).balanceOf(address(this));
     }

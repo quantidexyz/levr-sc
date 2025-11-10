@@ -3,7 +3,6 @@ pragma solidity 0.8.30;
 
 import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
-import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 
 contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
     address public override underlying;
@@ -18,8 +17,7 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
         _deployer = deployer_;
     }
 
-    /// @notice Initialize the cloned staked token
-    /// @dev Can only be called once per clone. Only callable by deployer to prevent frontrunning.
+    /// @inheritdoc ILevrStakedToken_v1
     function initialize(
         string memory name_,
         string memory symbol_,
@@ -27,11 +25,11 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
         address underlying_,
         address staking_
     ) external {
-        if (_initialized) revert ILevrStaking_v1.AlreadyInitialized();
-        if (msg.sender != _deployer) revert ILevrStaking_v1.OnlyFactory();
+        if (_initialized) revert ILevrStakedToken_v1.AlreadyInitialized();
+        if (msg.sender != _deployer) revert ILevrStakedToken_v1.OnlyFactory();
         if (underlying_ == address(0) || staking_ == address(0))
-            revert ILevrStaking_v1.ZeroAddress();
-        
+            revert ILevrStakedToken_v1.ZeroAddress();
+
         _initialized = true;
         underlying = underlying_;
         staking = staking_;
@@ -52,14 +50,14 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
 
     /// @inheritdoc ILevrStakedToken_v1
     function mint(address to, uint256 amount) external override {
-        if (msg.sender != staking) revert ILevrStaking_v1.OnlyFactory();
+        if (msg.sender != staking) revert ILevrStakedToken_v1.OnlyFactory();
         _mint(to, amount);
         emit Mint(to, amount);
     }
 
     /// @inheritdoc ILevrStakedToken_v1
     function burn(address from, uint256 amount) external override {
-        if (msg.sender != staking) revert ILevrStaking_v1.OnlyFactory();
+        if (msg.sender != staking) revert ILevrStakedToken_v1.OnlyFactory();
         _burn(from, amount);
         emit Burn(from, amount);
     }
@@ -73,7 +71,7 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
     /// @dev Allows mint/burn only - transfers would break VP and reward accounting
     function _update(address from, address to, uint256 value) internal override {
         if (!(from == address(0) || to == address(0)))
-            revert ILevrStaking_v1.CannotModifyUnderlying();
+            revert ILevrStakedToken_v1.CannotModifyUnderlying();
         super._update(from, to, value);
     }
 }

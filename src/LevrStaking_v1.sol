@@ -52,6 +52,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     mapping(address => uint256) public accRewardPerShare;
     mapping(address => mapping(address => uint256)) public rewardDebt;
 
+    /// @inheritdoc ILevrStaking_v1
     function initialize(
         address underlying_,
         address stakedToken_,
