@@ -7,7 +7,6 @@ pragma solidity 0.8.30;
 library RewardMath {
     /// @notice Calculate newly vested amount using time-based linear vesting
     /// @dev Calculates vesting based on time elapsed from stream start, not remaining amount
-    ///      At stream end, returns all remaining to guarantee zero dust
     /// @param originalTotal Original stream amount at stream start
     /// @param alreadyVested Amount already vested from this stream
     /// @param start Stream start timestamp
@@ -28,11 +27,6 @@ library RewardMath {
 
         uint256 duration = end - start;
         require(duration != 0, 'ZERO_DURATION');
-
-        // Stream ended: return all remaining to eliminate dust
-        if (settleTo >= end) {
-            return originalTotal > alreadyVested ? originalTotal - alreadyVested : 0;
-        }
 
         uint256 timeElapsed = settleTo - start;
 
