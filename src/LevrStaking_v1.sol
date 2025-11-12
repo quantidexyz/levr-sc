@@ -149,9 +149,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             _claimAllRewards(staker, staker);
         }
 
+        // Declare len once for reuse in both loops
+        uint256 len = _rewardTokens.length;
+
         // First staker: restart paused streams
         if (isFirstStaker) {
-            uint256 len = _rewardTokens.length;
             for (uint256 i = 0; i < len; i++) {
                 address rt = _rewardTokens[i];
                 ILevrStaking_v1.RewardTokenState storage rtState = _tokenState[rt];
@@ -186,7 +188,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         ILevrStakedToken_v1(stakedToken).mint(staker, actualReceived);
 
         // Update reward debt for all tokens (prevents dilution on future claims)
-        uint256 len = _rewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
             address token = _rewardTokens[i];
             rewardDebt[staker][token] = accRewardPerShare[token];
