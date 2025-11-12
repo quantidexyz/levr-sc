@@ -68,6 +68,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     // Tracks user's reward debt per token (what they've already accounted for)
     mapping(address => mapping(address => uint256)) public rewardDebt;
 
+    /// @inheritdoc ILevrStaking_v1
     function initialize(
         address underlying_,
         address stakedToken_,
@@ -124,8 +125,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    /// @dev Handles fee-on-transfer tokens by measuring actual received amount
-    ///      First staker resumes paused reward streams
     function stake(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         address staker = _msgSender();
@@ -189,8 +188,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    /// @dev Automatically claims all rewards before unstaking to prevent loss
-    ///      Returns new voting power for UI convenience (reflects partial unstake impact)
     function unstake(
         uint256 amount,
         address to
@@ -229,8 +226,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    /// @dev Pool-based rewards: user gets (balance/totalStaked) × available pool
-    ///      Each token can have different decimals (handled in native units)
     function claimRewards(address[] calldata tokens, address to) external nonReentrant {
         if (to == address(0)) revert ZeroAddress();
         address claimer = _msgSender();
@@ -243,8 +238,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    /// @dev Permissionless: Anyone can trigger accrual of unaccounted token balances
-    ///      Useful after fee collection or direct transfers to staking contract
     function accrueRewards(address token) external nonReentrant {
         // Calculate unaccounted rewards (balance - escrow - accounted rewards)
         uint256 available = _availableUnaccountedRewards(token);
@@ -254,8 +247,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    /// @dev Only token admin can whitelist. Underlying is always whitelisted (cannot be modified).
-    ///      Whitelisted tokens exempt from reward token limits and can always accrue rewards.
     function whitelistToken(address token) external nonReentrant {
         if (token == address(0)) revert ZeroAddress();
 
@@ -753,9 +744,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    /// @dev Returns voting power in token-days (e.g., 1000 tokens × 100 days = 100,000 VP)
-    ///      Normalizes all balances to 18 decimals for fair cross-token governance
-    ///      Examples: 1000 USDC (6 decimals) = 1000 DAI (18 decimals) in voting power
     function getVotingPower(address user) external view returns (uint256 votingPower) {
         uint256 startTime = stakeStartTime[user];
         if (startTime == 0) return 0; // Never staked or fully unstaked

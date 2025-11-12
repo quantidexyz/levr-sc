@@ -130,19 +130,31 @@ interface ILevrStaking_v1 {
     ) external;
 
     /// @notice Stake underlying; mints staked token to msg.sender.
+    /// @dev Handles fee-on-transfer tokens by measuring actual received amount.
+    ///      First staker resumes paused reward streams.
+    ///      Auto-claims existing rewards before staking more to prevent self-dilution.
+    /// @param amount Amount of underlying tokens to stake
     function stake(uint256 amount) external;
 
     /// @notice Unstake; burns staked token and returns underlying to `to`.
+    /// @dev Automatically claims all rewards before unstaking to prevent loss.
+    ///      Returns new voting power for UI convenience (reflects partial unstake impact).
     /// @param amount Amount to unstake
     /// @param to Address to receive the unstaked tokens
     /// @return newVotingPower The user's voting power after unstaking (useful for UI simulation)
     function unstake(uint256 amount, address to) external returns (uint256 newVotingPower);
 
     /// @notice Claim rewards for tokens to `to`.
+    /// @dev Pool-based rewards: user gets (balance/totalStaked) × available pool.
+    ///      Each token can have different decimals (handled in native units).
+    /// @param tokens Array of reward token addresses to claim
+    /// @param to Address to receive the claimed rewards
     function claimRewards(address[] calldata tokens, address to) external;
 
     /// @notice Accrue rewards for token
-    /// @dev Fee collection handled externally via SDK
+    /// @dev Permissionless: Anyone can trigger accrual of unaccounted token balances.
+    ///      Useful after fee collection or direct transfers to staking contract.
+    ///      Fee collection handled externally via SDK.
     /// @param token Reward token to accrue
     function accrueRewards(address token) external;
 
@@ -250,9 +262,11 @@ interface ILevrStaking_v1 {
 
     /// @notice Calculate voting power for a user
     /// @dev VP = (staked balance × time staked) / (1e18 × 86400)
-    ///      Normalized to token-days for UI-friendly numbers
-    ///      Example: 1000 tokens staked for 100 days = 100,000 token-days
-    ///      Returns 0 if user has never staked or has unstaked completely
+    ///      Returns voting power in token-days (e.g., 1000 tokens × 100 days = 100,000 VP).
+    ///      Normalizes all balances to 18 decimals for fair cross-token governance.
+    ///      Examples: 1000 USDC (6 decimals) = 1000 DAI (18 decimals) in voting power.
+    ///      Normalized to token-days for UI-friendly numbers.
+    ///      Returns 0 if user has never staked or has unstaked completely.
     /// @param user The user address
     /// @return votingPower The user's voting power in token-days
     function getVotingPower(address user) external view returns (uint256 votingPower);
