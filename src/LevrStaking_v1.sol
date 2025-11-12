@@ -201,7 +201,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 newStartTime = stakeStartTime[staker];
         if (remainingBalance > 0 && newStartTime > 0) {
             uint256 timeStaked = block.timestamp - newStartTime;
-            newVotingPower = (remainingBalance * timeStaked) / (PRECISION * SECONDS_PER_DAY);
+            newVotingPower = RewardMath.calculateVotingPower(
+                remainingBalance,
+                timeStaked,
+                PRECISION,
+                SECONDS_PER_DAY
+            );
         }
 
         emit Unstaked(staker, to, amount);
@@ -360,9 +365,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         }
 
         // Calculate pending using debt accounting (prevents dilution attack)
-        uint256 accumulatedRewards = (userBalance * currentAccRewardPerShare) / PRECISION;
-        uint256 debtAmount = (userBalance * rewardDebt[account][token]) / PRECISION;
-        claimable = accumulatedRewards > debtAmount ? accumulatedRewards - debtAmount : 0;
+        claimable = RewardMath.calculatePendingRewards(
+            userBalance,
+            currentAccRewardPerShare,
+            rewardDebt[account][token],
+            PRECISION
+        );
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -609,9 +617,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 effectiveDebt = _getEffectiveDebt(claimer, token);
 
         // Calculate pending rewards using debt accounting (prevents dilution attack)
-        uint256 accumulatedRewards = (userBalance * accRewardPerShare[token]) / PRECISION;
-        uint256 debtAmount = (userBalance * effectiveDebt) / PRECISION;
-        uint256 pending = accumulatedRewards > debtAmount ? accumulatedRewards - debtAmount : 0;
+        uint256 pending = RewardMath.calculatePendingRewards(
+            userBalance,
+            accRewardPerShare[token],
+            effectiveDebt,
+            PRECISION
+        );
 
         if (pending > 0) {
             // Reduce pool
@@ -707,7 +718,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 timeStaked = block.timestamp - startTime;
 
         // VP = balance × time / (PRECISION × SECONDS_PER_DAY) → token-days
-        return (balance * timeStaked) / (PRECISION * SECONDS_PER_DAY);
+        return RewardMath.calculateVotingPower(balance, timeStaked, PRECISION, SECONDS_PER_DAY);
     }
 
     // ============ Internal Wrappers for Stake/Unstake Operations ============
@@ -731,13 +742,14 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Calculate accumulated time so far
         uint256 timeAccumulated = block.timestamp - currentStartTime;
 
-        // Calculate new total balance
-        uint256 newTotalBalance = oldBalance + stakeAmount;
-
         // Calculate weighted average time: (oldBalance × timeAccumulated) / newTotalBalance
         // This preserves voting power: oldVP = oldBalance × timeAccumulated
         // After stake: newVP = newTotalBalance × newTimeAccumulated = oldVP (preserved)
-        uint256 newTimeAccumulated = (oldBalance * timeAccumulated) / newTotalBalance;
+        uint256 newTimeAccumulated = RewardMath.calculateStakeWeightedTime(
+            oldBalance,
+            stakeAmount,
+            timeAccumulated
+        );
 
         // Calculate new start time
         newStartTime = block.timestamp - newTimeAccumulated;
@@ -761,14 +773,15 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // If no balance remaining, reset to 0
         if (remainingBalance == 0) return 0;
 
-        // Calculate original balance before unstake
-        uint256 originalBalance = remainingBalance + unstakeAmount;
-
         // Calculate time accumulated so far
         uint256 timeAccumulated = block.timestamp - currentStartTime;
 
         // Preserve precision: calculate (oldTime * remaining) / original
-        uint256 newTimeAccumulated = (timeAccumulated * remainingBalance) / originalBalance;
+        uint256 newTimeAccumulated = RewardMath.calculateUnstakeWeightedTime(
+            remainingBalance,
+            unstakeAmount,
+            timeAccumulated
+        );
 
         // Calculate new start time
         newStartTime = block.timestamp - newTimeAccumulated;
