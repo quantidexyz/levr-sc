@@ -177,6 +177,10 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
         console.log('=== Reproducing Auditor PoC (1000 tokens) ===');
         console.log('WARNING: This test may take several minutes to complete');
 
+        // Initial stake to avoid first-staker path (prevents dust accrual from MinimalTokens)
+        underlying.approve(address(staking), 10 ether);
+        staking.stake(10 ether);
+
         // Attempt to whitelist 1000 tokens
         for (uint256 i = 0; i < count; i++) {
             MinimalToken dosToken = new MinimalToken();
@@ -193,7 +197,7 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
         console.log('Successfully whitelisted');
         console.log(count);
 
-        // Now try to stake and measure gas (this is where DOS would occur)
+        // Now try to stake and measure gas (not first staker, measures realistic gas)
         underlying.approve(address(staking), 1);
 
         uint256 gasStart = gasleft();
@@ -281,15 +285,15 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
                 new address[](0)
             );
 
+            // Initial stake to avoid first-staker path
+            underlying.approve(address(testStaking), 10 ether);
+            testStaking.stake(1 ether);
+
             // Whitelist tokens
             for (uint256 i = 0; i < count; i++) {
                 MinimalToken dosToken = new MinimalToken();
                 testStaking.whitelistToken(address(dosToken));
             }
-
-            // Measure gas
-            underlying.approve(address(testStaking), 10 ether);
-            testStaking.stake(1 ether);
 
             uint256 stakeGas = _measureStakeGasFor(testStaking, 1 ether);
             uint256 unstakeGas = _measureUnstakeGasFor(testStaking, 1 ether);
@@ -310,6 +314,10 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
 
         console.log('=== Cleanup Mechanism Test ===');
 
+        // Initial stake to avoid first-staker path (which tries to credit dust from MinimalTokens)
+        underlying.approve(address(staking), 10 ether);
+        staking.stake(10 ether);
+
         // Whitelist tokens
         address[] memory tokens = new address[](tokenCount);
         for (uint256 i = 0; i < tokenCount; i++) {
@@ -318,7 +326,7 @@ contract LevrStakingV1_DOS_Test is Test, LevrFactoryDeployHelper {
             staking.whitelistToken(address(dosToken));
         }
 
-        // Measure gas with bloated array
+        // Measure gas with bloated array (not first staker, avoids dust accrual)
         uint256 gasWithBloat = _measureStakeGas(1 ether);
         console.log('Gas with tokens:');
         console.log(tokenCount);

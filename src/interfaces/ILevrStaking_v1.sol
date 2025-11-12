@@ -20,20 +20,26 @@ interface ILevrStaking_v1 {
 
     // ============ Structs ============
 
-    /// @notice Pool-based token state - simple and efficient
+    /// @notice Reward token state with time-based linear vesting
     /// @param availablePool Current claimable pool (grows as rewards vest)
-    /// @param streamTotal Total amount to vest in current stream
+    /// @param streamTotal Remaining amount to vest in current stream
     /// @param lastUpdate Last streaming settlement timestamp
     /// @param exists Whether token is registered
     /// @param whitelisted Whether token is whitelisted (exempt from MAX_REWARD_TOKENS)
+    /// @param streamStart Per-token stream start timestamp
+    /// @param streamEnd Per-token stream end timestamp
+    /// @param originalStreamTotal Original stream amount at stream start (immutable during stream)
+    /// @param totalVested Total amount vested so far from current stream
     struct RewardTokenState {
         uint256 availablePool;
         uint256 streamTotal;
         uint64 lastUpdate;
         bool exists;
         bool whitelisted;
-        uint64 streamStart; // Per-token stream start (isolation fix for CRITICAL-3)
-        uint64 streamEnd; // Per-token stream end (isolation fix for CRITICAL-3)
+        uint64 streamStart;
+        uint64 streamEnd;
+        uint256 originalStreamTotal;
+        uint256 totalVested;
     }
 
     // ============ Errors ============
