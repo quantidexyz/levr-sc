@@ -6,8 +6,8 @@ pragma solidity 0.8.30;
 interface ILevrStaking_v1 {
     // ============ Constants ============
 
-    /// @notice Target decimals for normalization (18 decimals)
-    function TARGET_DECIMALS() external view returns (uint256);
+    /// @notice Precision scale for token decimals in voting power calculations
+    function PRECISION() external view returns (uint256);
 
     /// @notice Seconds per day (86400 seconds)
     function SECONDS_PER_DAY() external view returns (uint256);
@@ -17,20 +17,26 @@ interface ILevrStaking_v1 {
 
     // ============ Structs ============
 
-    /// @notice Pool-based token state - simple and efficient
+    /// @notice Reward token state with time-based linear vesting
     /// @param availablePool Current claimable pool (grows as rewards vest)
-    /// @param streamTotal Total amount to vest in current stream
+    /// @param streamTotal Remaining amount to vest in current stream
     /// @param lastUpdate Last streaming settlement timestamp
     /// @param exists Whether token is registered
     /// @param whitelisted Whether token is whitelisted (exempt from MAX_REWARD_TOKENS)
+    /// @param streamStart Per-token stream start timestamp
+    /// @param streamEnd Per-token stream end timestamp
+    /// @param originalStreamTotal Original stream amount at stream start (immutable during stream)
+    /// @param totalVested Total amount vested so far from current stream
     struct RewardTokenState {
         uint256 availablePool;
         uint256 streamTotal;
         uint64 lastUpdate;
         bool exists;
         bool whitelisted;
-        uint64 streamStart; // Per-token stream start (isolation fix for CRITICAL-3)
-        uint64 streamEnd; // Per-token stream end (isolation fix for CRITICAL-3)
+        uint64 streamStart;
+        uint64 streamEnd;
+        uint256 originalStreamTotal;
+        uint256 totalVested;
     }
 
     // ============ Errors ============
@@ -107,12 +113,6 @@ interface ILevrStaking_v1 {
 
     /// @notice The Levr factory instance
     function factory() external view returns (address);
-
-    /// @notice Underlying token decimals (queried at initialization)
-    function underlyingDecimals() external view returns (uint8);
-
-    /// @notice Token precision: 10^underlyingDecimals (min reward = precision/1000)
-    function precision() external view returns (uint256);
 
     // ============ Functions ============
 
