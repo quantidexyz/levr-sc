@@ -194,6 +194,17 @@ interface ILevrStaking_v1 {
     /// @dev Only token admin can call - useful for trusted tokens like WETH, USDC
     ///      CANNOT modify underlying token (always whitelisted).
     ///      If token already exists, it MUST have no pending rewards (prevents state corruption).
+    ///
+    /// @dev WARNING - Token Re-addition Edge Case (User Responsibility):
+    ///      When a token is removed via cleanupFinishedRewardToken and then re-added via
+    ///      whitelistToken, the accRewardPerShare is reset to 0. Users with unclaimed rewards
+    ///      from before the removal will have their rewardDebt auto-reset on their next claim.
+    ///      However, if a user doesn't claim for an extended period after re-addition, the new
+    ///      accRewardPerShare may eventually reach or exceed their old rewardDebt value. In this
+    ///      case, the stale debt detection won't trigger, and the user will lose rewards accrued
+    ///      between re-addition and when the new accRewardPerShare surpasses the old debt.
+    ///      Users should claim rewards promptly after token re-addition to avoid this edge case.
+    ///
     /// @param token The token to whitelist (cannot be underlying)
     function whitelistToken(address token) external;
 
