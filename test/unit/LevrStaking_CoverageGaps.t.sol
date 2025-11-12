@@ -449,9 +449,9 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     }
 
     // ============================================================================
-    // TEST 21: Credit Rewards - Reward Too Small
+    // TEST 21: Credit Rewards - Small amounts work for whitelisted tokens
     // ============================================================================
-    /// @dev Covers line 494: Reward too small check
+    /// @dev Verifies small amounts are accepted for whitelisted tokens
     function test_creditRewards_rewardTooSmall_reverts() public {
         address admin = underlying.admin();
         whitelistRewardToken(staking, address(rewardToken), admin);
@@ -462,11 +462,10 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Transfer very small amount (below MIN_REWARD_AMOUNT = 1e15)
+        // Transfer small amount (any amount works for whitelisted tokens)
         rewardToken.transfer(address(staking), 1e14);
 
-        // Try to accrue (should fail - too small)
-        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
+        // Should succeed - no minimum check for whitelisted tokens
         staking.accrueRewards(address(rewardToken));
     }
 

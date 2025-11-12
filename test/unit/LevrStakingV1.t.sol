@@ -1995,16 +1995,15 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         }
     }
 
-    /// Test: Accrue with minimum amount below MIN_REWARD_AMOUNT
+    /// Test: Accrue small amounts work for whitelisted tokens (no minimum check)
     function test_error_005_accrue_belowMinimum() public {
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
         whitelistRewardToken(staking, address(rewardToken), address(this));
 
-        // Mint less than MIN_REWARD_AMOUNT (1e15)
-        rewardToken.mint(address(staking), 100); // Way below minimum
+        // Mint small amount (any amount works for whitelisted tokens)
+        rewardToken.mint(address(staking), 100); // Small amount
 
-        // Try to accrue - should revert for REWARD_TOO_SMALL
-        vm.expectRevert();
+        // Should succeed - no minimum amount check for whitelisted tokens
         staking.accrueRewards(address(rewardToken));
     }
 

@@ -280,7 +280,7 @@ contract Phase3_MathematicalBoundaries_Test is Test, LevrFactoryDeployHelper {
         treasury.transfer(address(underlying), address(0xF006), 100 ether);
     }
 
-    /// Test: Condition - if (reward > minimum)
+    /// Test: Condition - whitelisted tokens accept any amount
     function test_cond_004_minimumChecks() public {
         address user = address(0xF007);
         underlying.mint(user, 10_000 ether);
@@ -294,9 +294,8 @@ contract Phase3_MathematicalBoundaries_Test is Test, LevrFactoryDeployHelper {
         vm.prank(address(this));
         staking.whitelistToken(address(rewardToken));
         
-        // Too small amount - should revert
+        // Small amount - should work for whitelisted tokens
         rewardToken.mint(address(staking), 1);
-        vm.expectRevert();
         staking.accrueRewards(address(rewardToken));
     }
 

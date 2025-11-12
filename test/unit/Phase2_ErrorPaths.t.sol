@@ -21,7 +21,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
     LevrTreasury_v1 internal treasury;
     LevrStaking_v1 internal staking;
     LevrGovernor_v1 internal governor;
-    
+
     address internal protocolTreasury = address(0xDEAD);
     address internal user = address(0xAAAA);
 
@@ -29,21 +29,21 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying = new MockERC20('Token', 'TKN');
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(protocolTreasury);
         (factory, forwarder, ) = deployFactoryWithDefaultClanker(cfg, address(this));
-        
+
         factory.prepareForDeployment();
         ILevrFactory_v1.Project memory project = factory.register(address(underlying));
-        
+
         governor = LevrGovernor_v1(project.governor);
         treasury = LevrTreasury_v1(payable(project.treasury));
         staking = LevrStaking_v1(project.staking);
-        
+
         // Fund and setup
         underlying.mint(address(treasury), 10_000 ether);
         underlying.mint(user, 1_000 ether);
     }
 
     // ============ Treasury Error Paths ============
-    
+
     function test_error_treasury_001_transferUnauthorized() public {
         vm.prank(user);
         vm.expectRevert();
@@ -89,7 +89,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
     function test_error_staking_001_stakeZeroAmount() public {
         vm.prank(user);
         underlying.approve(address(staking), 1_000 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         staking.stake(0);
@@ -106,7 +106,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(500 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         staking.unstake(0, user);
@@ -117,7 +117,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(500 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         staking.unstake(600 ether, user);
@@ -128,7 +128,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(500 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         staking.unstake(100 ether, address(0));
@@ -148,7 +148,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
     function test_error_staking_008_accrueUnwhitelistedToken() public {
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
         rewardToken.mint(address(staking), 1_000 ether);
-        
+
         vm.expectRevert();
         staking.accrueRewards(address(rewardToken));
     }
@@ -156,13 +156,13 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
     function test_error_staking_009_accrueInsufficientAmount() public {
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
         address admin = address(this); // Admin of underlying
-        
+
         vm.prank(admin);
         staking.whitelistToken(address(rewardToken));
-        
-        rewardToken.mint(address(staking), 100); // Way below MIN_REWARD_AMOUNT
-        
-        vm.expectRevert();
+
+        rewardToken.mint(address(staking), 100); // Small amount (works for whitelisted tokens)
+
+        // Should succeed - no minimum check for whitelisted tokens
         staking.accrueRewards(address(rewardToken));
     }
 
@@ -173,7 +173,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(200 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         governor.proposeBoost(address(0), 10 ether);
@@ -184,7 +184,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(200 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         governor.proposeTransfer(address(underlying), address(0), 10 ether, 'desc');
@@ -195,7 +195,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(200 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         governor.proposeTransfer(address(0), address(0x1234), 10 ether, 'desc');
@@ -206,12 +206,12 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(200 ether);
-        
+
         vm.warp(block.timestamp + 1);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
-        
+
         // Try to vote immediately (before voting window)
         vm.prank(user);
         vm.expectRevert();
@@ -223,14 +223,14 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(200 ether);
-        
+
         vm.prank(user);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
-        
+
         // Jump past voting window
         vm.warp(block.timestamp + 10 days);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        
+
         vm.prank(user);
         vm.expectRevert();
         governor.vote(pid, true);
@@ -241,17 +241,17 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(200 ether);
-        
+
         vm.prank(user);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
-        
+
         // User unstakes all
         vm.prank(user);
         staking.unstake(200 ether, user);
-        
+
         vm.warp(block.timestamp + 2 days + 1);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        
+
         // Try to vote without power
         vm.prank(user);
         vm.expectRevert();
@@ -263,16 +263,16 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), 1_000 ether);
         vm.prank(user);
         staking.stake(200 ether);
-        
+
         vm.prank(user);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
-        
+
         vm.warp(block.timestamp + 2 days + 1);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        
+
         vm.prank(user);
         governor.vote(pid, true);
-        
+
         // Try to vote again
         vm.prank(user);
         vm.expectRevert();
@@ -295,7 +295,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
             value: 5 ether,
             callData: ''
         });
-        
+
         vm.deal(user, 10 ether);
         vm.prank(user);
         vm.expectRevert();
@@ -304,7 +304,7 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
 
     function test_error_forwarder_003_withdrawTrappedETHNonDeployer() public {
         vm.deal(address(forwarder), 1 ether);
-        
+
         vm.prank(user);
         vm.expectRevert();
         forwarder.withdrawTrappedETH();
