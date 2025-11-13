@@ -5,6 +5,7 @@ import {Test} from 'forge-std/Test.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
@@ -2000,10 +2001,11 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
         whitelistRewardToken(staking, address(rewardToken), address(this));
 
-        // Mint small amount (any amount works for whitelisted tokens)
-        rewardToken.mint(address(staking), 100); // Small amount
+        // Mint amount below MIN_REWARD_AMOUNT (10,000 wei)
+        rewardToken.mint(address(staking), 100); // Below minimum
 
-        // Should succeed - no minimum amount check for whitelisted tokens
+        // Should revert with RewardTooSmall
+        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
         staking.accrueRewards(address(rewardToken));
     }
 

@@ -9,6 +9,7 @@ import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrForwarder_v1} from '../../src/interfaces/ILevrForwarder_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
@@ -160,10 +161,15 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         vm.prank(admin);
         staking.whitelistToken(address(rewardToken));
 
-        rewardToken.mint(address(staking), 100); // Small amount (works for whitelisted tokens)
-
-        // Should succeed - no minimum check for whitelisted tokens
+        // Test that minimum amount is enforced
+        rewardToken.mint(address(staking), 100); // Small amount below minimum (10,000)
+        
+        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
         staking.accrueRewards(address(rewardToken));
+
+        // Now test with sufficient amount
+        rewardToken.mint(address(staking), 10_000 - 100); // Top up to 10,000
+        staking.accrueRewards(address(rewardToken)); // Should succeed
     }
 
     // ============ Governor Error Paths ============
