@@ -114,13 +114,12 @@ contract LevrStakingExtremeSmallRewardsTest is Test, LevrFactoryDeployHelper {
     }
 
     /**
-     * @notice Test Vector 1: Distribute 1 wei to single staker
-     * @dev The smallest possible reward distribution
+     * @notice Test Vector 1: Distribute 1 wei to single staker (BLOCKED)
+     * @dev Validates that 1 wei rewards are blocked by MIN_REWARD_AMOUNT
      */
-    function test_oneWei_singleStaker() public {
-        console2.log('\n=== Test Vector 1: 1 Wei to Single Staker ===');
+    function test_rewardDurationDilutionAttack_PREVENTED() public {
+        console2.log('\n=== Test Vector 9: Reward Duration Dilution Attack - PREVENTED ===');
 
-        // User stakes a normal amount
         uint256 stakeAmount = 1_000 * 1e18;
         stakingToken.mint(user1, stakeAmount);
 
@@ -131,525 +130,53 @@ contract LevrStakingExtremeSmallRewardsTest is Test, LevrFactoryDeployHelper {
 
         console2.log('User1 staked:', stakeAmount / 1e18, 'tokens');
 
-        // Capture state before 1 wei distribution
-        uint256 accRewardBefore = staking.accRewardPerShare(address(rewardToken));
-        console2.log('accRewardPerShare before:', accRewardBefore);
-
-        // Distribute 1 wei
-        rewardToken.mint(address(staking), 1);
+        // Initial reward distribution: 1000 tokens over 7 days
+        uint256 initialReward = 1_000 * 1e18;
+        rewardToken.mint(address(staking), initialReward);
         staking.accrueRewards(address(rewardToken));
 
-        // Wait for streaming to complete
-        vm.warp(block.timestamp + 7 days);
+        console2.log('\n--- Initial Distribution ---');
+        console2.log('Distributed: 1,000 tokens');
+        
+        uint256 initialRate = staking.rewardRatePerSecond(address(rewardToken));
+        console2.log('Rate per day:', (initialRate * 1 days) / 1e18, 'tokens/day');
 
-        // Capture state after
-        uint256 accRewardAfter = staking.accRewardPerShare(address(rewardToken));
-        console2.log('accRewardPerShare after:', accRewardAfter);
+        // Fast forward to day 5
+        vm.warp(block.timestamp + 5 days);
 
-        // Check claimable
-        uint256 claimable = staking.claimableRewards(user1, address(rewardToken));
-        console2.log('User1 claimable:', claimable);
-
-        // Accounting should not overflow or corrupt
-        assertGe(accRewardAfter, accRewardBefore, 'accRewardPerShare should not decrease');
-
-        // Expected: (1 * PRECISION) / stakeAmount
-        // = (1 * 1e18) / (1000 * 1e18) = 1e18 / 1000e18 = 1/1000 = 0 (rounds down)
-        // So accRewardPerShare might not change if reward is too small
-
-        console2.log('[OK] 1 wei distribution does not corrupt accounting');
-    }
-
-    /**
-     * @notice Test Vector 2: Distribute 1 wei to multiple stakers
-     * @dev Tests precision loss with multiple beneficiaries
-     */
-    function test_oneWei_multipleStakers() public {
-        console2.log('\n=== Test Vector 2: 1 Wei to Multiple Stakers ===');
-
-        // Three users stake equal amounts
-        uint256 stakeAmount = 1_000 * 1e18;
-
-        stakingToken.mint(user1, stakeAmount);
-        stakingToken.mint(user2, stakeAmount);
-        stakingToken.mint(user3, stakeAmount);
-
-        vm.prank(user1);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user1);
-        staking.stake(stakeAmount);
-
-        vm.prank(user2);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user2);
-        staking.stake(stakeAmount);
-
-        vm.prank(user3);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user3);
-        staking.stake(stakeAmount);
-
-        console2.log('3 users staked:', stakeAmount / 1e18, 'tokens each');
-        console2.log('Total staked:', staking.totalStaked() / 1e18, 'tokens');
-
-        // Distribute 1 wei across 3 stakers
+        // ATTACK ATTEMPT: Try to donate 1 wei
+        console2.log('\n--- ATTACK ATTEMPT: Donate 1 Wei ---');
         rewardToken.mint(address(staking), 1);
+        
+        // Should REVERT with RewardTooSmall
+        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
         staking.accrueRewards(address(rewardToken));
+        
+        console2.log('[BLOCKED] Attack prevented by universal 10,000 wei minimum!');
 
-        vm.warp(block.timestamp + 7 days);
+        // Try with 5,000 wei (still below minimum) - should also revert
+        // Note: Previous 1 wei is still in contract, so total available is 5,001
+        rewardToken.mint(address(staking), 5_000);
+        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
+        staking.accrueRewards(address(rewardToken));
+        console2.log('[BLOCKED] 5,000 wei also blocked (< 10,000 minimum)');
 
-        // Check claimable for each user
-        uint256 claimable1 = staking.claimableRewards(user1, address(rewardToken));
-        uint256 claimable2 = staking.claimableRewards(user2, address(rewardToken));
-        uint256 claimable3 = staking.claimableRewards(user3, address(rewardToken));
-
-        console2.log('User1 claimable:', claimable1);
-        console2.log('User2 claimable:', claimable2);
-        console2.log('User3 claimable:', claimable3);
-
-        // With 1 wei and large totalStaked, everyone likely gets 0 due to precision
-        // But accounting should remain consistent
-        uint256 totalClaimable = claimable1 + claimable2 + claimable3;
-        console2.log('Total claimable:', totalClaimable);
-
-        // Accounting should not overflow
-        assertLe(totalClaimable, 1, 'Cannot claim more than distributed');
-
-        console2.log('[OK] 1 wei to multiple stakers does not corrupt accounting');
-    }
-
-    /**
-     * @notice Test Vector 3: Multiple 1 wei distributions
-     * @dev Tests if repeated small distributions cause accumulation issues
-     */
-    function test_multiple_oneWei_distributions() public {
-        console2.log('\n=== Test Vector 3: Multiple 1 Wei Distributions ===');
-
-        uint256 stakeAmount = 100 * 1e18;
-        stakingToken.mint(user1, stakeAmount);
-
-        vm.prank(user1);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user1);
-        staking.stake(stakeAmount);
-
-        console2.log('User1 staked:', stakeAmount / 1e18, 'tokens');
-
-        // Distribute 1 wei, 10 times
-        for (uint256 i = 0; i < 10; i++) {
-            rewardToken.mint(address(staking), 1);
-            staking.accrueRewards(address(rewardToken));
-            vm.warp(block.timestamp + 7 days);
-        }
-
-        uint256 accRewardFinal = staking.accRewardPerShare(address(rewardToken));
-        console2.log('accRewardPerShare after 10 distributions:', accRewardFinal);
-
-        uint256 claimable = staking.claimableRewards(user1, address(rewardToken));
-        console2.log('Total claimable:', claimable);
-
-        // Should be able to claim without reverting
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(rewardToken);
-
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1);
-
-        uint256 received = rewardToken.balanceOf(user1);
-        console2.log('Actually received:', received);
-
-        // Received should not exceed what was distributed (10 wei)
-        assertLe(received, 10, 'Cannot receive more than distributed');
-
-        console2.log('[OK] Multiple 1 wei distributions handled correctly');
-    }
-
-    /**
-     * @notice Test Vector 4: Normal rewards after 1 wei distribution (DOS Prevention)
-     * @dev Validates that 1 wei distribution doesn't DOS the reward system:
-     *      - accrueRewards doesn't revert
-     *      - Streaming continues to work
-     *      - Subsequent rewards can be distributed
-     *      - Claims work normally after dust distribution
-     */
-    function test_normalRewards_after_oneWei_noDOS() public {
-        console2.log('\n=== Test Vector 4: Normal Rewards After 1 Wei (DOS Prevention) ===');
-
-        uint256 stakeAmount = 1_000 * 1e18;
-        stakingToken.mint(user1, stakeAmount);
-
-        vm.prank(user1);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user1);
-        staking.stake(stakeAmount);
-
-        // First: distribute 1 wei (dust) - should NOT revert
-        console2.log('Distributing 1 wei (should not revert)...');
-        rewardToken.mint(address(staking), 1);
+        // Add enough to reach 10,000 minimum
+        console2.log('\n--- Legitimate 10,000 Wei Distribution ---');
+        rewardToken.mint(address(staking), 3_999); // Total: 5,001 + 3,999 = 9,000 (still not enough)
+        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
+        staking.accrueRewards(address(rewardToken));
+        
+        // Now add enough to reach minimum
+        rewardToken.mint(address(staking), 1_000); // Total: 9,000 + 1,000 = 10,000
         staking.accrueRewards(address(rewardToken)); // Should succeed
-
-        console2.log('[PASS] accrueRewards with 1 wei succeeded (no DOS)');
-
-        // Verify streaming was set up
-        (uint64 streamStart1, uint64 streamEnd1, uint256 streamTotal1) = staking.getTokenStreamInfo(
-            address(rewardToken)
-        );
-        console2.log('Stream after 1 wei - Start:', streamStart1);
-        console2.log('Stream after 1 wei - End:', streamEnd1);
-        console2.log('Stream after 1 wei - Total:', streamTotal1);
-
-        assertGt(streamEnd1, streamStart1, 'Stream window should be set');
-        assertEq(streamTotal1, 1, 'Stream total should be 1 wei');
-
-        // Wait for stream to vest
-        vm.warp(block.timestamp + 7 days);
-
-        // Claim should not revert (even if claimable is 0 due to rounding)
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(rewardToken);
-
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1); // Should not revert
-        console2.log('[PASS] Claim after 1 wei succeeded (no DOS)');
-
-        // Then: distribute normal amount (1000 tokens) - should still work
-        console2.log('\nDistributing 1,000 tokens after dust...');
-        uint256 normalReward = 1_000 * 1e18;
-        rewardToken.mint(address(staking), normalReward);
-        staking.accrueRewards(address(rewardToken)); // Should succeed
-        console2.log('[PASS] accrueRewards with normal amount succeeded');
-
-        vm.warp(block.timestamp + 7 days);
-
-        // Check claimable for normal rewards
-        uint256 claimable = staking.claimableRewards(user1, address(rewardToken));
-        console2.log('Claimable after normal rewards:', claimable / 1e18, 'tokens');
-
-        // Should get approximately the normal reward amount (1 wei was already claimed/lost to rounding)
-        assertApproxEqRel(claimable, normalReward, 0.01e18, 'Should get ~1000 tokens');
-
-        // Claim and verify - should not revert
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1);
-
-        uint256 received = rewardToken.balanceOf(user1);
-        console2.log('Actually received:', received / 1e18, 'tokens');
-
-        assertApproxEqRel(received, normalReward, 0.01e18, 'Should receive ~1000 tokens');
-
-        console2.log('[OK] No DOS: System works normally after 1 wei distribution');
-    }
-
-    /**
-     * @notice Test Vector 5: Extreme case - 1 wei with very large stake
-     * @dev Tests the most extreme precision loss scenario
-     */
-    function test_oneWei_largeStake() public {
-        console2.log('\n=== Test Vector 5: 1 Wei with Large Stake ===');
-
-        // User stakes a very large amount (1 billion tokens)
-        uint256 largeStake = 1_000_000_000 * 1e18;
-        stakingToken.mint(user1, largeStake);
-
-        vm.prank(user1);
-        stakingToken.approve(address(staking), largeStake);
-        vm.prank(user1);
-        staking.stake(largeStake);
-
-        console2.log('User1 staked:', largeStake / 1e18, 'tokens');
-
-        // Capture initial state
-        uint256 totalStakedBefore = staking.totalStaked();
-        uint256 accRewardBefore = staking.accRewardPerShare(address(rewardToken));
-
-        // Distribute 1 wei
-        rewardToken.mint(address(staking), 1);
-        staking.accrueRewards(address(rewardToken));
-        vm.warp(block.timestamp + 7 days);
-
-        // Capture state after
-        uint256 totalStakedAfter = staking.totalStaked();
-        uint256 accRewardAfter = staking.accRewardPerShare(address(rewardToken));
-
-        console2.log('Total staked before:', totalStakedBefore);
-        console2.log('Total staked after:', totalStakedAfter);
-        console2.log('accRewardPerShare before:', accRewardBefore);
-        console2.log('accRewardPerShare after:', accRewardAfter);
-
-        // Verify no corruption
-        assertEq(totalStakedBefore, totalStakedAfter, 'Total staked should not change');
-        assertGe(accRewardAfter, accRewardBefore, 'accRewardPerShare should not decrease');
-
-        // With 1 wei / 1 billion tokens, increment will be:
-        // (1 * 1e18) / (1e9 * 1e18) = 1e18 / 1e27 = 1e-9 → rounds to 0
-        // So accRewardPerShare might not change, which is OK
-
-        uint256 claimable = staking.claimableRewards(user1, address(rewardToken));
-        console2.log('Claimable:', claimable);
-
-        // Try to claim (should not revert)
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(rewardToken);
-
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1);
-
-        console2.log('[OK] Extreme precision loss handled without corruption');
-    }
-
-    /**
-     * @notice Test Vector 6: Few weis (2-10 wei) distribution
-     * @dev Tests slightly larger but still extremely small amounts
-     */
-    function test_fewWeis_distribution() public {
-        console2.log('\n=== Test Vector 6: Few Weis (2-10) Distribution ===');
-
-        uint256 stakeAmount = 1_000 * 1e18;
-        stakingToken.mint(user1, stakeAmount);
-        stakingToken.mint(user2, stakeAmount);
-
-        vm.prank(user1);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user1);
-        staking.stake(stakeAmount);
-
-        vm.prank(user2);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user2);
-        staking.stake(stakeAmount);
-
-        console2.log('2 users staked 1,000 tokens each');
-
-        // Distribute 10 wei
-        rewardToken.mint(address(staking), 10);
-        staking.accrueRewards(address(rewardToken));
-        vm.warp(block.timestamp + 7 days);
-
-        uint256 claimable1 = staking.claimableRewards(user1, address(rewardToken));
-        uint256 claimable2 = staking.claimableRewards(user2, address(rewardToken));
-
-        console2.log('User1 claimable:', claimable1);
-        console2.log('User2 claimable:', claimable2);
-
-        // Claim both
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(rewardToken);
-
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1);
-
-        vm.prank(user2);
-        staking.claimRewards(tokens, user2);
-
-        uint256 received1 = rewardToken.balanceOf(user1);
-        uint256 received2 = rewardToken.balanceOf(user2);
-
-        console2.log('User1 received:', received1);
-        console2.log('User2 received:', received2);
-
-        // Total received should not exceed distributed
-        assertLe(received1 + received2, 10, 'Total received <= distributed');
-
-        console2.log('[OK] Few weis handled correctly');
-    }
-
-    /**
-     * @notice Test Vector 7: Stake, distribute 1 wei, unstake
-     * @dev Tests full lifecycle with 1 wei reward
-     */
-    function test_fullLifecycle_oneWei() public {
-        console2.log('\n=== Test Vector 7: Full Lifecycle with 1 Wei ===');
-
-        uint256 stakeAmount = 1_000 * 1e18;
-        stakingToken.mint(user1, stakeAmount);
-
-        // Stake
-        vm.prank(user1);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user1);
-        staking.stake(stakeAmount);
-
-        console2.log('Staked:', stakeAmount / 1e18, 'tokens');
-
-        // Distribute 1 wei
-        rewardToken.mint(address(staking), 1);
-        staking.accrueRewards(address(rewardToken));
-        vm.warp(block.timestamp + 7 days);
-
-        console2.log('Distributed 1 wei');
-
-        // Check state before unstake
-        uint256 claimableBefore = staking.claimableRewards(user1, address(rewardToken));
-        console2.log('Claimable before unstake:', claimableBefore);
-
-        // Unstake (auto-claims rewards)
-        vm.prank(user1);
-        staking.unstake(stakeAmount, user1);
-
-        console2.log('Unstaked');
-
-        // Check final state
-        uint256 finalStakingBalance = stakingToken.balanceOf(user1);
-        uint256 finalRewardBalance = rewardToken.balanceOf(user1);
-
-        console2.log('Final staking token balance:', finalStakingBalance / 1e18);
-        console2.log('Final reward balance:', finalRewardBalance);
-
-        // Should get staking tokens back
-        assertEq(finalStakingBalance, stakeAmount, 'Should get all staking tokens back');
-
-        // Reward balance should not overflow
-        assertLe(finalRewardBalance, 1, 'Cannot receive more than 1 wei');
-
-        console2.log('[OK] Full lifecycle with 1 wei completes successfully');
-    }
-
-    /**
-     * @notice Test Vector 8: DOS Attack Prevention - Repeated 1 wei spam
-     * @dev Validates that an attacker cannot DOS the system by repeatedly sending 1 wei
-     *      Key validations:
-     *      - accrueRewards succeeds with 1 wei (no revert)
-     *      - Streaming is set up correctly
-     *      - Claims don't revert
-     *      - System remains usable after spam
-     *      - Normal rewards still work after spam attack
-     */
-    function test_dosAttackPrevention_repeatedOneWeiSpam() public {
-        console2.log('\n=== Test Vector 8: DOS Attack Prevention (1 Wei Spam) ===');
-
-        uint256 stakeAmount = 500 * 1e18;
-        stakingToken.mint(user1, stakeAmount);
-
-        vm.prank(user1);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user1);
-        staking.stake(stakeAmount);
-
-        console2.log('User1 staked:', stakeAmount / 1e18, 'tokens');
-        console2.log('\nSimulating DOS attack: 100 consecutive 1 wei distributions...');
-
-        // Simulate DOS attack: attacker sends 100 consecutive 1 wei rewards
-        for (uint256 i = 1; i <= 100; i++) {
-            // Each distribution should NOT revert
-            rewardToken.mint(address(staking), 1);
-            staking.accrueRewards(address(rewardToken)); // Should not revert
-
-            // Advance time slightly to trigger new stream windows
-            vm.warp(block.timestamp + 1 hours);
-
-            if (i % 25 == 0) {
-                console2.log('  Completed', i, 'spam distributions (no revert)');
-            }
-        }
-
-        console2.log('[PASS] All 100 spam distributions succeeded without DOS');
-
-        // Verify streaming is still working
-        (uint64 streamStart, uint64 streamEnd, uint256 streamTotal) = staking.getTokenStreamInfo(
-            address(rewardToken)
-        );
-        console2.log('Stream still active - Start:', streamStart);
-        console2.log('Stream still active - End:', streamEnd);
-        console2.log('Stream total after spam:', streamTotal);
-
-        assertGt(streamEnd, streamStart, 'Streaming should still be active');
-
-        // User should be able to claim without reverting (even if amount is 0)
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(rewardToken);
-
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1); // Should not revert
-        console2.log('[PASS] Claim after spam attack succeeded (no DOS)');
-
-        // Now distribute normal rewards - system should still work
-        console2.log('\nDistributing normal rewards (1000 tokens) after spam...');
-        uint256 normalReward = 1_000 * 1e18;
-        rewardToken.mint(address(staking), normalReward);
-        staking.accrueRewards(address(rewardToken)); // Should not revert
-        console2.log('[PASS] Normal accrueRewards succeeded after spam');
-
-        vm.warp(block.timestamp + 7 days);
-
-        uint256 claimable = staking.claimableRewards(user1, address(rewardToken));
-        console2.log('Claimable after spam + normal:', claimable / 1e18, 'tokens');
-
-        // Should get approximately the normal reward
-        assertApproxEqRel(claimable, normalReward, 0.05e18, 'Should get ~1000 tokens');
-
-        // Final claim should work
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1);
-
-        uint256 finalBalance = rewardToken.balanceOf(user1);
-        console2.log('Final balance:', finalBalance / 1e18, 'tokens');
-
-        console2.log('[OK] DOS attack prevented: System remains functional after 100x 1 wei spam');
-    }
-
-    /**
-     * @notice Test Vector 9: Accounting consistency after multiple small distributions
-     * @dev Verifies all accounting invariants hold after many small distributions
-     */
-    function test_accountingInvariants_multipleSmallDistributions() public {
-        console2.log('\n=== Test Vector 8: Accounting Invariants ===');
-
-        uint256 stakeAmount = 500 * 1e18;
-        stakingToken.mint(user1, stakeAmount);
-        stakingToken.mint(user2, stakeAmount);
-
-        vm.prank(user1);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user1);
-        staking.stake(stakeAmount);
-
-        vm.prank(user2);
-        stakingToken.approve(address(staking), stakeAmount);
-        vm.prank(user2);
-        staking.stake(stakeAmount);
-
-        console2.log('2 users staked 500 tokens each');
-
-        // Distribute small amounts multiple times
-        for (uint256 i = 1; i <= 5; i++) {
-            rewardToken.mint(address(staking), i); // 1, 2, 3, 4, 5 wei
-            staking.accrueRewards(address(rewardToken));
-            vm.warp(block.timestamp + 7 days);
-            console2.log('Distributed', i, 'wei');
-        }
-
-        // Total distributed: 1+2+3+4+5 = 15 wei
-
-        uint256 claimable1 = staking.claimableRewards(user1, address(rewardToken));
-        uint256 claimable2 = staking.claimableRewards(user2, address(rewardToken));
-
-        console2.log('User1 claimable:', claimable1);
-        console2.log('User2 claimable:', claimable2);
-
-        // Claim both
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(rewardToken);
-
-        vm.prank(user1);
-        staking.claimRewards(tokens, user1);
-
-        vm.prank(user2);
-        staking.claimRewards(tokens, user2);
-
-        uint256 received1 = rewardToken.balanceOf(user1);
-        uint256 received2 = rewardToken.balanceOf(user2);
-
-        console2.log('User1 received:', received1);
-        console2.log('User2 received:', received2);
-
-        // Invariant: total received <= total distributed
-        assertLe(received1 + received2, 15, 'Total received should not exceed 15 wei');
-
-        // Verify no dust stuck in contract (all distributed or claimable)
-        uint256 contractBalance = rewardToken.balanceOf(address(staking));
-        console2.log('Remaining in contract:', contractBalance);
-        assertLe(contractBalance, 15, 'Contract should not have more than distributed');
-
-        console2.log('[OK] Accounting invariants hold after multiple small distributions');
+        console2.log('[PASS] 10,000 wei (meets minimum) succeeded');
+
+        console2.log('\n[FIX VERIFIED] Universal minimum prevents duration dilution attack!');
+        console2.log('Minimum: 10,000 wei (1e4) for ALL tokens');
+        console2.log('  18 decimals (DAI): 0.00001 tokens (~$0.00003)');
+        console2.log('  18 decimals (WETH): 0.00001 WETH (~$0.03)');
+        console2.log('  6 decimals (USDC): 0.01 cents ($0.0001)');
+        console2.log('  8 decimals (WBTC): 0.0001 WBTC (~$6)');
     }
 }

@@ -68,7 +68,11 @@ contract LevrFactoryDeployHelper is Test {
         address weth = 0x4200000000000000000000000000000000000006; // Base WETH
         if (weth.code.length == 0) {
             // Deploy MockERC20 at this address using deployCodeTo
-            deployCodeTo('MockERC20', abi.encode('Wrapped Ether', 'WETH'), weth);
+            deployCodeTo(
+                'test/mocks/MockERC20.sol:MockERC20',
+                abi.encode('Wrapped Ether', 'WETH'),
+                weth
+            );
         }
 
         // Step 6: Build initial whitelist (WETH for Base)
@@ -194,13 +198,7 @@ contract LevrFactoryDeployHelper is Test {
     ) internal {
         address[] memory rewardTokens = new address[](1);
         rewardTokens[0] = rewardToken;
-        initializeStakingWithRewardTokens(
-            staking,
-            underlying,
-            stakedToken,
-            treasury,
-            rewardTokens
-        );
+        initializeStakingWithRewardTokens(staking, underlying, stakedToken, treasury, rewardTokens);
     }
 
     /// @notice Helper to whitelist a dynamically created reward token (for tokens created during tests)

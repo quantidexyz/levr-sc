@@ -32,6 +32,9 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @notice Basis points denominator (10000 = 100%)
     uint256 public constant BASIS_POINTS = 10_000;
 
+    /// @notice Minimum reward amount to prevent duration dilution attacks (10,000 wei)
+    uint256 public constant MIN_REWARD_AMOUNT = 1e4;
+
     constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
         if (factory_ == address(0)) revert ZeroAddress();
         factory = factory_;
@@ -531,13 +534,12 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @notice Credit rewards to the pool with streaming
-    /// @dev Minimum check prevents reward token DoS attack (0.001 tokens minimum)
-    ///      Works with any token decimals (USDC, WBTC, DAI all supported)
+    /// @dev Minimum check (0.01 tokens) is enforced in _ensureRewardToken()
     /// @param token The reward token address
     /// @param amount The amount to credit (in token's native units)
     function _creditRewards(address token, uint256 amount) internal {
-        // Ensure token is registered and whitelisted
-        RewardTokenState storage tokenState = _ensureRewardToken(token);
+        // Ensure token is registered, whitelisted, and amount meets minimum
+        RewardTokenState storage tokenState = _ensureRewardToken(token, amount);
 
         // Settle pool to move vested rewards from stream to available pool
         _settlePoolForToken(token);
@@ -549,13 +551,23 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         emit RewardsAccrued(token, amount, tokenState.availablePool);
     }
 
+    /// @notice Validates reward token and minimum amount to prevent duration dilution attack
+    /// @dev Requires minimum 10,000 wei to make repeated attacks impractical while allowing all tokens
+    /// @param token The reward token address
+    /// @param amount The amount being credited (in token's native units)
+    /// @return tokenState Storage pointer to token state
     function _ensureRewardToken(
-        address token
+        address token,
+        uint256 amount
     ) internal view returns (ILevrStaking_v1.RewardTokenState storage tokenState) {
         tokenState = _tokenState[token];
 
         // Token MUST exist and be whitelisted
         if (!tokenState.exists || !tokenState.whitelisted) revert TokenNotWhitelisted();
+
+        // Prevent duration dilution attack: require minimum amount
+        // Examples: 18 dec = 0.00001 tokens, 6 dec (USDC) = 0.01 cents, 8 dec (WBTC) = 0.0001 WBTC ($6)
+        if (amount < MIN_REWARD_AMOUNT) revert RewardTooSmall();
     }
 
     /// @notice Internal helper to remove token from array
