@@ -271,7 +271,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Try to unwhitelist again
         vm.prank(admin);
-        vm.expectRevert(ILevrStaking_v1.NotWhitelisted.selector);
+        vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
         staking.unwhitelistToken(address(rewardToken));
     }
 

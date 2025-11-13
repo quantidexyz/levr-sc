@@ -54,7 +54,6 @@ interface ILevrStaking_v1 {
     error CannotWhitelistWithPendingRewards();
     error CannotUnwhitelistUnderlying();
     error TokenNotRegistered();
-    error NotWhitelisted();
     error CannotUnwhitelistWithPendingRewards();
     error CannotRemoveUnderlying();
     error CannotRemoveWhitelisted();

@@ -305,7 +305,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Token must exist and be whitelisted
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         if (!tokenState.exists) revert TokenNotRegistered();
-        if (!tokenState.whitelisted) revert NotWhitelisted();
+        if (!tokenState.whitelisted) revert TokenNotWhitelisted();
 
         // CRITICAL: Cannot unwhitelist if token has pending rewards (would make them unclaimable)
         if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
@@ -554,11 +554,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     ) internal view returns (ILevrStaking_v1.RewardTokenState storage tokenState) {
         tokenState = _tokenState[token];
 
-        // Token MUST already exist (via initialize() or whitelistToken())
-        if (!tokenState.exists) revert TokenNotWhitelisted();
-
-        // Token MUST be whitelisted
-        if (!tokenState.whitelisted) revert TokenNotWhitelisted();
+        // Token MUST exist and be whitelisted
+        if (!tokenState.exists || !tokenState.whitelisted) revert TokenNotWhitelisted();
     }
 
     /// @notice Internal helper to remove token from array
