@@ -11,13 +11,13 @@ import {ILevrTreasury_v1} from './interfaces/ILevrTreasury_v1.sol';
 contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBase {
     using SafeERC20 for IERC20;
 
-    /// @notice Factory contract that deployed this treasury (immutable)
+    /// @inheritdoc ILevrTreasury_v1
     address public immutable factory;
 
-    /// @notice Underlying token managed by this treasury
+    /// @inheritdoc ILevrTreasury_v1
     address public underlying;
 
-    /// @notice Governor contract authorized to control treasury actions
+    /// @inheritdoc ILevrTreasury_v1
     address public governor;
 
     constructor(address factory_, address trustedForwarder) ERC2771ContextBase(trustedForwarder) {

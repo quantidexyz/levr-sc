@@ -46,4 +46,13 @@ interface ILevrTreasury_v1 {
     /// @param to Recipient
     /// @param amount Amount to transfer
     function transfer(address token, address to, uint256 amount) external;
+
+    /// @notice Address of the Levr factory that deployed this treasury.
+    function factory() external view returns (address);
+
+    /// @notice Address of the underlying token managed by this treasury.
+    function underlying() external view returns (address);
+
+    /// @notice Address of the governor contract controlling this treasury.
+    function governor() external view returns (address);
 }
