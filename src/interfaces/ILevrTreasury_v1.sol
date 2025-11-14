@@ -28,6 +28,12 @@ interface ILevrTreasury_v1 {
     /// @param governor Project governor address
     event Initialized(address indexed underlying, address indexed governor);
 
+    /// @notice Emitted when the governor executes a token transfer.
+    /// @param token ERC20 token address transferred from the treasury
+    /// @param to Recipient of the transfer
+    /// @param amount Amount transferred
+    event TransferExecuted(address indexed token, address indexed to, uint256 amount);
+
     // ============ Functions ============
 
     /// @notice Initialize the treasury (called once by factory during deployment).
@@ -40,17 +46,4 @@ interface ILevrTreasury_v1 {
     /// @param to Recipient
     /// @param amount Amount to transfer
     function transfer(address token, address to, uint256 amount) external;
-
-    /// @notice Current underlying balance held by the treasury.
-    /// @return balance Underlying token balance
-    function getUnderlyingBalance() external view returns (uint256 balance);
-
-    /// @notice Address of the underlying token this treasury manages.
-    function underlying() external view returns (address);
-
-    /// @notice Address of the governor contract that can authorize transfers.
-    function governor() external view returns (address);
-
-    /// @notice Address of the staking contract for boost operations.
-    function staking() external view returns (address);
 }

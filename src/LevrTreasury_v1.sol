@@ -7,13 +7,17 @@ import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 import {ERC2771ContextBase} from './base/ERC2771ContextBase.sol';
 import {ILevrTreasury_v1} from './interfaces/ILevrTreasury_v1.sol';
-import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 
 contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBase {
     using SafeERC20 for IERC20;
 
-    address public underlying;
+    /// @notice Factory contract that deployed this treasury (immutable)
     address public immutable factory;
+
+    /// @notice Underlying token managed by this treasury
+    address public underlying;
+
+    /// @notice Governor contract authorized to control treasury actions
     address public governor;
 
     constructor(address factory_, address trustedForwarder) ERC2771ContextBase(trustedForwarder) {
@@ -22,7 +26,7 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
     }
 
     /// @inheritdoc ILevrTreasury_v1
-    function initialize(address governor_, address underlying_) external {
+    function initialize(address governor_, address underlying_) external override {
         if (governor != address(0)) revert ILevrTreasury_v1.AlreadyInitialized();
         if (_msgSender() != factory) revert ILevrTreasury_v1.OnlyFactory();
         if (governor_ == address(0)) revert ILevrTreasury_v1.ZeroAddress();
@@ -43,18 +47,9 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
         address token,
         address to,
         uint256 amount
-    ) external nonReentrant onlyGovernor {
+    ) external override nonReentrant onlyGovernor {
         if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         IERC20(token).safeTransfer(to, amount);
-    }
-
-    /// @inheritdoc ILevrTreasury_v1
-    function getUnderlyingBalance() external view returns (uint256) {
-        return IERC20(underlying).balanceOf(address(this));
-    }
-
-    /// @inheritdoc ILevrTreasury_v1
-    function staking() external view returns (address) {
-        return ILevrFactory_v1(factory).getProjectContracts(underlying).staking;
+        emit TransferExecuted(token, to, amount);
     }
 }
