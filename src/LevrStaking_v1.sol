@@ -401,11 +401,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function streamWindowSeconds() external view returns (uint32) {
-        return ILevrFactory_v1(factory).streamWindowSeconds(underlying);
-    }
-
-    /// @inheritdoc ILevrStaking_v1
     function getTokenStreamInfo(
         address token
     ) external view returns (uint64 streamStart, uint64 streamEnd, uint256 streamTotal) {

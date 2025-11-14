@@ -171,8 +171,6 @@ interface ILevrStaking_v1 {
     ) external view returns (uint256 claimable);
 
     /// @notice View streaming parameters.
-    function streamWindowSeconds() external view returns (uint32);
-
     /// @notice Get stream info for a specific reward token
     /// @param token The reward token address
     /// @return streamStart Per-token stream start timestamp

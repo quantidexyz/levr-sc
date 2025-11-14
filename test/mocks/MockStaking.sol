@@ -91,10 +91,6 @@ contract MockStaking is ILevrStaking_v1 {
 
     function unwhitelistToken(address) external override {}
 
-    function streamWindowSeconds() external pure override returns (uint32) {
-        return 0;
-    }
-
     function getTokenStreamInfo(address) external pure override returns (uint64, uint64, uint256) {
         return (0, 0, 0);
     }

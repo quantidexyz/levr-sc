@@ -51,7 +51,13 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         factory = address(this);
 
         staking = createStaking(address(0), address(this));
-        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
+        sToken = createStakedToken(
+            'Staked Token',
+            'sTKN',
+            18,
+            address(underlying),
+            address(staking)
+        );
 
         // Initialize with empty whitelist
         initializeStakingWithRewardTokens(
@@ -75,12 +81,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     function test_initialize_alreadyInitialized_reverts() public {
         // Try to initialize again
         vm.expectRevert(ILevrStaking_v1.AlreadyInitialized.selector);
-        staking.initialize(
-            address(underlying),
-            address(sToken),
-            treasury,
-            new address[](0)
-        );
+        staking.initialize(address(underlying), address(sToken), treasury, new address[](0));
     }
 
     // ============================================================================
@@ -94,12 +95,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         // Try to initialize from non-factory address
         vm.prank(alice);
         vm.expectRevert(ILevrStaking_v1.OnlyFactory.selector);
-        newStaking.initialize(
-            address(underlying),
-            address(sToken),
-            treasury,
-            new address[](0)
-        );
+        newStaking.initialize(address(underlying), address(sToken), treasury, new address[](0));
     }
 
     // ============================================================================
@@ -124,12 +120,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
-        newStaking.initialize(
-            address(underlying),
-            address(sToken),
-            address(0),
-            new address[](0)
-        );
+        newStaking.initialize(address(underlying), address(sToken), address(0), new address[](0));
     }
 
     function test_initialize_zeroAddressFactory_reverts() public {
@@ -402,7 +393,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     // ============================================================================
     /// @dev Covers lines 394-395: streamWindowSeconds view function
     function test_streamWindowSeconds_returnsCorrectValue() public view {
-        uint32 window = staking.streamWindowSeconds();
+        uint32 window = ILevrFactory_v1(factory).streamWindowSeconds(address(underlying));
         assertEq(window, 3 days, 'Should return 3 days');
     }
 
