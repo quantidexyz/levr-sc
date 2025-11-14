@@ -126,6 +126,9 @@ interface ILevrGovernor_v1 {
     /// @notice Proposal amount exceeds maximum allowed percentage of treasury balance
     error ProposalAmountExceedsLimit();
 
+    /// @notice Proposal does not exist
+    error ProposalNotFound();
+
     /// @notice Function is internal only (cannot be called directly)
     error InternalOnly();
 
@@ -193,6 +196,13 @@ interface ILevrGovernor_v1 {
         uint256 proposalWindowEnd,
         uint256 votingWindowEnd
     );
+
+    /// @notice Emitted when the governor is initialized
+    /// @param treasury Treasury address
+    /// @param staking Staking contract address
+    /// @param stakedToken Staked token address
+    /// @param underlying Underlying token address
+    event Initialized(address treasury, address staking, address stakedToken, address underlying);
 
     // ============ Functions ============
 

@@ -71,10 +71,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             maxProposalAmountBps: 500, // 5% max
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
-        (LevrFactory_v1 fac, , ) = deployFactoryWithDefaultClanker(
-            cfg,
-            address(this)
-        );
+        (LevrFactory_v1 fac, , ) = deployFactoryWithDefaultClanker(cfg, address(this));
 
         // Prepare infrastructure before registering
         fac.prepareForDeployment();
@@ -193,10 +190,10 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
     function test_getProposal_invalid_proposalId_reverts() public {
         // Try to get a non-existent proposal (should revert)
-        vm.expectRevert(ILevrGovernor_v1.InvalidProposalType.selector);
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotFound.selector);
         governor.getProposal(999);
 
-        vm.expectRevert(ILevrGovernor_v1.InvalidProposalType.selector);
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotFound.selector);
         governor.getProposal(0);
     }
 
@@ -344,10 +341,10 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     function test_propose_tokenNotInTreasury_allowed() public {
         // Propose for token - proposal creation checks balance at creation time
         MockERC20 otherToken = new MockERC20('Other', 'OTH');
-        
+
         // Mint token to treasury first (proposal creation validates balance)
         otherToken.mint(address(treasury), 100 ether);
-        
+
         // 5% of 100 = 5 ether max
         vm.prank(user);
         uint256 pid = governor.proposeTransfer(
@@ -387,7 +384,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Both proposals should exist in same cycle
         ILevrGovernor_v1.Proposal memory p1 = governor.getProposal(pid1);
         ILevrGovernor_v1.Proposal memory p2 = governor.getProposal(pid2);
-        
+
         // Verify both proposals exist and use different tokens
         assertEq(p1.token, address(underlying), 'First uses underlying');
         assertEq(p2.token, address(weth), 'Second uses WETH');
@@ -404,7 +401,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Create proposals for different tokens (different users since same user can only propose one transfer per cycle)
         // Amounts must be within maxProposalAmountBps (5% of treasury balance)
         // 5% of 1000 = 50 ether max
-        
+
         // Setup second user first so both can propose in same cycle
         address otherUser = address(0x9999);
         underlying.mint(otherUser, 1_000 ether);
@@ -425,12 +422,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Second proposal should be in same cycle (if proposal window still open)
         vm.prank(otherUser);
-        uint256 pid2 = governor.proposeTransfer(
-            address(weth),
-            address(0xB),
-            50 ether,
-            'transfer2'
-        );
+        uint256 pid2 = governor.proposeTransfer(address(weth), address(0xB), 50 ether, 'transfer2');
 
         // Both should be independent
         ILevrGovernor_v1.Proposal memory p1 = governor.getProposal(pid1);
@@ -592,7 +584,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Create two proposals
         vm.prank(alice);
         uint256 pid1 = governor.proposeBoost(address(underlying), 100 ether);
-        
+
         vm.prank(bob);
         uint256 pid2 = governor.proposeBoost(address(underlying), 200 ether);
 
@@ -611,7 +603,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Get proposals
         ILevrGovernor_v1.Proposal memory p1 = governor.getProposal(pid1);
         ILevrGovernor_v1.Proposal memory p2 = governor.getProposal(pid2);
-        
+
         // Both should have votes (may not be exactly equal due to VP timing differences)
         assertGt(p1.yesVotes, 0, 'Proposal 1 should have votes');
         assertGt(p2.yesVotes, 0, 'Proposal 2 should have votes');
@@ -639,7 +631,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Execution doesn't revert, marks as defeated due to insufficient balance
         governor.execute(pid);
-        
+
         // Verify proposal was marked as executed (defeated)
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
         assertTrue(proposal.executed, 'Proposal should be marked executed (defeated)');
@@ -652,12 +644,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Proposal amount must be within maxProposalAmountBps (5% of treasury balance)
         // 5% of 1000 = 50 ether max
         vm.prank(user);
-        uint256 pid = governor.proposeTransfer(
-            address(weth),
-            address(0xB0B),
-            50 ether,
-            'transfer'
-        );
+        uint256 pid = governor.proposeTransfer(address(weth), address(0xB0B), 50 ether, 'transfer');
 
         // Vote first
         vm.warp(block.timestamp + 2 days + 1);
@@ -713,13 +700,13 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(user);
             uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
-            
+
             // Vote and execute
             vm.warp(block.timestamp + 2 days + 1);
             vm.roll(block.number + 1); // Advance blocks for voting eligibility
             vm.prank(user);
             governor.vote(pid, true);
-            
+
             vm.warp(block.timestamp + 5 days + 1);
             governor.execute(pid); // Execute proposal to start new cycle
             vm.warp(block.timestamp + 1);
@@ -779,11 +766,11 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 2 days + 1);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        
+
         // Vote yes
         vm.prank(user);
         governor.vote(pid, true);
-        
+
         // Change to no
         vm.prank(user);
         try governor.vote(pid, false) {
@@ -849,15 +836,15 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Create multiple stakers
         address alice = address(0x1111);
         address bob = address(0x2222);
-        
+
         underlying.mint(alice, 500 ether);
         underlying.mint(bob, 500 ether);
-        
+
         vm.prank(alice);
         underlying.approve(address(staking), 500 ether);
         vm.prank(alice);
         staking.stake(100 ether);
-        
+
         vm.prank(bob);
         underlying.approve(address(staking), 500 ether);
         vm.prank(bob);
@@ -869,14 +856,14 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 2 days + 1);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        
+
         // All three vote
         vm.prank(user);
         governor.vote(pid, true);
-        
+
         vm.prank(alice);
         governor.vote(pid, true);
-        
+
         vm.prank(bob);
         governor.vote(pid, false);
 
@@ -955,7 +942,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Create user with minimal stake
         address minStaker = address(0x3333);
         underlying.mint(minStaker, 1 ether);
-        
+
         vm.prank(minStaker);
         underlying.approve(address(staking), 1 ether);
         vm.prank(minStaker);
@@ -974,7 +961,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         // Don't vote at all
         vm.warp(block.timestamp + 5 days + 1);
-        
+
         // Try to execute without votes
         try governor.execute(pid) {
             // May succeed as defeated proposal
@@ -986,13 +973,13 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     /// Test: Cycle advancement without proposals
     function test_phase2_009_cycleAdvanceWithoutProposals() public {
         uint256 cycleBefore = governor.currentCycleId();
-        
+
         // Just wait for cycle to end
         vm.warp(block.timestamp + 10 days);
-        
+
         // Start new cycle
         governor.startNewCycle();
-        
+
         uint256 cycleAfter = governor.currentCycleId();
         assertGt(cycleAfter, cycleBefore, 'Cycle should advance');
     }
@@ -1000,19 +987,26 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     /// Test: Multiple rapid proposals in early window
     function test_phase2_010_multipleProposalsEarlyWindow() public {
         vm.warp(block.timestamp + 1 days);
-        
+
         // Multiple different users proposing
         for (uint256 i = 0; i < 3; i++) {
             address proposer = address(uint160(0x4000 + i));
             underlying.mint(proposer, 1_000 ether);
-            
+
             vm.prank(proposer);
             underlying.approve(address(staking), 1_000 ether);
             vm.prank(proposer);
             staking.stake(100 ether);
-            
+
             vm.prank(proposer);
-            try governor.proposeTransfer(address(underlying), address(0x5555), 10 ether, string(abi.encodePacked('prop', i))) {
+            try
+                governor.proposeTransfer(
+                    address(underlying),
+                    address(0x5555),
+                    10 ether,
+                    string(abi.encodePacked('prop', i))
+                )
+            {
                 // May succeed or fail depending on maxActiveProposals
             } catch {
                 // Acceptable if limit exceeded
@@ -1024,15 +1018,15 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
     function test_phase2_011_executeWithMoreNoThanYes() public {
         address voter1 = address(0x6666);
         address voter2 = address(0x7777);
-        
+
         underlying.mint(voter1, 500 ether);
         underlying.mint(voter2, 500 ether);
-        
+
         vm.prank(voter1);
         underlying.approve(address(staking), 500 ether);
         vm.prank(voter1);
         staking.stake(100 ether);
-        
+
         vm.prank(voter2);
         underlying.approve(address(staking), 500 ether);
         vm.prank(voter2);
@@ -1043,20 +1037,20 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 2 days + 1);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        
+
         // voter1 votes yes
         vm.prank(voter1);
         governor.vote(pid, true);
-        
+
         // voter2 votes no (with more stake)
         vm.prank(voter2);
         governor.vote(pid, false);
 
         vm.warp(block.timestamp + 5 days + 1);
-        
+
         // Execute proposal that should be defeated
         governor.execute(pid);
-        
+
         // Check if executed
         ILevrGovernor_v1.Proposal memory p = governor.getProposal(pid);
         assertTrue(p.executed, 'Defeated proposal should be marked executed');
@@ -1067,7 +1061,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Single user with huge stake
         address whale = address(0x8888);
         underlying.mint(whale, 100_000 ether);
-        
+
         vm.prank(whale);
         underlying.approve(address(staking), 100_000 ether);
         vm.prank(whale);
@@ -1082,12 +1076,12 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 2 days + 1);
         vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        
+
         vm.prank(whale);
         governor.vote(pid, true);
 
         vm.warp(block.timestamp + 5 days + 1);
-        
+
         // Whale's vote should dominate
         ILevrGovernor_v1.Proposal memory p = governor.getProposal(pid);
         assertGt(p.yesVotes, 0, 'Whale vote should be counted');

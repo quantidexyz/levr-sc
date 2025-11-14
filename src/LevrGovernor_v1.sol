@@ -86,6 +86,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         staking = staking_;
         stakedToken = stakedToken_;
         underlying = underlying_;
+
+        emit Initialized(treasury_, staking_, stakedToken_, underlying_);
     }
 
     // ============ External Functions ============
@@ -257,6 +259,8 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             try ILevrStaking_v1(staking).accrueRewards(token) {} catch {}
         } else if (proposalType == ProposalType.TransferToAddress) {
             ILevrTreasury_v1(treasury).transfer(token, recipient, amount);
+        } else {
+            revert InvalidProposalType();
         }
     }
 
@@ -438,7 +442,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     function _state(uint256 proposalId) internal view returns (ProposalState) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
 
-        if (proposal.id == 0) revert InvalidProposalType();
+        if (proposal.id == 0) revert ProposalNotFound();
 
         // Terminal state: Executed (only set on successful execution)
         if (proposal.executed) return ProposalState.Executed;
