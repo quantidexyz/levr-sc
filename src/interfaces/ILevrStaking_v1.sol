@@ -188,8 +188,6 @@ interface ILevrStaking_v1 {
     /// @notice Pool APR in basis points for the underlying token, annualized from current stream.
     function aprBps() external view returns (uint256);
 
-    /// @notice View functions.
-    function stakedBalanceOf(address account) external view returns (uint256);
     function totalStaked() external view returns (uint256);
 
     /// @notice Escrow balance per token (non-reward reserves held for users).

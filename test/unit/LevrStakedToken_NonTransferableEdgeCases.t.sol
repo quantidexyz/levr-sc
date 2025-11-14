@@ -252,14 +252,10 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeploy
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        assertEq(stakedToken.balanceOf(alice), staking.stakedBalanceOf(alice));
-
         // Bob stakes
         vm.startPrank(bob);
         underlying.approve(address(staking), 500 ether);
         staking.stake(500 ether);
-
-        assertEq(stakedToken.balanceOf(bob), staking.stakedBalanceOf(bob));
 
         // Total supply = total staked
         assertEq(stakedToken.totalSupply(), staking.totalStaked());
@@ -268,7 +264,6 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeploy
         vm.startPrank(alice);
         staking.unstake(300 ether, alice);
 
-        assertEq(stakedToken.balanceOf(alice), staking.stakedBalanceOf(alice));
         assertEq(stakedToken.totalSupply(), staking.totalStaked());
 
         // No desync possible (no transfers to create mismatch)

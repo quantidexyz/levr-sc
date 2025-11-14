@@ -105,7 +105,7 @@ contract LevrStaking_StuckFundsTest is Test, LevrFactoryDeployHelper {
 
         // Verify escrow matches staked amount
         uint256 escrow = staking.escrowBalance(address(underlying));
-        uint256 aliceStaked = staking.stakedBalanceOf(alice);
+        uint256 aliceStaked = sToken.balanceOf(alice);
         assertEq(escrow, aliceStaked, 'Escrow should match staked amount');
 
         // Manually transfer underlying out (simulating balance depletion)

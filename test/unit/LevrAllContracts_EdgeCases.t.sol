@@ -216,7 +216,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         vm.stopPrank();
 
         assertEq(staking.totalStaked(), 100 ether);
-        assertEq(staking.stakedBalanceOf(alice), 100 ether);
+        assertEq(sToken.balanceOf(alice), 100 ether);
         console2.log('First stake successful: 100 tokens');
     }
 

@@ -391,11 +391,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function stakedBalanceOf(address account) external view returns (uint256) {
-        return ILevrStakedToken_v1(stakedToken).balanceOf(account);
-    }
-
-    /// @inheritdoc ILevrStaking_v1
     function totalStaked() external view returns (uint256) {
         return _totalStaked;
     }

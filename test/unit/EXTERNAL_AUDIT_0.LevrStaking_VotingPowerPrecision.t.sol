@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
-import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {console} from 'forge-std/console.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -58,7 +58,13 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test, LevrFacto
 
         // Create staking and staked token directly
         staking = createStaking(address(forwarder), address(factory));
-        stakedToken = createStakedToken('Staked Token', 'sUND', 18, address(underlying), address(staking));
+        stakedToken = createStakedToken(
+            'Staked Token',
+            'sUND',
+            18,
+            address(underlying),
+            address(staking)
+        );
 
         // Initialize staking
         vm.prank(address(factory));
@@ -151,7 +157,7 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test, LevrFacto
         staking.unstake(999000 ether, alice);
 
         uint256 vpAfter = staking.getVotingPower(alice);
-        uint256 balanceAfter = staking.stakedBalanceOf(alice);
+        uint256 balanceAfter = stakedToken.balanceOf(alice);
 
         console.log('VP AFTER 99.9% unstake:', vpAfter);
         console.log('Balance after unstake:', balanceAfter);
