@@ -15,6 +15,9 @@ interface ILevrStaking_v1 {
     /// @notice Basis points for APR calculations (10000 = 100%)
     function BASIS_POINTS() external view returns (uint256);
 
+    /// @notice Minimum reward amount required to start a new stream
+    function MIN_REWARD_AMOUNT() external view returns (uint256);
+
     // ============ Structs ============
 
     /// @notice Reward token state with time-based linear vesting
@@ -105,7 +108,7 @@ interface ILevrStaking_v1 {
         address indexed treasury
     );
 
-    // ============ State Variables ============
+    // ============ Functions ============
 
     /// @notice The underlying token being staked
     function underlying() external view returns (address);
@@ -118,8 +121,6 @@ interface ILevrStaking_v1 {
 
     /// @notice The Levr factory instance
     function factory() external view returns (address);
-
-    // ============ Functions ============
 
     /// @notice Initialize staking module.
     /// @param underlying The underlying token to stake (auto-whitelisted - not in array)
@@ -193,6 +194,7 @@ interface ILevrStaking_v1 {
     /// @notice Pool APR in basis points for the underlying token, annualized from current stream.
     function aprBps() external view returns (uint256);
 
+    /// @notice Total amount of underlying currently staked.
     function totalStaked() external view returns (uint256);
 
     /// @notice Escrow balance per token (non-reward reserves held for users).

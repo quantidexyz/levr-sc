@@ -43,6 +43,10 @@ contract MockStaking is ILevrStaking_v1 {
         return 10_000;
     }
 
+    function MIN_REWARD_AMOUNT() external pure override returns (uint256) {
+        return 1e4;
+    }
+
     function underlying() external pure override returns (address) {
         return address(0);
     }
