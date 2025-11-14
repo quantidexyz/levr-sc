@@ -62,6 +62,14 @@ interface ILevrGovernor_v1 {
         uint64 lastAttemptTime; // Timestamp of last attempt (0 if never attempted)
     }
 
+    /// @notice Per-cycle governance timing and execution status
+    struct Cycle {
+        uint256 proposalWindowStart;
+        uint256 proposalWindowEnd;
+        uint256 votingWindowEnd;
+        bool executed;
+    }
+
     // ============ Errors ============
 
     /// @notice Proposal window is not open
@@ -187,6 +195,9 @@ interface ILevrGovernor_v1 {
     );
 
     // ============ Functions ============
+
+    /// @notice Minimum delay between execution attempts
+    function EXECUTION_ATTEMPT_DELAY() external view returns (uint32);
 
     /// @notice Initialize the cloned governor (clone-only, called once by factory).
     function initialize(
@@ -318,4 +329,8 @@ interface ILevrGovernor_v1 {
     /// @notice Get the staked token address
     /// @return The staked token address (for balance checks)
     function stakedToken() external view returns (address);
+
+    /// @notice Get the underlying token address managed by this governor
+    /// @return The underlying token address
+    function underlying() external view returns (address);
 }
