@@ -140,8 +140,8 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Address of the unverified project token
     event ProjectUnverified(address indexed clankerToken);
 
-    /// @notice Emitted when a verified project's configuration is updated.
-    /// @param clankerToken Address of the project token
+    /// @notice Emitted whenever a project's configuration is changed (set/updated/cleared).
+    /// @param clankerToken Address of the project token whose config changed
     event ProjectConfigUpdated(address indexed clankerToken);
 
     // ============ Functions ============
@@ -240,6 +240,9 @@ interface ILevrFactory_v1 {
     /// @notice Protocol treasury address for fee receipts.
     function protocolTreasury() external view returns (address);
 
+    /// @notice Address of the LevrDeployer contract used for delegatecall deployments.
+    function levrDeployer() external view returns (address);
+
     /// @notice Reward streaming window for staking accruals (in seconds).
     /// @param clankerToken Optional project token address (0x0 = default config)
     /// @return Streaming window (project override if verified, otherwise default)
@@ -289,5 +292,4 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Optional project token address (0x0 = default config)
     /// @return Minimum quorum BPS (project override if verified, otherwise default)
     function minimumQuorumBps(address clankerToken) external view returns (uint16);
-
 }
