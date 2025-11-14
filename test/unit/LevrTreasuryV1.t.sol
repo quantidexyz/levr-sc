@@ -51,15 +51,15 @@ contract LevrTreasuryV1_UnitTest is Test, LevrFactoryDeployHelper {
         treasury.transfer(address(underlying), address(1), 1 ether);
     }
 
-    function test_applyBoost_movesFundsToStaking_andCreditsRewards() public {
+    function test_transferToStaking_movesFundsForLaterAccrual() public {
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 2_000 ether);
+        treasury.transfer(address(underlying), address(staking), 2_000 ether);
 
         address[] memory tokens = new address[](1);
         tokens[0] = address(underlying);
 
         // no stake yet → no rewards claimable, but staking now holds funds
-        assertGt(underlying.balanceOf(address(staking)), 0);
+        assertEq(underlying.balanceOf(address(staking)), 2_000 ether);
     }
 
     // ============ Missing Edge Cases from USER_FLOWS.md Flow 14-15 ============
@@ -125,38 +125,34 @@ contract LevrTreasuryV1_UnitTest is Test, LevrFactoryDeployHelper {
         treasury.transfer(address(0), address(0xB0B), 100 ether);
     }
 
-    // Flow 15 - Treasury Boost
-    function test_boost_stakingAddressChanges_usesCurrentAddress() public {
-        // Boost should get staking address from factory dynamically
+    // Flow 15 - Treasury boost via transfer to staking
+    function test_transfer_stakingAddressChanges_usesCurrentAddress() public {
+        // Transfer should get staking address from factory dynamically
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 1_000 ether);
+        treasury.transfer(address(underlying), address(staking), 1_000 ether);
 
         // Verify staking received funds
         assertGt(underlying.balanceOf(address(staking)), 0, 'Staking should receive funds');
     }
 
-    function test_boost_maliciousStaking_reentrancyProtected() public {
+    function test_transfer_toStaking_reentrancyProtected() public {
         // Reentrancy protection tested via nonReentrant modifier
-        // Normal boost should work
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 1_000 ether);
+        treasury.transfer(address(underlying), address(staking), 1_000 ether);
 
         // If staking tried to reenter, nonReentrant would prevent it
-        assertGt(underlying.balanceOf(address(staking)), 0, 'Boost should succeed');
+        assertGt(underlying.balanceOf(address(staking)), 0, 'Transfer should succeed');
     }
 
-    function test_boost_twiceInSameTx_prevented() public {
-        // Apply boost once
+    function test_transfer_toStaking_multipleTimes() public {
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 1_000 ether);
+        treasury.transfer(address(underlying), address(staking), 1_000 ether);
 
-        // Apply boost again in same transaction (via helper)
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 500 ether);
+        treasury.transfer(address(underlying), address(staking), 500 ether);
 
-        // Both should succeed (no prevention needed - different amounts)
         uint256 stakingBalance = underlying.balanceOf(address(staking));
-        assertGt(stakingBalance, 1_000 ether, 'Should have received both boosts');
+        assertGt(stakingBalance, 1_000 ether, 'Should have received both transfers');
     }
 }
 
@@ -266,23 +262,23 @@ contract LevrTreasuryV1_BranchCoverage_Test is Test, LevrFactoryDeployHelper {
         assertEq(underlying.balanceOf(address(0x4444)), 3000 ether);
     }
 
-    /// Branch: Boost with large amount
-    function test_branch_003_boost_largeAmount() public {
+    /// Branch: Transfer large amount to staking (boost)
+    function test_branch_003_transferToStaking_largeAmount() public {
         uint256 largeAmount = 50_000 ether;
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), largeAmount);
+        treasury.transfer(address(underlying), address(staking), largeAmount);
         assertGt(underlying.balanceOf(address(staking)), 0);
     }
 
-    /// Branch: Boost multiple times with different amounts
-    function test_branch_004_boost_multipleBoosts() public {
+    /// Branch: Transfer to staking multiple times with different amounts
+    function test_branch_004_transferToStaking_multiple() public {
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 5_000 ether);
+        treasury.transfer(address(underlying), address(staking), 5_000 ether);
         
         uint256 balanceAfter1 = underlying.balanceOf(address(staking));
         
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 10_000 ether);
+        treasury.transfer(address(underlying), address(staking), 10_000 ether);
         
         uint256 balanceAfter2 = underlying.balanceOf(address(staking));
         assertGt(balanceAfter2, balanceAfter1);
@@ -295,10 +291,10 @@ contract LevrTreasuryV1_BranchCoverage_Test is Test, LevrFactoryDeployHelper {
         assertEq(underlying.balanceOf(address(0x5555)), 1);
     }
 
-    /// Branch: Boost minimum required amount
-    function test_branch_006_boost_minimumAmount() public {
+    /// Branch: Transfer smallest meaningful amount to staking
+    function test_branch_006_transferToStaking_smallAmount() public {
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 1000 ether);  // Use minimum valid amount
+        treasury.transfer(address(underlying), address(staking), 1000 ether);
         assertGt(underlying.balanceOf(address(staking)), 0);
     }
 
@@ -310,11 +306,11 @@ contract LevrTreasuryV1_BranchCoverage_Test is Test, LevrFactoryDeployHelper {
         assertEq(underlying.balanceOf(address(treasury)), 0);
     }
 
-    /// Branch: Boost leaving minimum balance
-    function test_branch_008_boost_leavingMinimum() public {
+    /// Branch: Transfer to staking leaving minimum balance
+    function test_branch_008_transferToStaking_leavingMinimum() public {
         uint256 treasuryBalance = underlying.balanceOf(address(treasury));
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), treasuryBalance - 100);
+        treasury.transfer(address(underlying), address(staking), treasuryBalance - 100);
         assertEq(underlying.balanceOf(address(treasury)), 100);
     }
 
@@ -325,18 +321,18 @@ contract LevrTreasuryV1_BranchCoverage_Test is Test, LevrFactoryDeployHelper {
         assertEq(underlying.balanceOf(address(0x9999)), 1);
     }
 
-    /// Branch: Boost with all treasury funds
-    function test_branch_010_boost_allFunds() public {
+    /// Branch: Transfer all treasury funds to staking
+    function test_branch_010_transferToStaking_allFunds() public {
         uint256 balance = underlying.balanceOf(address(treasury));
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), balance);
+        treasury.transfer(address(underlying), address(staking), balance);
         assertEq(underlying.balanceOf(address(treasury)), 0);
     }
 
-    /// Branch: Transfer after boost
-    function test_branch_011_transferAfterBoost() public {
+    /// Branch: Transfer after sending rewards to staking
+    function test_branch_011_transferAfterStakingPush() public {
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 5_000 ether);
+        treasury.transfer(address(underlying), address(staking), 5_000 ether);
         
         uint256 remaining = underlying.balanceOf(address(treasury));
         if (remaining > 0) {
@@ -346,12 +342,12 @@ contract LevrTreasuryV1_BranchCoverage_Test is Test, LevrFactoryDeployHelper {
         }
     }
 
-    /// Branch: Boost then transfer to same recipient
-    function test_branch_012_boostThenTransferToSame() public {
+    /// Branch: Transfer to staking then send remainder to same recipient
+    function test_branch_012_stakingTransferThenRecipient() public {
         address recipient = address(0x6666);
         
         vm.prank(governor);
-        treasury.applyBoost(address(underlying), 2_000 ether);
+        treasury.transfer(address(underlying), address(staking), 2_000 ether);
         
         uint256 remaining = underlying.balanceOf(address(treasury));
         if (remaining > 0) {

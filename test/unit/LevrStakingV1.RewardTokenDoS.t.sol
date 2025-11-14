@@ -55,7 +55,7 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test, LevrFactoryDeployHelper {
         rewardToken.transfer(address(staking), smallAmount);
 
         // Should succeed - no minimum amount check, whitelist is the protection
-        staking.accrueFromTreasury(address(rewardToken), smallAmount, false);
+        staking.accrueRewards(address(rewardToken));
         
         // Verify rewards were credited
         assertTrue(true, 'Small amounts accepted for whitelisted tokens');
@@ -73,7 +73,7 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test, LevrFactoryDeployHelper {
         // Accrue exactly MIN_REWARD_AMOUNT = 1e15
         uint256 minAmount = 1e15;
         rewardToken.transfer(address(staking), minAmount);
-        staking.accrueFromTreasury(address(rewardToken), minAmount, false);
+        staking.accrueRewards(address(rewardToken));
 
         // Should succeed
     }
@@ -89,12 +89,8 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test, LevrFactoryDeployHelper {
 
         // Accrue normal amount - use pullFromTreasury to avoid available check
         uint256 legit = 1000 ether;
-        rewardToken.transfer(treasury, legit);
-        vm.prank(treasury);
-        rewardToken.approve(address(staking), legit);
-
-        vm.prank(treasury);
-        staking.accrueFromTreasury(address(rewardToken), legit, true);
+        rewardToken.transfer(address(staking), legit);
+        staking.accrueRewards(address(rewardToken));
 
         // Verify call succeeded without reverting
         assertTrue(true, 'Should accept legitimate amounts');
@@ -115,7 +111,7 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test, LevrFactoryDeployHelper {
 
             // Try to accrue without whitelisting - should revert with TokenNotWhitelisted
             vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
-            staking.accrueFromTreasury(address(attackToken), 1e14, false);
+            staking.accrueRewards(address(attackToken));
         }
 
         // Verify legitimate whitelisted token can be added
@@ -125,6 +121,6 @@ contract LevrStakingV1_RewardTokenDoS_Test is Test, LevrFactoryDeployHelper {
 
         // Whitelist and accrue legitimate token
         staking.whitelistToken(address(legit));
-        staking.accrueFromTreasury(address(legit), 1000 ether, false);
+        staking.accrueRewards(address(legit));
     }
 }

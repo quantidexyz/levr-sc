@@ -255,7 +255,7 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
         
         for (uint256 i = 0; i < 10; i++) {
             vm.prank(gov);
-            treasury.applyBoost(address(underlying), 1_000 ether);
+            treasury.transfer(address(underlying), address(staking), 1_000 ether);
         }
     }
 
@@ -268,7 +268,7 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
                 treasury.transfer(address(underlying), address(uint160(0x5000 + i)), 100 ether);
             } else {
                 vm.prank(gov);
-                treasury.applyBoost(address(underlying), 500 ether);
+                treasury.transfer(address(underlying), address(staking), 500 ether);
             }
         }
     }

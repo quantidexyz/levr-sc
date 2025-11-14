@@ -260,7 +260,8 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test, LevrFactoryDeployHelper 
         token1.mint(project1.treasury, 10000 ether);
 
         vm.prank(project1.governor);
-        LevrTreasury_v1(project1.treasury).applyBoost(address(token1), 5000 ether);
+        LevrTreasury_v1(project1.treasury).transfer(address(token1), project1.staking, 5000 ether);
+        LevrStaking_v1(project1.staking).accrueRewards(address(token1));
 
         console2.log('Applied 5000 token boost to staking');
 

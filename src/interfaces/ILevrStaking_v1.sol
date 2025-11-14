@@ -60,7 +60,6 @@ interface ILevrStaking_v1 {
     error RewardsTillPending();
     error RewardTooSmall();
     error TokenNotWhitelisted();
-    error InsufficientAvailable();
     error InvalidTokenDecimals();
 
     // ============ Events ============
@@ -156,12 +155,6 @@ interface ILevrStaking_v1 {
     ///      Fee collection handled externally via SDK.
     /// @param token Reward token to accrue
     function accrueRewards(address token) external;
-
-    /// @notice Accrue rewards from treasury, optionally pulling tokens from treasury first.
-    /// @param token Reward token
-    /// @param amount Amount to accrue
-    /// @param pullFromTreasury If true, transfer `amount` from treasury before accrual
-    function accrueFromTreasury(address token, uint256 amount, bool pullFromTreasury) external;
 
     /// @notice Get outstanding rewards for a token - available rewards in the contract balance
     /// @param token The reward token to check

@@ -253,7 +253,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         if (_msgSender() != address(this)) revert ILevrGovernor_v1.InternalOnly();
 
         if (proposalType == ProposalType.BoostStakingPool) {
-            ILevrTreasury_v1(treasury).applyBoost(token, amount);
+            ILevrTreasury_v1(treasury).transfer(token, staking, amount);
+            // Accrual is permissionless; swallow errors so boosts can't be blocked
+            try ILevrStaking_v1(staking).accrueRewards(token) {} catch {}
         } else if (proposalType == ProposalType.TransferToAddress) {
             ILevrTreasury_v1(treasury).transfer(token, recipient, amount);
         }

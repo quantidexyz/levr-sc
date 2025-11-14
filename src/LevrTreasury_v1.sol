@@ -8,7 +8,6 @@ import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {ERC2771ContextBase} from './base/ERC2771ContextBase.sol';
 import {ILevrTreasury_v1} from './interfaces/ILevrTreasury_v1.sol';
 import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
-import {ILevrStaking_v1} from './interfaces/ILevrStaking_v1.sol';
 
 contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBase {
     using SafeERC20 for IERC20;
@@ -47,18 +46,6 @@ contract LevrTreasury_v1 is ILevrTreasury_v1, ReentrancyGuard, ERC2771ContextBas
     ) external nonReentrant onlyGovernor {
         if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
         IERC20(token).safeTransfer(to, amount);
-    }
-
-    /// @inheritdoc ILevrTreasury_v1
-    function applyBoost(address token, uint256 amount) external nonReentrant onlyGovernor {
-        if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
-        if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
-        ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
-            underlying
-        );
-        IERC20(token).forceApprove(project.staking, amount);
-        ILevrStaking_v1(project.staking).accrueFromTreasury(token, amount, true);
-        IERC20(token).forceApprove(project.staking, 0);
     }
 
     /// @inheritdoc ILevrTreasury_v1

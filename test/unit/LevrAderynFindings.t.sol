@@ -90,11 +90,9 @@ contract LevrAderynFindingsTest is Test, LevrFactoryDeployHelper {
     // ========================================
 
     /**
-     * @notice Tests L-2/L-18 fix: SafeERC20 forceApprove usage in Treasury
-     * @dev Fixed: Replaced IERC20.approve() with IERC20.forceApprove()
-     *      Files: src/LevrTreasury_v1.sol lines 61, 65
-     *      Using: OpenZeppelin SafeERC20.forceApprove()
-     *      Benefit: Handles non-standard tokens that return false instead of reverting
+     * @notice Tests L-2/L-18 fix: SafeERC20 usage in Treasury transfers
+     * @dev Boosts now route through `transfer()` which relies solely on SafeERC20.safeTransfer(),
+     *      eliminating stale approvals altogether.
      */
     function test_aderyn_L2_safeERC20_forceApprove() public pure {
         // Verify SafeERC20 is imported and used in Treasury
@@ -105,11 +103,11 @@ contract LevrAderynFindingsTest is Test, LevrFactoryDeployHelper {
         // 2. Properly handles non-zero to non-zero approvals
         // 3. Reverts on failure instead of returning false
         //
-        // The actual applyBoost() function is tested comprehensively in:
+        // The transfer-to-staking path is tested comprehensively in:
         // - test/e2e/LevrV1.Governance.t.sol
         // - test/unit/LevrStakingV1.GovernanceBoostMidstream.t.sol
 
-        console2.log('[OK] Treasury uses SafeERC20.forceApprove() for safe approvals');
+        console2.log('[OK] Treasury uses SafeERC20.safeTransfer() for governor-controlled payouts');
         assertTrue(true, 'SafeERC20 imported and used correctly');
     }
 
@@ -291,7 +289,7 @@ contract LevrAderynFindingsTest is Test, LevrFactoryDeployHelper {
         // All flagged functions have nonReentrant modifier:
         // - LevrFactory_v1.register() ✅
         // - LevrTreasury_v1.transfer() ✅
-        // - LevrTreasury_v1.applyBoost() ✅
+        // - LevrTreasury_v1.transfer() to staking ✅
         // - LevrFeeSplitter_v1.distribute() ✅
         // - LevrGovernor_v1.vote() ✅
         // - LevrStaking_v1.unstake() ✅

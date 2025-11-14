@@ -41,11 +41,6 @@ interface ILevrTreasury_v1 {
     /// @param amount Amount to transfer
     function transfer(address token, address to, uint256 amount) external;
 
-    /// @notice Apply a staking boost by moving tokens to staking and accruing rewards.
-    /// @param token ERC20 token address (underlying, WETH, or any ERC20)
-    /// @param amount Amount of tokens to allocate to stakers
-    function applyBoost(address token, uint256 amount) external;
-
     /// @notice Current underlying balance held by the treasury.
     /// @return balance Underlying token balance
     function getUnderlyingBalance() external view returns (uint256 balance);

@@ -72,7 +72,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test, LevrFactoryDeployHel
         underlying.mint(address(treasury), 1_000_000 * 1e18);
     }
 
-    /// @notice Test that treasury boost (accrueFromTreasury) mid-stream preserves unvested rewards
+    /// @notice Test that treasury boost via direct transfer mid-stream preserves unvested rewards
     function test_treasuryBoostMidstream_preservesUnvestedRewards() public {
         console2.log('=== TREASURY BOOST MID-STREAM TEST ===\n');
 
@@ -89,16 +89,15 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test, LevrFactoryDeployHel
         console2.log('  Vested: ~200K (1/3)');
         console2.log('  Unvested: ~400K (2/3)');
 
-        // Treasury boost: Simulate governance boost via accrueFromTreasury
+        // Treasury boost: Simulate governance boost via direct transfer + accrue
         console2.log('\nTreasury boost: 50K tokens');
 
         // Transfer from treasury to staking and accrue
         underlying.mint(address(staking), 50_000 * 1e18);
 
-        vm.prank(address(treasury));
-        staking.accrueFromTreasury(address(underlying), 50_000 * 1e18, false);
+        staking.accrueRewards(address(underlying));
 
-        console2.log('  accrueFromTreasury() called');
+        console2.log('  accrueRewards() called');
 
         // Complete the stream
         (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
@@ -150,16 +149,14 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test, LevrFactoryDeployHel
         // Boost 1: After 1 day
         vm.warp(block.timestamp + 1 days);
         underlying.mint(address(staking), 100_000 * 1e18);
-        vm.prank(address(treasury));
-        staking.accrueFromTreasury(address(underlying), 100_000 * 1e18, false);
+        staking.accrueRewards(address(underlying));
         totalAccrued += 100_000 * 1e18;
         console2.log('Boost 1 (day 1): 100K tokens');
 
         // Boost 2: After another day
         vm.warp(block.timestamp + 1 days);
         underlying.mint(address(staking), 50_000 * 1e18);
-        vm.prank(address(treasury));
-        staking.accrueFromTreasury(address(underlying), 50_000 * 1e18, false);
+        staking.accrueRewards(address(underlying));
         totalAccrued += 50_000 * 1e18;
         console2.log('Boost 2 (day 2): 50K tokens');
 

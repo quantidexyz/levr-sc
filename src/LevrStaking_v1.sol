@@ -391,30 +391,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     }
 
     /// @inheritdoc ILevrStaking_v1
-    function accrueFromTreasury(
-        address token,
-        uint256 amount,
-        bool pullFromTreasury
-    ) external nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (pullFromTreasury) {
-            // Only treasury can initiate a pull
-            if (_msgSender() != treasury) revert ILevrFactory_v1.UnauthorizedCaller();
-            uint256 beforeAvail = _availableUnaccountedRewards(token);
-            IERC20(token).safeTransferFrom(treasury, address(this), amount);
-            uint256 afterAvail = _availableUnaccountedRewards(token);
-            uint256 delta = afterAvail > beforeAvail ? afterAvail - beforeAvail : 0;
-            if (delta > 0) {
-                _creditRewards(token, delta);
-            }
-        } else {
-            uint256 available = _availableUnaccountedRewards(token);
-            if (available < amount) revert InsufficientAvailable();
-            _creditRewards(token, amount);
-        }
-    }
-
-    /// @inheritdoc ILevrStaking_v1
     function stakedBalanceOf(address account) external view returns (uint256) {
         return ILevrStakedToken_v1(stakedToken).balanceOf(account);
     }
