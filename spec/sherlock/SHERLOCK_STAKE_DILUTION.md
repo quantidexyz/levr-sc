@@ -1209,7 +1209,7 @@ function cleanupFinishedRewardToken(address token) external nonReentrant {
 
     // CRITICAL: Ensure no pending pool/stream rewards
     if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
-        revert RewardsTillPending();
+        revert RewardsStillPending();
     }
 
     // CRITICAL: Ensure all distributed rewards have been claimed

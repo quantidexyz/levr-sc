@@ -57,7 +57,7 @@ interface ILevrStaking_v1 {
     error CannotUnwhitelistWithPendingRewards();
     error CannotRemoveUnderlying();
     error CannotRemoveWhitelisted();
-    error RewardsTillPending();
+    error RewardsStillPending();
     error RewardTooSmall();
     error TokenNotWhitelisted();
     error InvalidTokenDecimals();
@@ -97,6 +97,13 @@ interface ILevrStaking_v1 {
 
     /// @notice Emitted when a token is removed from the whitelist
     event TokenUnwhitelisted(address indexed token);
+
+    /// @notice Emitted when the staking contract is initialized
+    event Initialized(
+        address indexed underlying,
+        address indexed stakedToken,
+        address indexed treasury
+    );
 
     // ============ State Variables ============
 

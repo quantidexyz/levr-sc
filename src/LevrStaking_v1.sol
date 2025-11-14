@@ -91,18 +91,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         treasury = treasury_;
 
         // Initialize underlying token with pool-based state (ALWAYS whitelisted - separate from array)
-        _tokenState[underlying_] = ILevrStaking_v1.RewardTokenState({
-            availablePool: 0,
-            streamTotal: 0,
-            lastUpdate: 0,
-            exists: true,
-            whitelisted: true,
-            streamStart: 0,
-            streamEnd: 0,
-            originalStreamTotal: 0,
-            totalVested: 0
-        });
-        _rewardTokens.push(underlying_);
+        _initRewardToken(underlying_, true);
 
         // Initialize additional whitelisted tokens from factory config (e.g., WETH)
         for (uint256 i = 0; i < initialWhitelistedTokens.length; i++) {
@@ -112,19 +101,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             if (token == address(0) || token == underlying_ || _tokenState[token].exists) continue;
 
             // Initialize whitelisted token
-            _tokenState[token] = ILevrStaking_v1.RewardTokenState({
-                availablePool: 0,
-                streamTotal: 0,
-                lastUpdate: 0,
-                exists: true,
-                whitelisted: true,
-                streamStart: 0,
-                streamEnd: 0,
-                originalStreamTotal: 0,
-                totalVested: 0
-            });
-            _rewardTokens.push(token);
+            _initRewardToken(token, true);
         }
+
+        emit Initialized(underlying_, stakedToken_, treasury_);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -337,7 +317,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (!tokenState.exists) revert TokenNotRegistered();
         if (tokenState.whitelisted) revert CannotRemoveWhitelisted();
         if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
-            revert RewardsTillPending();
+            revert RewardsStillPending();
         }
 
         _removeTokenFromArray(token);
@@ -547,6 +527,24 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
                 break;
             }
         }
+    }
+
+    /// @notice Shared initializer for reward token state
+    /// @param token Token address
+    /// @param whitelisted Whether token starts whitelisted
+    function _initRewardToken(address token, bool whitelisted) internal {
+        _tokenState[token] = ILevrStaking_v1.RewardTokenState({
+            availablePool: 0,
+            streamTotal: 0,
+            lastUpdate: 0,
+            exists: true,
+            whitelisted: whitelisted,
+            streamStart: 0,
+            streamEnd: 0,
+            originalStreamTotal: 0,
+            totalVested: 0
+        });
+        _rewardTokens.push(token);
     }
 
     /// @notice Calculate unaccounted rewards for a token
