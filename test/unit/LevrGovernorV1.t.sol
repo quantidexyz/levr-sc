@@ -11,6 +11,7 @@ import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
@@ -264,6 +265,32 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         );
         assertFalse(proposal.meetsQuorum, 'Should not meet quorum (40% < 70%)');
         assertTrue(proposal.meetsApproval, 'Should meet approval (100% yes votes)');
+    }
+
+    function test_currentCycleId_publicGetterTracksTransitions() public {
+        assertEq(governor.currentCycleId(), 0, 'Cycle ID should start at zero');
+
+        vm.prank(user);
+        uint256 pid = governor.proposeBoost(address(underlying), 50 ether);
+        assertEq(governor.currentCycleId(), 1, 'First proposal should start cycle 1');
+
+        vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1);
+        vm.prank(user);
+        governor.vote(pid, true);
+
+        vm.warp(block.timestamp + 5 days + 1);
+        governor.execute(pid);
+
+        assertEq(
+            governor.currentCycleId(),
+            1,
+            'Cycle ID remains until next cycle is explicitly started'
+        );
+
+        vm.warp(block.timestamp + 1 days);
+        governor.startNewCycle();
+        assertEq(governor.currentCycleId(), 2, 'Manual advancement increments cycle ID');
     }
 
     // ============ Missing Edge Cases from USER_FLOWS.md Flow 10-13 ============
@@ -658,6 +685,86 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
         governor.execute(pid);
 
         assertEq(weth.balanceOf(address(0xB0B)), 50 ether, 'Recipient should receive WETH');
+    }
+
+    function test_execute_boost_transfersFunds_andStartsStreaming() public {
+        vm.prank(user);
+        uint256 pid = governor.proposeBoost(address(underlying), 200 ether);
+
+        vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
+        vm.prank(user);
+        governor.vote(pid, true);
+
+        uint256 stakingBalanceBefore = underlying.balanceOf(address(staking));
+        uint256 outstandingBefore = staking.outstandingRewards(address(underlying));
+        uint256 rewardRateBefore = staking.rewardRatePerSecond(address(underlying));
+
+        vm.warp(block.timestamp + 5 days + 1);
+
+        governor.execute(pid);
+
+        assertEq(
+            underlying.balanceOf(address(staking)),
+            stakingBalanceBefore + 200 ether,
+            'Staking should receive boost funds'
+        );
+        assertEq(
+            staking.outstandingRewards(address(underlying)),
+            outstandingBefore,
+            'Boost execution should credit rewards immediately'
+        );
+        assertGt(
+            staking.rewardRatePerSecond(address(underlying)),
+            rewardRateBefore,
+            'Boost should start streaming rewards'
+        );
+
+        ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
+        assertTrue(proposal.executed, 'Proposal should be marked executed');
+    }
+
+    function test_execute_boostAccrualFailure_stillTransfersFunds() public {
+        vm.prank(user);
+        uint256 pid = governor.proposeBoost(address(underlying), 300 ether);
+
+        vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
+        vm.prank(user);
+        governor.vote(pid, true);
+
+        uint256 stakingBalanceBefore = underlying.balanceOf(address(staking));
+        uint256 outstandingBefore = staking.outstandingRewards(address(underlying));
+        uint256 rewardRateBefore = staking.rewardRatePerSecond(address(underlying));
+
+        vm.mockCallRevert(
+            address(staking),
+            abi.encodeWithSelector(ILevrStaking_v1.accrueRewards.selector, address(underlying)),
+            'ACCRUE_REVERT'
+        );
+
+        vm.warp(block.timestamp + 5 days + 1);
+        governor.execute(pid);
+        vm.clearMockedCalls();
+
+        assertEq(
+            underlying.balanceOf(address(staking)),
+            stakingBalanceBefore + 300 ether,
+            'Funds should transfer even if accrueRewards reverts'
+        );
+        assertEq(
+            staking.outstandingRewards(address(underlying)),
+            outstandingBefore + 300 ether,
+            'Unaccrued rewards should remain outstanding'
+        );
+        assertEq(
+            staking.rewardRatePerSecond(address(underlying)),
+            rewardRateBefore,
+            'Streaming should not start when accrual fails'
+        );
+
+        ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
+        assertTrue(proposal.executed, 'Proposal should still be marked executed');
     }
 
     // Flow 13 - Manual Cycle

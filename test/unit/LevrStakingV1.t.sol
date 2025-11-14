@@ -65,6 +65,56 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         );
     }
 
+    function test_publicGetters_totalStakedAndEscrowBalance() public {
+        ILevrStaking_v1 stakingView = ILevrStaking_v1(address(staking));
+
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        assertEq(stakingView.totalStaked(), 1_000 ether, 'totalStaked getter must track deposits');
+        assertEq(
+            stakingView.escrowBalance(address(underlying)),
+            1_000 ether,
+            'escrowBalance getter must match principal'
+        );
+
+        staking.unstake(600 ether, address(this));
+
+        assertEq(stakingView.totalStaked(), 400 ether, 'totalStaked getter updates after unstake');
+        assertEq(
+            stakingView.escrowBalance(address(underlying)),
+            400 ether,
+            'escrowBalance getter updates after unstake'
+        );
+    }
+
+    function test_publicGetter_lastStakeBlock_tracksPerAccount() public {
+        ILevrStaking_v1 stakingView = ILevrStaking_v1(address(staking));
+
+        vm.roll(1_000);
+        underlying.approve(address(staking), 100 ether);
+        staking.stake(100 ether);
+        assertEq(
+            stakingView.lastStakeBlock(address(this)),
+            1_000,
+            'lastStakeBlock must reflect current block'
+        );
+
+        address user = address(0xB0B);
+        underlying.mint(user, 50 ether);
+        vm.roll(1_500);
+        vm.startPrank(user);
+        underlying.approve(address(staking), 50 ether);
+        staking.stake(50 ether);
+        vm.stopPrank();
+
+        assertEq(
+            stakingView.lastStakeBlock(user),
+            1_500,
+            'Each account has independent lastStakeBlock tracking'
+        );
+    }
+
     function test_unstake_burns_andReturnsUnderlying() public {
         underlying.approve(address(staking), 1_000 ether);
         staking.stake(1_000 ether);
