@@ -14,10 +14,41 @@ interface ILevrDeployer_v1 {
     /// @notice Thrown when zero address is provided
     error ZeroAddress();
 
+    /// @notice Emitted when treasury and staking clone instances are prepared
+    /// @param treasury The cloned treasury address
+    /// @param staking The cloned staking address
+    event ContractsPrepared(address indexed treasury, address indexed staking);
+
+    /// @notice Emitted when a full project deployment completes
+    /// @param clankerToken The underlying token for the project
+    /// @param treasury The treasury contract address
+    /// @param staking The staking contract address
+    /// @param stakedToken The freshly deployed staked token address
+    /// @param governor The governor contract address
+    event ProjectDeployed(
+        address indexed clankerToken,
+        address indexed treasury,
+        address indexed staking,
+        address stakedToken,
+        address governor
+    );
+
     /// @notice The factory address that is authorized to delegatecall this logic
     /// @dev Set once at construction time. During delegatecall, address(this) equals the factory.
     /// @return The authorized factory address
     function authorizedFactory() external view returns (address);
+
+    /// @notice Implementation address used for treasury clones
+    /// @return The treasury implementation contract address
+    function treasuryImplementation() external view returns (address);
+
+    /// @notice Implementation address used for staking clones
+    /// @return The staking implementation contract address
+    function stakingImplementation() external view returns (address);
+
+    /// @notice Implementation address used for governor clones
+    /// @return The governor implementation contract address
+    function governorImplementation() external view returns (address);
 
     /// @notice Prepare treasury and staking contracts (called via delegatecall)
     /// @dev Executed in factory context to reduce factory bytecode size

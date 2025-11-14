@@ -13,14 +13,16 @@ import {IClanker} from './interfaces/external/IClanker.sol';
 
 contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Context {
     // ============ State Variables ============
-    // Protocol-level configuration (factory defaults)
     /// @inheritdoc ILevrFactory_v1
-    uint16 public protocolFeeBps;
-    uint32 private _streamWindowSeconds;
+    address public immutable levrDeployer;
+
     /// @inheritdoc ILevrFactory_v1
     address public protocolTreasury;
     /// @inheritdoc ILevrFactory_v1
-    address public immutable levrDeployer; // LevrDeployer_v1 for delegatecall
+    uint16 public protocolFeeBps;
+
+    // Stream window seconds.
+    uint32 private _streamWindowSeconds;
 
     // Governance parameter defaults
     uint32 private _proposalWindowSeconds;
@@ -32,24 +34,27 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 private _maxProposalAmountBps;
     uint16 private _minimumQuorumBps;
 
-    // Registered projects and prepared deployments
-    mapping(address => ILevrFactory_v1.Project) private _projects; // clankerToken => Project
-    address[] private _projectTokens; // Array of all registered project tokens
+    // Registered projects.
+    mapping(address => ILevrFactory_v1.Project) private _projects;
 
-    mapping(address => ILevrFactory_v1.PreparedContracts) private _preparedContracts; // deployer => PreparedContracts
+    // Array of all registered project tokens.
+    address[] private _projectTokens;
 
-    /// @notice Registry of trusted Clanker factories (multi-version support).
+    // Prepared contracts for deployments.
+    mapping(address => ILevrFactory_v1.PreparedContracts) private _preparedContracts;
+
+    // Registry of trusted Clanker factories (multi-version support).
     address[] private _trustedClankerFactories;
-    /// @notice Quick lookup cache for trusted Clanker factories.
+
+    // Quick lookup cache for trusted Clanker factories.
     mapping(address => bool) private _isTrustedClankerFactory;
 
-    // Per-project configuration overrides
-    mapping(address => ILevrFactory_v1.FactoryConfig) private _projectOverrideConfig; // clankerToken => override config
+    // Per-project configuration overrides.
+    mapping(address => ILevrFactory_v1.FactoryConfig) private _projectOverrideConfig;
 
-    // Initial whitelist propagated to new projects
+    // Initial whitelist propagated to new projects.
     address[] private _initialWhitelistedTokens;
 
-    // ============ Constructor ============
     constructor(
         FactoryConfig memory cfg,
         address owner_,
