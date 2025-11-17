@@ -13,7 +13,7 @@ contract LevrFactoryConfigBoundsTest is Test, LevrFactoryDeployHelper {
 
     function setUp() public {
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(address(this));
-        (factory, , ) = deployFactoryWithDefaultClanker(cfg, address(this));
+        (factory, , ) = deployFactoryWithDefaultClanker(cfg, address(this), createDefaultBounds());
 
         underlying = new MockERC20('Underlying', 'UND');
         factory.prepareForDeployment();

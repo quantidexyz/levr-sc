@@ -114,15 +114,33 @@ forge script script/DeployLevrFactoryDevnet.s.sol --chain-id 31337 --broadcast
 // 1. Deploy forwarder FIRST
 LevrForwarder_v1 forwarder = new LevrForwarder_v1("LevrForwarder_v1");
 
-// 2. Deploy factory with forwarder
-LevrFactory_v1 factory = new LevrFactory_v1(config, owner, address(forwarder));
+// 2. Define guardrails for governance overrides
+ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+    minStreamWindowSeconds: 1 days,
+    minProposalWindowSeconds: 6 hours,
+    minVotingWindowSeconds: 2 days,
+    minQuorumBps: 2000,
+    minApprovalBps: 5000,
+    minMinSTokenBpsToSubmit: 100,
+    minMinimumQuorumBps: 25
+});
 
-// 3. Prepare (get addresses before Clanker exists)
+// 3. Deploy factory with forwarder, deployer logic, and whitelist
+LevrFactory_v1 factory = new LevrFactory_v1(
+    config,
+    bounds,
+    owner,
+    address(forwarder),
+    address(levrDeployer),
+    initialWhitelist
+);
+
+// 4. Prepare (get addresses before Clanker exists)
 (address treasury, address staking) = factory.prepareForDeployment();
 
-// 4. Deploy Clanker token (use treasury/staking addresses)
+// 5. Deploy Clanker token (use treasury/staking addresses)
 
-// 5. Register (as tokenAdmin)
+// 6. Register (as tokenAdmin)
 ILevrFactory_v1.Project memory project = factory.register(clankerToken);
 ```
 
@@ -165,6 +183,8 @@ struct FactoryConfig {
   uint16 quorumBps;                // Min participation threshold (7000 = 70%)
   uint16 approvalBps;              // Min approval threshold (5100 = 51%)
   uint16 minSTokenBpsToSubmit;     // Min % of supply to propose (100 = 1%)
+  uint16 maxProposalAmountBps;     // Max treasury spend per proposal
+  uint16 minimumQuorumBps;         // Minimum quorum floor (adaptive safety)
 }
 ```
 

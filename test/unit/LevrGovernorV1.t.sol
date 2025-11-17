@@ -66,9 +66,9 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 1, // Testing with maxActiveProposals = 1
-            quorumBps: 0, // No quorum requirement for this unit test
-            approvalBps: 0, // No approval requirement for this unit test
-            minSTokenBpsToSubmit: 0, // No minimum for this test
+            quorumBps: 1, // Effectively no quorum requirement for this unit test
+            approvalBps: 1, // Effectively no approval requirement
+            minSTokenBpsToSubmit: 1, // Minimal stake requirement
             maxProposalAmountBps: 500, // 5% max
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
@@ -160,8 +160,8 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             'Should still be Active'
         );
         // With quorum/approval at 0 in test config, both should be true
-        assertTrue(proposal.meetsQuorum, 'Should meet quorum (0% threshold)');
-        assertTrue(proposal.meetsApproval, 'Should meet approval (0% threshold)');
+        assertTrue(proposal.meetsQuorum, 'Should meet quorum (effectively zero threshold)');
+        assertTrue(proposal.meetsApproval, 'Should meet approval (effectively zero threshold)');
 
         // Warp past voting window
         vm.warp(block.timestamp + 5 days + 1);
@@ -209,7 +209,7 @@ contract LevrGovernorV1_UnitTest is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 7000, // 70% quorum
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 0,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });

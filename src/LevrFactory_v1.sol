@@ -60,22 +60,14 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
     constructor(
         FactoryConfig memory cfg,
+        ConfigBounds memory bounds,
         address owner_,
         address trustedForwarder_,
         address levrDeployer_,
         address[] memory initialWhitelistedTokens_
     ) Ownable(owner_) ERC2771Context(trustedForwarder_) {
-        ILevrFactory_v1.ConfigBounds memory defaultBounds = ILevrFactory_v1.ConfigBounds({
-            minStreamWindowSeconds: 1 days,
-            minProposalWindowSeconds: 6 hours,
-            minVotingWindowSeconds: 2 days,
-            minQuorumBps: 2000,
-            minApprovalBps: 5000,
-            minMinSTokenBpsToSubmit: 100,
-            minMinimumQuorumBps: 25
-        });
-        _validateBounds(defaultBounds);
-        _configBounds = defaultBounds;
+        _validateBounds(bounds);
+        _configBounds = bounds;
         _updateConfig(cfg, address(0), true);
         levrDeployer = levrDeployer_;
 

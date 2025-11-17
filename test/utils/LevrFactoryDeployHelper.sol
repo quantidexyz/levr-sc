@@ -42,6 +42,18 @@ contract LevrFactoryDeployHelper is Test {
         internal
         returns (LevrFactory_v1 factory, LevrForwarder_v1 forwarder, LevrDeployer_v1 levrDeployer)
     {
+        return deployFactory(cfg, createLooseBounds(), owner, clankerFactory);
+    }
+
+    function deployFactory(
+        ILevrFactory_v1.FactoryConfig memory cfg,
+        ILevrFactory_v1.ConfigBounds memory bounds,
+        address owner,
+        address clankerFactory
+    )
+        internal
+        returns (LevrFactory_v1 factory, LevrForwarder_v1 forwarder, LevrDeployer_v1 levrDeployer)
+    {
         // Step 1: Deploy forwarder
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
@@ -82,6 +94,7 @@ contract LevrFactoryDeployHelper is Test {
         // Step 7: Deploy factory with initial whitelist
         factory = new LevrFactory_v1(
             cfg,
+            bounds,
             owner,
             address(forwarder),
             address(levrDeployer),
@@ -118,6 +131,17 @@ contract LevrFactoryDeployHelper is Test {
         internal
         returns (LevrFactory_v1 factory, LevrForwarder_v1 forwarder, LevrDeployer_v1 levrDeployer)
     {
+        return deployFactoryWithDefaultClanker(cfg, owner, createLooseBounds());
+    }
+
+    function deployFactoryWithDefaultClanker(
+        ILevrFactory_v1.FactoryConfig memory cfg,
+        address owner,
+        ILevrFactory_v1.ConfigBounds memory bounds
+    )
+        internal
+        returns (LevrFactory_v1 factory, LevrForwarder_v1 forwarder, LevrDeployer_v1 levrDeployer)
+    {
         // Base mainnet Clanker factory address
         address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
 
@@ -129,7 +153,7 @@ contract LevrFactoryDeployHelper is Test {
             mockClankerFactory = clankerFactory;
         }
 
-        return deployFactory(cfg, owner, clankerFactory);
+        return deployFactory(cfg, bounds, owner, clankerFactory);
     }
 
     /// @notice Register a token with the mock Clanker factory (for unit tests)
@@ -159,6 +183,38 @@ contract LevrFactoryDeployHelper is Test {
             minSTokenBpsToSubmit: 100, // 1%
             maxProposalAmountBps: 500, // 5%
             minimumQuorumBps: 25 // 0.25% minimum quorum
+        });
+    }
+
+    function createDefaultBounds()
+        internal
+        pure
+        returns (ILevrFactory_v1.ConfigBounds memory bounds)
+    {
+        bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1 days,
+            minProposalWindowSeconds: 6 hours,
+            minVotingWindowSeconds: 2 days,
+            minQuorumBps: 2000,
+            minApprovalBps: 5000,
+            minMinSTokenBpsToSubmit: 100,
+            minMinimumQuorumBps: 25
+        });
+    }
+
+    function createLooseBounds()
+        internal
+        pure
+        returns (ILevrFactory_v1.ConfigBounds memory bounds)
+    {
+        bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
         });
     }
 

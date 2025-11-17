@@ -46,8 +46,19 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeploy
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),

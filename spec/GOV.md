@@ -408,8 +408,19 @@ address[] memory _initialWhitelistedTokens  // NEW
 address[] memory initialWhitelist = new address[](1);
 initialWhitelist[0] = WETH_ADDRESS;  // Factory canonical reward token
 
+ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+    minStreamWindowSeconds: 1 days,
+    minProposalWindowSeconds: 6 hours,
+    minVotingWindowSeconds: 2 days,
+    minQuorumBps: 2000,
+    minApprovalBps: 5000,
+    minMinSTokenBpsToSubmit: 100,
+    minMinimumQuorumBps: 25
+});
+
 factory = new LevrFactory_v1(
     config,
+    bounds,
     owner,
     trustedForwarder,
     levrDeployer,
@@ -545,7 +556,16 @@ factory = new LevrFactory_v1(config, owner, forwarder, deployer);
 // AFTER (v1.5.0)
 address[] memory initialWhitelist = new address[](1);
 initialWhitelist[0] = WETH_ADDRESS;  // Factory's canonical reward token
-factory = new LevrFactory_v1(config, owner, forwarder, deployer, initialWhitelist);
+ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+    minStreamWindowSeconds: 1 days,
+    minProposalWindowSeconds: 6 hours,
+    minVotingWindowSeconds: 2 days,
+    minQuorumBps: 2000,
+    minApprovalBps: 5000,
+    minMinSTokenBpsToSubmit: 100,
+    minMinimumQuorumBps: 25
+});
+factory = new LevrFactory_v1(config, bounds, owner, forwarder, deployer, initialWhitelist);
 ```
 
 **Test File Updates:**
