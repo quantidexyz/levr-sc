@@ -15,6 +15,9 @@ interface ILevrStaking_v1 {
     /// @notice Basis points for APR calculations (10000 = 100%)
     function BASIS_POINTS() external view returns (uint256);
 
+    /// @notice Minimum reward amount required to start a new stream
+    function MIN_REWARD_AMOUNT() external view returns (uint256);
+
     // ============ Structs ============
 
     /// @notice Reward token state with time-based linear vesting
@@ -57,10 +60,9 @@ interface ILevrStaking_v1 {
     error CannotUnwhitelistWithPendingRewards();
     error CannotRemoveUnderlying();
     error CannotRemoveWhitelisted();
-    error RewardsTillPending();
+    error RewardsStillPending();
     error RewardTooSmall();
     error TokenNotWhitelisted();
-    error InsufficientAvailable();
     error InvalidTokenDecimals();
 
     // ============ Events ============
@@ -99,7 +101,14 @@ interface ILevrStaking_v1 {
     /// @notice Emitted when a token is removed from the whitelist
     event TokenUnwhitelisted(address indexed token);
 
-    // ============ State Variables ============
+    /// @notice Emitted when the staking contract is initialized
+    event Initialized(
+        address indexed underlying,
+        address indexed stakedToken,
+        address indexed treasury
+    );
+
+    // ============ Functions ============
 
     /// @notice The underlying token being staked
     function underlying() external view returns (address);
@@ -112,8 +121,6 @@ interface ILevrStaking_v1 {
 
     /// @notice The Levr factory instance
     function factory() external view returns (address);
-
-    // ============ Functions ============
 
     /// @notice Initialize staking module.
     /// @param underlying The underlying token to stake (auto-whitelisted - not in array)
@@ -157,12 +164,6 @@ interface ILevrStaking_v1 {
     /// @param token Reward token to accrue
     function accrueRewards(address token) external;
 
-    /// @notice Accrue rewards from treasury, optionally pulling tokens from treasury first.
-    /// @param token Reward token
-    /// @param amount Amount to accrue
-    /// @param pullFromTreasury If true, transfer `amount` from treasury before accrual
-    function accrueFromTreasury(address token, uint256 amount, bool pullFromTreasury) external;
-
     /// @notice Get outstanding rewards for a token - available rewards in the contract balance
     /// @param token The reward token to check
     /// @return available Rewards available in the contract balance (unaccounted)
@@ -178,8 +179,6 @@ interface ILevrStaking_v1 {
     ) external view returns (uint256 claimable);
 
     /// @notice View streaming parameters.
-    function streamWindowSeconds() external view returns (uint32);
-
     /// @notice Get stream info for a specific reward token
     /// @param token The reward token address
     /// @return streamStart Per-token stream start timestamp
@@ -195,8 +194,7 @@ interface ILevrStaking_v1 {
     /// @notice Pool APR in basis points for the underlying token, annualized from current stream.
     function aprBps() external view returns (uint256);
 
-    /// @notice View functions.
-    function stakedBalanceOf(address account) external view returns (uint256);
+    /// @notice Total amount of underlying currently staked.
     function totalStaked() external view returns (uint256);
 
     /// @notice Escrow balance per token (non-reward reserves held for users).

@@ -28,7 +28,13 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         underlying = new MockERC20('Token', 'TKN');
         // Pass address(0) for forwarder since we're not testing meta-transactions here
         staking = createStaking(address(0), address(this));
-        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
+        sToken = createStakedToken(
+            'Staked Token',
+            'sTKN',
+            18,
+            address(underlying),
+            address(staking)
+        );
         // Initialize with empty reward tokens array (tokens created dynamically in tests)
         initializeStakingWithRewardTokens(
             staking,
@@ -59,6 +65,56 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         );
     }
 
+    function test_publicGetters_totalStakedAndEscrowBalance() public {
+        ILevrStaking_v1 stakingView = ILevrStaking_v1(address(staking));
+
+        underlying.approve(address(staking), 1_000 ether);
+        staking.stake(1_000 ether);
+
+        assertEq(stakingView.totalStaked(), 1_000 ether, 'totalStaked getter must track deposits');
+        assertEq(
+            stakingView.escrowBalance(address(underlying)),
+            1_000 ether,
+            'escrowBalance getter must match principal'
+        );
+
+        staking.unstake(600 ether, address(this));
+
+        assertEq(stakingView.totalStaked(), 400 ether, 'totalStaked getter updates after unstake');
+        assertEq(
+            stakingView.escrowBalance(address(underlying)),
+            400 ether,
+            'escrowBalance getter updates after unstake'
+        );
+    }
+
+    function test_publicGetter_lastStakeBlock_tracksPerAccount() public {
+        ILevrStaking_v1 stakingView = ILevrStaking_v1(address(staking));
+
+        vm.roll(1_000);
+        underlying.approve(address(staking), 100 ether);
+        staking.stake(100 ether);
+        assertEq(
+            stakingView.lastStakeBlock(address(this)),
+            1_000,
+            'lastStakeBlock must reflect current block'
+        );
+
+        address user = address(0xB0B);
+        underlying.mint(user, 50 ether);
+        vm.roll(1_500);
+        vm.startPrank(user);
+        underlying.approve(address(staking), 50 ether);
+        staking.stake(50 ether);
+        vm.stopPrank();
+
+        assertEq(
+            stakingView.lastStakeBlock(user),
+            1_500,
+            'Each account has independent lastStakeBlock tracking'
+        );
+    }
+
     function test_unstake_burns_andReturnsUnderlying() public {
         underlying.approve(address(staking), 1_000 ether);
         staking.stake(1_000 ether);
@@ -68,19 +124,19 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         assertEq(staking.totalStaked(), 600 ether);
     }
 
-    function test_accrueFromTreasury_pull_flow_streamsOverWindow() public {
+    function test_accrueAfterTreasuryTransfer_streamsOverWindow() public {
         // fund treasury with reward token
         underlying.mint(treasury, 10_000 ether);
-        vm.prank(treasury);
-        underlying.approve(address(staking), 10_000 ether);
 
         // stake to create shares
         underlying.approve(address(staking), 1_000 ether);
         staking.stake(1_000 ether);
 
-        // pull from treasury and credit
+        // treasury pushes rewards into staking and anyone accrues
         vm.prank(treasury);
-        staking.accrueFromTreasury(address(underlying), 2_000 ether, true);
+        underlying.transfer(address(staking), 2_000 ether);
+        vm.prank(treasury);
+        staking.accrueRewards(address(underlying));
 
         // claim rewards after 1 day in a 3 day window
         address[] memory toks = new address[](1);
@@ -136,12 +192,11 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         staking.stake(6_000 ether);
         vm.stopPrank();
 
-        // fund treasury and pull 8000 tokens -> stream rewards
+        // fund treasury and push 8000 tokens -> stream rewards
         underlying.mint(treasury, 8_000 ether);
         vm.prank(treasury);
-        underlying.approve(address(staking), type(uint256).max);
-        vm.prank(treasury);
-        staking.accrueFromTreasury(address(underlying), 8_000 ether, true);
+        underlying.transfer(address(staking), 8_000 ether);
+        staking.accrueRewards(address(underlying));
 
         // expected shares: alice 25%, bob 75% of credited rewards
         address[] memory toks = new address[](1);
@@ -1781,7 +1836,7 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
     // Flow 9 - Treasury Boost
     function test_boost_accrueReverts_handledGracefully() public {
         // This requires mocking treasury - tested in treasury tests
-        // Staking should handle revert from accrueFromTreasury
+        // Staking should handle revert from accrueRewards
         underlying.approve(address(staking), 1_000 ether);
         staking.stake(1_000 ether);
 

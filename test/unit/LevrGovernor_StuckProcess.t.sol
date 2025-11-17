@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
-import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -51,8 +51,19 @@ contract LevrGovernor_StuckProcessTest is Test, LevrFactoryDeployHelper {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),
@@ -62,8 +73,21 @@ contract LevrGovernor_StuckProcessTest is Test, LevrFactoryDeployHelper {
         // Deploy contracts
         treasury = createTreasury(address(0), address(factory));
         staking = createStaking(address(0), address(factory));
-        sToken = createStakedToken('Staked Token', 'sTKN', 18, address(underlying), address(staking));
-        governor = createGovernor(address(0), address(factory), address(treasury), address(staking), address(sToken), address(underlying));
+        sToken = createStakedToken(
+            'Staked Token',
+            'sTKN',
+            18,
+            address(underlying),
+            address(staking)
+        );
+        governor = createGovernor(
+            address(0),
+            address(factory),
+            address(treasury),
+            address(staking),
+            address(sToken),
+            address(underlying)
+        );
 
         // Initialize (must be called by factory)
         vm.prank(address(factory));
@@ -576,6 +600,10 @@ contract LevrGovernor_StuckProcessTest is Test, LevrFactoryDeployHelper {
         vm.prank(alice);
         governor.vote(pid, true);
 
+        // Drain treasury so boost execution fails balance check
+        vm.prank(address(governor));
+        treasury.transfer(address(underlying), address(0xBEEF), 9000 ether);
+
         vm.warp(block.timestamp + 5 days + 1);
 
         // Execute multiple times - will fail because factory returns zero address for staking
@@ -588,7 +616,7 @@ contract LevrGovernor_StuckProcessTest is Test, LevrFactoryDeployHelper {
 
         // NEW BEHAVIOR: Failed boost execution doesn't mark executed
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(pid);
-        assertFalse(proposal.executed, 'Proposal should NOT be executed (applyBoost failed)');
+        assertFalse(proposal.executed, 'Proposal should NOT be executed (transfer failed)');
 
         // Attempts tracked
         assertEq(governor.executionAttempts(pid).count, 3, 'Should have 3 attempts');

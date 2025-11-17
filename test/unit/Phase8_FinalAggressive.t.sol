@@ -209,11 +209,11 @@ contract Phase8_FinalAggressive_Test is Test, LevrFactoryDeployHelper {
     function test_p8_tre_002() public {
         address gov = address(governor);
         vm.prank(gov);
-        treasury.applyBoost(address(underlying), 1_000 ether);
+        treasury.transfer(address(underlying), address(staking), 1_000 ether);
         vm.prank(gov);
-        treasury.applyBoost(address(underlying), 1_000 ether);
+        treasury.transfer(address(underlying), address(staking), 1_000 ether);
         vm.prank(gov);
-        treasury.applyBoost(address(underlying), 1_000 ether);
+        treasury.transfer(address(underlying), address(staking), 1_000 ether);
     }
 
     function test_p8_tre_003() public {

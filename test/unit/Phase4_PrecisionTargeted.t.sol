@@ -183,12 +183,12 @@ contract Phase4_PrecisionTargeted_Test is Test, LevrFactoryDeployHelper {
         treasury.transfer(address(underlying), address(0x2002), 100 ether);
     }
 
-    function test_lcov_treasury_boost_unauthorized() public {
+    function test_lcov_treasury_transferToStaking_unauthorized() public {
         address notGov = address(0x2003);
         
         vm.prank(notGov);
         vm.expectRevert();
-        treasury.applyBoost(address(underlying), 100 ether);
+        treasury.transfer(address(underlying), address(staking), 100 ether);
     }
 
     // ============ Governor Functions ============

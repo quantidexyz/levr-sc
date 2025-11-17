@@ -43,6 +43,10 @@ contract MockStaking is ILevrStaking_v1 {
         return 10_000;
     }
 
+    function MIN_REWARD_AMOUNT() external pure override returns (uint256) {
+        return 1e4;
+    }
+
     function underlying() external pure override returns (address) {
         return address(0);
     }
@@ -66,8 +70,6 @@ contract MockStaking is ILevrStaking_v1 {
     }
 
     function claimRewards(address[] calldata, address) external override {}
-
-    function accrueFromTreasury(address, uint256, bool) external override {}
 
     function outstandingRewards(address) external pure override returns (uint256) {
         return 0;
@@ -93,10 +95,6 @@ contract MockStaking is ILevrStaking_v1 {
 
     function unwhitelistToken(address) external override {}
 
-    function streamWindowSeconds() external pure override returns (uint32) {
-        return 0;
-    }
-
     function getTokenStreamInfo(address) external pure override returns (uint64, uint64, uint256) {
         return (0, 0, 0);
     }
@@ -106,10 +104,6 @@ contract MockStaking is ILevrStaking_v1 {
     }
 
     function aprBps() external pure override returns (uint256) {
-        return 0;
-    }
-
-    function stakedBalanceOf(address) external pure override returns (uint256) {
         return 0;
     }
 

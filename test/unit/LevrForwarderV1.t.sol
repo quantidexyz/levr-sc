@@ -44,7 +44,10 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     /// @notice Test that direct calls to executeTransaction are blocked
     function test_executeTransaction_revertsWhenCalledDirectly() public {
         // Attacker tries to call executeTransaction directly to impersonate governor
-        bytes memory data = abi.encodeCall(treasury.transfer, (address(token), attacker, 100 ether));
+        bytes memory data = abi.encodeCall(
+            treasury.transfer,
+            (address(token), attacker, 100 ether)
+        );
 
         // Attempt direct call (should fail)
         vm.prank(attacker);
@@ -315,7 +318,7 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     function test_multicall_veryLongArray_gasLimit() public {
         // Create a very long array of calls
         ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](500);
-        
+
         for (uint256 i = 0; i < 500; i++) {
             calls[i] = ILevrForwarder_v1.SingleCall({
                 target: address(token),
@@ -339,7 +342,7 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     function test_multicall_oneCallFailsNoAllowFailure_entireReverts() public {
         // Create calls where one will fail
         ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](2);
-        
+
         // First call succeeds
         calls[0] = ILevrForwarder_v1.SingleCall({
             target: address(token),
@@ -364,14 +367,14 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     function test_multicall_targetDoesNotTrustForwarder_fails() public {
         // Create a call to a contract that doesn't trust the forwarder
         // This tests ERC2771Context integration
-        
+
         // Normal call should work (forwarder appends sender)
         ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
         calls[0] = ILevrForwarder_v1.SingleCall({
             target: address(treasury),
             allowFailure: true,
             value: 0,
-            callData: abi.encodeCall(LevrTreasury_v1.getUnderlyingBalance, ())
+            callData: abi.encodeWithSignature('underlying()')
         });
 
         // Should succeed if target trusts forwarder (treasury does via ERC2771Context)
@@ -422,7 +425,7 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
         // Test deep recursion protection
         // Forwarder allows executeTransaction only via multicall
         // Deep recursion should be prevented by reentrancy guard
-        
+
         ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
         calls[0] = ILevrForwarder_v1.SingleCall({
             target: address(forwarder),
@@ -466,19 +469,19 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     /// Branch: Sequential calls to treasury
     function test_branch_003_multipleCallsSequential() public {
         ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](2);
-        
+
         calls[0] = ILevrForwarder_v1.SingleCall({
             target: address(treasury),
             allowFailure: false,
             value: 0,
             callData: abi.encodeCall(treasury.underlying, ())
         });
-        
+
         calls[1] = ILevrForwarder_v1.SingleCall({
             target: address(treasury),
             allowFailure: false,
             value: 0,
-            callData: abi.encodeCall(treasury.getUnderlyingBalance, ())
+            callData: abi.encodeWithSignature('governor()')
         });
 
         ILevrForwarder_v1.Result[] memory results = forwarder.executeMulticall(calls);
@@ -490,7 +493,7 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     /// Branch: Large array of calls
     function test_branch_004_largeMulticall() public {
         ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](10);
-        
+
         for (uint256 i = 0; i < 10; i++) {
             calls[i] = ILevrForwarder_v1.SingleCall({
                 target: address(treasury),
@@ -521,7 +524,7 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
     /// Branch: ETH transfer with executeTransaction
     function test_branch_006_executeTransaction_withETH() public {
         vm.deal(alice, 1 ether);
-        
+
         ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
         calls[0] = ILevrForwarder_v1.SingleCall({
             target: address(forwarder),
@@ -534,7 +537,7 @@ contract LevrForwarderV1_UnitTest is Test, LevrFactoryDeployHelper {
         vm.prank(alice);
         forwarder.executeMulticall{value: 1 ether}(calls);
         uint256 bobAfter = bob.balance;
-        
+
         assertGt(bobAfter, bobBefore);
     }
 

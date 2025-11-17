@@ -23,16 +23,16 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     // ============ Constants ============
 
-    /// @notice Precision for voting power calculations
+    /// @inheritdoc ILevrStaking_v1
     uint256 public constant PRECISION = 1e18;
 
-    /// @notice Seconds per day
+    /// @inheritdoc ILevrStaking_v1
     uint256 public constant SECONDS_PER_DAY = 86400;
 
-    /// @notice Basis points denominator (10000 = 100%)
+    /// @inheritdoc ILevrStaking_v1
     uint256 public constant BASIS_POINTS = 10_000;
 
-    /// @notice Minimum reward amount to prevent duration dilution attacks (10,000 wei)
+    /// @inheritdoc ILevrStaking_v1
     uint256 public constant MIN_REWARD_AMOUNT = 1e4;
 
     constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
@@ -40,18 +40,26 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         factory = factory_;
     }
 
-    address public underlying;
-    address public stakedToken;
-    address public treasury;
+    /// @inheritdoc ILevrStaking_v1
     address public immutable factory;
 
-    uint256 private _totalStaked;
+    /// @inheritdoc ILevrStaking_v1
+    address public underlying;
 
-    // Voting power: tracks when each user started staking (time-weighted)
+    /// @inheritdoc ILevrStaking_v1
+    address public stakedToken;
+
+    /// @inheritdoc ILevrStaking_v1
+    address public treasury;
+
+    /// @inheritdoc ILevrStaking_v1
+    uint256 public totalStaked;
+
+    /// @inheritdoc ILevrStaking_v1
     mapping(address => uint256) public stakeStartTime;
 
-    // Anti-flash-loan: tracks last stake block for each user (MEV protection)
-    mapping(address => uint256) private _lastStakeBlock;
+    /// @inheritdoc ILevrStaking_v1
+    mapping(address => uint256) public lastStakeBlock;
 
     /// @notice Array of all registered reward tokens
     /// @dev Underlying is always first, whitelisted tokens added during init/whitelist
@@ -61,9 +69,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @dev Maps token address to pool state (balance, streaming, whitelist status)
     mapping(address => ILevrStaking_v1.RewardTokenState) private _tokenState;
 
-    /// @notice Escrowed balances per token (principal held for stakers)
-    /// @dev Separates user deposits from rewards for accurate accounting
-    mapping(address => uint256) private _escrowBalance;
+    /// @inheritdoc ILevrStaking_v1
+    mapping(address => uint256) public escrowBalance;
 
     // Reward accounting: prevents dilution attack (MasterChef pattern)
     // Tracks cumulative rewards per staked token (scaled by PRECISION, never decreases)
@@ -91,18 +98,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         treasury = treasury_;
 
         // Initialize underlying token with pool-based state (ALWAYS whitelisted - separate from array)
-        _tokenState[underlying_] = ILevrStaking_v1.RewardTokenState({
-            availablePool: 0,
-            streamTotal: 0,
-            lastUpdate: 0,
-            exists: true,
-            whitelisted: true,
-            streamStart: 0,
-            streamEnd: 0,
-            originalStreamTotal: 0,
-            totalVested: 0
-        });
-        _rewardTokens.push(underlying_);
+        _initRewardToken(underlying_, true);
 
         // Initialize additional whitelisted tokens from factory config (e.g., WETH)
         for (uint256 i = 0; i < initialWhitelistedTokens.length; i++) {
@@ -112,19 +108,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             if (token == address(0) || token == underlying_ || _tokenState[token].exists) continue;
 
             // Initialize whitelisted token
-            _tokenState[token] = ILevrStaking_v1.RewardTokenState({
-                availablePool: 0,
-                streamTotal: 0,
-                lastUpdate: 0,
-                exists: true,
-                whitelisted: true,
-                streamStart: 0,
-                streamEnd: 0,
-                originalStreamTotal: 0,
-                totalVested: 0
-            });
-            _rewardTokens.push(token);
+            _initRewardToken(token, true);
         }
+
+        emit Initialized(underlying_, stakedToken_, treasury_);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -132,7 +119,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (amount == 0) revert InvalidAmount();
         address staker = _msgSender();
 
-        bool isFirstStaker = _totalStaked == 0;
+        bool isFirstStaker = totalStaked == 0;
 
         // Settle all reward pools to latest state
         _settleAllPools();
@@ -174,11 +161,11 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         stakeStartTime[staker] = _onStakeNewTimestamp(actualReceived);
 
         // Track last stake block (MEV protection - only stake inflates balance)
-        _lastStakeBlock[staker] = block.number;
+        lastStakeBlock[staker] = block.number;
 
         // Update accounting: escrow, total staked, mint receipt token
-        _escrowBalance[underlying] += actualReceived;
-        _totalStaked += actualReceived;
+        escrowBalance[underlying] += actualReceived;
+        totalStaked += actualReceived;
         ILevrStakedToken_v1(stakedToken).mint(staker, actualReceived);
 
         // Update reward debt for all tokens (prevents dilution on future claims)
@@ -206,10 +193,10 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         // Burn receipt token and update accounting
         ILevrStakedToken_v1(stakedToken).burn(staker, amount);
-        _totalStaked -= amount;
-        uint256 esc = _escrowBalance[underlying];
+        totalStaked -= amount;
+        uint256 esc = escrowBalance[underlying];
         if (esc < amount) revert InsufficientEscrow(); // Safety check
-        _escrowBalance[underlying] = esc - amount;
+        escrowBalance[underlying] = esc - amount;
 
         // Transfer underlying back to recipient
         IERC20(underlying).safeTransfer(to, amount);
@@ -337,7 +324,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (!tokenState.exists) revert TokenNotRegistered();
         if (tokenState.whitelisted) revert CannotRemoveWhitelisted();
         if (!(tokenState.availablePool == 0 && tokenState.streamTotal == 0)) {
-            revert RewardsTillPending();
+            revert RewardsStillPending();
         }
 
         _removeTokenFromArray(token);
@@ -359,7 +346,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         uint256 userBalance = ILevrStakedToken_v1(stakedToken).balanceOf(account);
         if (userBalance == 0) return 0;
 
-        uint256 cachedTotalStaked = _totalStaked;
+        uint256 cachedTotalStaked = totalStaked;
         if (cachedTotalStaked == 0) return 0;
 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
@@ -388,50 +375,6 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             rewardDebt[account][token],
             PRECISION
         );
-    }
-
-    /// @inheritdoc ILevrStaking_v1
-    function accrueFromTreasury(
-        address token,
-        uint256 amount,
-        bool pullFromTreasury
-    ) external nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (pullFromTreasury) {
-            // Only treasury can initiate a pull
-            if (_msgSender() != treasury) revert ILevrFactory_v1.UnauthorizedCaller();
-            uint256 beforeAvail = _availableUnaccountedRewards(token);
-            IERC20(token).safeTransferFrom(treasury, address(this), amount);
-            uint256 afterAvail = _availableUnaccountedRewards(token);
-            uint256 delta = afterAvail > beforeAvail ? afterAvail - beforeAvail : 0;
-            if (delta > 0) {
-                _creditRewards(token, delta);
-            }
-        } else {
-            uint256 available = _availableUnaccountedRewards(token);
-            if (available < amount) revert InsufficientAvailable();
-            _creditRewards(token, amount);
-        }
-    }
-
-    /// @inheritdoc ILevrStaking_v1
-    function stakedBalanceOf(address account) external view returns (uint256) {
-        return ILevrStakedToken_v1(stakedToken).balanceOf(account);
-    }
-
-    /// @inheritdoc ILevrStaking_v1
-    function totalStaked() external view returns (uint256) {
-        return _totalStaked;
-    }
-
-    /// @inheritdoc ILevrStaking_v1
-    function escrowBalance(address token) external view returns (uint256) {
-        return _escrowBalance[token];
-    }
-
-    /// @inheritdoc ILevrStaking_v1
-    function streamWindowSeconds() external view returns (uint32) {
-        return ILevrFactory_v1(factory).streamWindowSeconds(underlying);
     }
 
     /// @inheritdoc ILevrStaking_v1
@@ -487,7 +430,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
     /// @inheritdoc ILevrStaking_v1
     function aprBps() external view returns (uint256) {
-        if (_totalStaked == 0) return 0;
+        if (totalStaked == 0) return 0;
 
         uint32 window = ILevrFactory_v1(factory).streamWindowSeconds(underlying);
         if (window == 0) return 0;
@@ -512,7 +455,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         }
 
         if (totalAnnualRate == 0) return 0;
-        return (totalAnnualRate * BASIS_POINTS) / _totalStaked;
+        return (totalAnnualRate * BASIS_POINTS) / totalStaked;
     }
 
     function _resetStreamForToken(address token, uint256 amount) internal {
@@ -583,6 +526,24 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         }
     }
 
+    /// @notice Shared initializer for reward token state
+    /// @param token Token address
+    /// @param whitelisted Whether token starts whitelisted
+    function _initRewardToken(address token, bool whitelisted) internal {
+        _tokenState[token] = ILevrStaking_v1.RewardTokenState({
+            availablePool: 0,
+            streamTotal: 0,
+            lastUpdate: 0,
+            exists: true,
+            whitelisted: whitelisted,
+            streamStart: 0,
+            streamEnd: 0,
+            originalStreamTotal: 0,
+            totalVested: 0
+        });
+        _rewardTokens.push(token);
+    }
+
     /// @notice Calculate unaccounted rewards for a token
     /// @dev Returns rewards in contract that aren't tracked in pool or streaming
     ///      For underlying token: excludes escrowed principal (user deposits)
@@ -594,8 +555,8 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // For underlying token: subtract escrowed principal (staker deposits)
         // Only excess balance counts as rewards
         if (token == underlying) {
-            if (bal > _escrowBalance[underlying]) {
-                bal -= _escrowBalance[underlying];
+            if (bal > escrowBalance[underlying]) {
+                bal -= escrowBalance[underlying];
             } else {
                 bal = 0; // No excess balance
             }
@@ -708,7 +669,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
 
         // Pause streaming if no stakers (preserves rewards for future stakers)
         // Updates lastUpdate so when stakers return, streaming resumes from current time
-        if (_totalStaked == 0) {
+        if (totalStaked == 0) {
             tokenState.lastUpdate = uint64(block.timestamp);
             return;
         }
@@ -739,18 +700,13 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
             tokenState.streamTotal -= newlyVested;
 
             // Update cumulative rewards per share (prevents dilution attack)
-            accRewardPerShare[token] += (newlyVested * PRECISION) / _totalStaked;
+            accRewardPerShare[token] += (newlyVested * PRECISION) / totalStaked;
         }
 
         tokenState.lastUpdate = settleTo;
     }
 
     // ============ Governance Functions ============
-
-    /// @inheritdoc ILevrStaking_v1
-    function lastStakeBlock(address user) external view returns (uint256) {
-        return _lastStakeBlock[user];
-    }
 
     /// @inheritdoc ILevrStaking_v1
     function getVotingPower(address user) external view returns (uint256 votingPower) {

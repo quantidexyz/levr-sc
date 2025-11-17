@@ -157,7 +157,14 @@ contract DeployLevrTest is Test, LevrFactoryDeployHelper {
 
         // This should be caught during factory initialization validation
         vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
-        new LevrFactory_v1(config, address(this), address(0x1), address(0x2), new address[](0));
+        new LevrFactory_v1(
+            config,
+            createLooseBounds(),
+            address(this),
+            address(0x1),
+            address(0x2),
+            new address[](0)
+        );
     }
 
     function test_DeployLevr_streamWindowValidation() public {
@@ -171,7 +178,14 @@ contract DeployLevrTest is Test, LevrFactoryDeployHelper {
         // Test zero stream window should revert
         config.streamWindowSeconds = 0;
         vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
-        new LevrFactory_v1(config, address(this), address(0x1), address(0x2), new address[](0));
+        new LevrFactory_v1(
+            config,
+            createLooseBounds(),
+            address(this),
+            address(0x1),
+            address(0x2),
+            new address[](0)
+        );
     }
 
     // ============ Multi-Contract Interaction Tests ============
@@ -262,7 +276,14 @@ contract DeployLevrTest is Test, LevrFactoryDeployHelper {
         // Zero max active proposals should revert
         config.maxActiveProposals = 0;
         vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
-        new LevrFactory_v1(config, address(this), address(0x1), address(0x2), new address[](0));
+        new LevrFactory_v1(
+            config,
+            createLooseBounds(),
+            address(this),
+            address(0x1),
+            address(0x2),
+            new address[](0)
+        );
     }
 
     // ============ Deployment Consistency Tests ============

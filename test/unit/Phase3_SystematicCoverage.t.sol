@@ -62,7 +62,7 @@ contract Phase3_SystematicCoverage_Test is Test, LevrFactoryDeployHelper {
         address gov = address(governor);
         for (uint256 i = 1; i <= 5; i++) {
             vm.prank(gov);
-            treasury.applyBoost(address(underlying), i * 1000 ether);
+            treasury.transfer(address(underlying), address(staking), i * 1000 ether);
         }
     }
 
@@ -73,7 +73,7 @@ contract Phase3_SystematicCoverage_Test is Test, LevrFactoryDeployHelper {
             treasury.transfer(address(underlying), address(uint160(0x6000 + i)), 100 ether);
             
             vm.prank(gov);
-            treasury.applyBoost(address(underlying), 500 ether);
+            treasury.transfer(address(underlying), address(staking), 500 ether);
         }
     }
 

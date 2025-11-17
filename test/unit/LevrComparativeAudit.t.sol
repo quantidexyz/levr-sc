@@ -263,7 +263,7 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
 
     /// @notice Gnosis Safe: Reentrancy during execution
     /// @dev Original issue: External call before state update
-    /// @dev Our protection: nonReentrant modifier on applyBoost and transfer
+    /// @dev Our protection: nonReentrant modifier on transfer (single entry point for boosts)
     function test_treasury_reentrancyProtection() public {
         console2.log('\n=== TREASURY: Reentrancy Protection Test ===');
 
@@ -309,20 +309,28 @@ contract LevrComparativeAudit_Test is Test, LevrFactoryDeployHelper {
         console2.log('RESULT: Only governor can transfer funds');
     }
 
-    /// @notice Treasury: Approval not reset after failed boost
-    /// @dev This was fixed in audit [H-3]
-    function test_treasury_approvalResetAfterBoost() public {
-        console2.log('\n=== TREASURY: Approval Reset After Boost Test ===');
+    /// @notice Treasury: Governor can stream rewards by transferring to staking
+    function test_treasury_transferToStakingMovesFunds() public {
+        console2.log('\n=== TREASURY: Transfer To Staking Moves Funds ===');
 
-        // Apply boost
+        uint256 stakingBefore = underlying.balanceOf(address(staking));
+        uint256 treasuryBefore = underlying.balanceOf(address(treasury));
+
         vm.prank(address(governor));
-        treasury.applyBoost(address(underlying), 100 ether);
+        treasury.transfer(address(underlying), address(staking), 100 ether);
 
-        // Check that approval was reset to 0
-        uint256 approval = underlying.allowance(address(treasury), address(staking));
-        assertEq(approval, 0, 'Approval should be reset to 0');
+        assertEq(
+            underlying.balanceOf(address(staking)),
+            stakingBefore + 100 ether,
+            'Staking should receive funds'
+        );
+        assertEq(
+            underlying.balanceOf(address(treasury)),
+            treasuryBefore - 100 ether,
+            'Treasury balance decreases'
+        );
 
-        console2.log('RESULT: Approval correctly reset to 0 after boost');
+        console2.log('RESULT: Governor push transfers seed staking rewards');
     }
 
     // ============================================================================

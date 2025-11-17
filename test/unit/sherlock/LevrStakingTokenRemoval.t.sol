@@ -425,7 +425,7 @@ contract LevrStakingTokenRemovalTest is Test, LevrFactoryDeployHelper {
         uint256 aliceUnderlyingReturned = underlying.balanceOf(alice) - aliceUnderlyingBefore;
 
         assertEq(aliceUnderlyingReturned, 1000e18, 'Alice gets underlying back after unwhitelist');
-        assertEq(staking.stakedBalanceOf(alice), 0, 'Alice fully unstaked');
+        assertEq(sToken.balanceOf(alice), 0, 'Alice fully unstaked');
 
         // Phase 6: Cleanup now possible
         vm.prank(tokenAdmin);

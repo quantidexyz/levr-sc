@@ -46,8 +46,19 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeploy
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),
@@ -252,14 +263,10 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeploy
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        assertEq(stakedToken.balanceOf(alice), staking.stakedBalanceOf(alice));
-
         // Bob stakes
         vm.startPrank(bob);
         underlying.approve(address(staking), 500 ether);
         staking.stake(500 ether);
-
-        assertEq(stakedToken.balanceOf(bob), staking.stakedBalanceOf(bob));
 
         // Total supply = total staked
         assertEq(stakedToken.totalSupply(), staking.totalStaked());
@@ -268,7 +275,6 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeploy
         vm.startPrank(alice);
         staking.unstake(300 ether, alice);
 
-        assertEq(stakedToken.balanceOf(alice), staking.stakedBalanceOf(alice));
         assertEq(stakedToken.totalSupply(), staking.totalStaked());
 
         // No desync possible (no transfers to create mismatch)

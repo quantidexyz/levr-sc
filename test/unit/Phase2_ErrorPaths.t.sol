@@ -65,17 +65,10 @@ contract Phase2_ErrorPaths_Test is Test, LevrFactoryDeployHelper {
         treasury.transfer(address(underlying), address(0), 100 ether);
     }
 
-    function test_error_treasury_004_boostUnauthorized() public {
+    function test_error_treasury_004_transferToStakingUnauthorized() public {
         vm.prank(user);
         vm.expectRevert();
-        treasury.applyBoost(address(underlying), 100 ether);
-    }
-
-    function test_error_treasury_005_boostZeroToken() public {
-        address gov = address(governor);
-        vm.prank(gov);
-        vm.expectRevert();
-        treasury.applyBoost(address(0), 100 ether);
+        treasury.transfer(address(underlying), address(staking), 100 ether);
     }
 
     function test_error_treasury_006_transferExceedsBalance() public {

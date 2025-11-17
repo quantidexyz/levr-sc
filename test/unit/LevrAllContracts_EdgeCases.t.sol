@@ -216,7 +216,7 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
         vm.stopPrank();
 
         assertEq(staking.totalStaked(), 100 ether);
-        assertEq(staking.stakedBalanceOf(alice), 100 ether);
+        assertEq(sToken.balanceOf(alice), 100 ether);
         console2.log('First stake successful: 100 tokens');
     }
 
@@ -390,9 +390,9 @@ contract LevrAllContracts_EdgeCases_Test is Test, LevrFactoryDeployHelper {
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 10,
-            quorumBps: 0,
-            approvalBps: 0,
-            minSTokenBpsToSubmit: 0,
+            quorumBps: 2000, // Respect guardrails
+            approvalBps: 5000,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 10000,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });

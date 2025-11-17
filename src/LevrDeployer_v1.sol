@@ -12,9 +12,16 @@ import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 import {LevrStakedToken_v1} from './LevrStakedToken_v1.sol';
 
 contract LevrDeployer_v1 is ILevrDeployer_v1 {
+    /// @inheritdoc ILevrDeployer_v1
     address public immutable authorizedFactory;
+
+    /// @inheritdoc ILevrDeployer_v1
     address public immutable treasuryImplementation;
+
+    /// @inheritdoc ILevrDeployer_v1
     address public immutable stakingImplementation;
+
+    /// @inheritdoc ILevrDeployer_v1
     address public immutable governorImplementation;
 
     modifier onlyAuthorized() {
@@ -46,6 +53,7 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
     {
         treasury = Clones.clone(treasuryImplementation);
         staking = Clones.clone(stakingImplementation);
+        emit ContractsPrepared(treasury, staking);
     }
 
     /// @inheritdoc ILevrDeployer_v1
@@ -89,5 +97,13 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
 
         // Initialize treasury (cloned in prepareContracts)
         ILevrTreasury_v1(project.treasury).initialize(project.governor, clankerToken);
+
+        emit ProjectDeployed(
+            clankerToken,
+            project.treasury,
+            project.staking,
+            project.stakedToken,
+            project.governor
+        );
     }
 }
