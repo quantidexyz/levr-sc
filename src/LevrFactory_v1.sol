@@ -34,7 +34,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 private _maxProposalAmountBps;
     uint16 private _minimumQuorumBps;
 
-    // Governance guardrails enforced for configs.
+    // Guardrails enforced for configs.
     ILevrFactory_v1.ConfigBounds private _configBounds;
 
     // Registered projects.
