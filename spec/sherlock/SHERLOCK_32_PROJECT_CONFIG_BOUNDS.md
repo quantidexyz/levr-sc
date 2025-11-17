@@ -2,7 +2,7 @@
 
 **Date Created:** November 17, 2025  
 **Date Validated:** November 17, 2025  
-**Status:** ⚠️ **CONFIRMED – HIGH SEVERITY (Fix Required)**  
+**Status:** ✅ **PATCHED – AWAITING VERIFICATION**  
 **Severity:** HIGH (Governance capture / forced proposal execution)  
 **Category:** Governance Configuration / Access Control
 
@@ -194,6 +194,8 @@ No other token holder had time to react, and on-chain governance logs alone do n
 | 4    | Update `updateConfig` and `updateProjectConfig` call sites to consume the new validator (no other code changes needed).  |
 | 5    | (Optional) Introduce per-project config timelock if we want an additional defense-in-depth layer.                        |
 
+**Current implementation detail:** Guardrails are enforced on every *future* config update (factory or project). Existing overrides remain grandfathered until the project submits another update.
+
 ---
 
 ## Testing Plan
@@ -212,7 +214,7 @@ Test cases to add:
 
 - `test_updateProjectConfig_revertsWhenQuorumBelowMin()`
 - `test_updateProjectConfig_revertsWhenVotingWindowBelowMin()`
-- `test_factoryOwnerCanRaiseBoundsAndExistingConfigsMustRespect()`
+- `test_factoryOwnerCanRaiseBounds_grandfatherExistingConfigsUntilNextUpdate()`
 - `test_configBounds_canBeUpdatedButNotSetToZero()`
 
 ---
@@ -228,8 +230,8 @@ Test cases to add:
 
 ## Next Steps
 
-- [ ] Implement guardrail storage + validation changes in `LevrFactory_v1`.
-- [ ] Add the bounding tests listed above.
+- [x] Implement guardrail storage + validation changes in `LevrFactory_v1`.
+- [x] Add the bounding tests listed above.
 - [ ] Communicate the change to active projects so they know overrides must comply.
 - [ ] Consider timelocking project config changes if auditors require stronger guarantees.
 
