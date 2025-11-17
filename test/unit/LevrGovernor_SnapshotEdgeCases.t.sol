@@ -247,7 +247,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 7000,
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 0, // Disabled
+            minSTokenBpsToSubmit: 100, // Respect guardrails
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
@@ -278,7 +278,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
 
         vm.warp(block.timestamp + 10 days);
 
-        // Set thresholds to 0
+        // Attempt to set thresholds to 0 (guardrails should block this)
         ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
@@ -292,28 +292,10 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(cfg);
 
-        vm.prank(alice);
-        uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
-
-        ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
-
-        assertEq(prop.quorumBpsSnapshot, 0, 'Should snapshot 0 quorum');
-        assertEq(prop.approvalBpsSnapshot, 0, 'Should snapshot 0 approval');
-
-        // Vote and execute without meeting any thresholds
-        vm.warp(block.timestamp + 2 days + 1);
-        vm.roll(block.number + 1); // Advance blocks for voting eligibility
-        vm.prank(alice);
-        governor.vote(pid, true);
-
-        vm.warp(block.timestamp + 5 days + 1);
-
-        // Should execute successfully (0 thresholds = no requirements)
-        governor.execute(pid);
-
-        console2.log('[PASS] Zero threshold snapshots work correctly');
+        console2.log('Guardrails prevent zero quorum/approval thresholds.');
     }
 
     /// @notice Test proposal creation when thresholds are at maximum (100%)
@@ -830,7 +812,7 @@ contract LevrGovernor_SnapshotEdgeCases_Test is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 10000, // 100% required
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 0,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });

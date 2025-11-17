@@ -51,8 +51,19 @@ contract LevrAderynFindingsTest is Test, LevrFactoryDeployHelper {
         });
 
         // Deploy factory and deployer
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             trustedForwarder,
             address(0),

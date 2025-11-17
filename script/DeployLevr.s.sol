@@ -350,10 +350,21 @@ contract DeployLevr is Script {
         console.log('- WETH:', weth);
         console.log('');
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1 days,
+            minProposalWindowSeconds: 6 hours,
+            minVotingWindowSeconds: 2 days,
+            minQuorumBps: 2000,
+            minApprovalBps: 5000,
+            minMinSTokenBpsToSubmit: 100,
+            minMinimumQuorumBps: 25
+        });
+
         // 6. Deploy the factory with forwarder, deployer logic, and initial whitelist
         console.log('Deploying LevrFactory_v1...');
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
+            bounds,
             params.deployer,
             address(forwarder),
             address(levrDeployer),

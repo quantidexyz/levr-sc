@@ -44,9 +44,20 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test, LevrFacto
         // Deploy forwarder
         forwarder = new LevrForwarder_v1('Levr Forwarder');
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         // Deploy factory with correct constructor
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(forwarder),
             address(0),

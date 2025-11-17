@@ -139,9 +139,20 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('Initial whitelist:');
         console.log('- WETH:', weth);
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1 days,
+            minProposalWindowSeconds: 6 hours,
+            minVotingWindowSeconds: 2 days,
+            minQuorumBps: 2000,
+            minApprovalBps: 5000,
+            minMinSTokenBpsToSubmit: 100,
+            minMinimumQuorumBps: 25
+        });
+
         // Deploy the factory with forwarder, deployer logic, and initial whitelist
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
+            bounds,
             deployer,
             address(forwarder),
             address(levrDeployer),

@@ -67,9 +67,20 @@ contract LevrCloneSecurityTest is Test {
             minimumQuorumBps: 25
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         address[] memory whitelist = new address[](0);
         factory = new LevrFactory_v1(
             config,
+            bounds,
             owner,
             address(forwarder),
             address(deployer),
@@ -307,9 +318,20 @@ contract LevrCloneSecurityTest is Test {
             minimumQuorumBps: 25
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         address[] memory whitelist = new address[](0);
         LevrFactory_v1 fakeFactory = new LevrFactory_v1(
             config,
+            bounds,
             attacker,
             address(forwarder),
             address(deployer), // Trying to use our deployer

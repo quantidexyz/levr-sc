@@ -34,6 +34,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
     uint16 private _maxProposalAmountBps;
     uint16 private _minimumQuorumBps;
 
+    // Guardrails enforced for configs.
+    ILevrFactory_v1.ConfigBounds private _configBounds;
+
     // Registered projects.
     mapping(address => ILevrFactory_v1.Project) private _projects;
 
@@ -57,11 +60,14 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
     constructor(
         FactoryConfig memory cfg,
+        ConfigBounds memory bounds,
         address owner_,
         address trustedForwarder_,
         address levrDeployer_,
         address[] memory initialWhitelistedTokens_
     ) Ownable(owner_) ERC2771Context(trustedForwarder_) {
+        _validateBounds(bounds);
+        _configBounds = bounds;
         _updateConfig(cfg, address(0), true);
         levrDeployer = levrDeployer_;
 
@@ -215,6 +221,23 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         emit ProjectConfigUpdated(clankerToken);
     }
 
+    /// @inheritdoc ILevrFactory_v1
+    function updateConfigBounds(
+        ILevrFactory_v1.ConfigBounds calldata bounds
+    ) external override onlyOwner {
+        _validateBounds(bounds);
+        _configBounds = bounds;
+        emit ConfigBoundsUpdated(
+            bounds.minStreamWindowSeconds,
+            bounds.minProposalWindowSeconds,
+            bounds.minVotingWindowSeconds,
+            bounds.minQuorumBps,
+            bounds.minApprovalBps,
+            bounds.minMinSTokenBpsToSubmit,
+            bounds.minMinimumQuorumBps
+        );
+    }
+
     // ============ Project Administration ============
     /// @inheritdoc ILevrFactory_v1
     function addTrustedClankerFactory(address factory) external override onlyOwner {
@@ -304,6 +327,16 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
             address token = _projectTokens[offset + i];
             projects[i] = ILevrFactory_v1.ProjectInfo(token, _projects[token]);
         }
+    }
+
+    /// @inheritdoc ILevrFactory_v1
+    function getConfigBounds()
+        external
+        view
+        override
+        returns (ILevrFactory_v1.ConfigBounds memory)
+    {
+        return _configBounds;
     }
 
     // ============ Config Views ============
@@ -416,9 +449,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         }
     }
 
-    /// @dev Validate config parameters
-    function _validateConfig(FactoryConfig memory cfg, bool validateProtocolFee) private pure {
-        // BPS values must be ? 100% (10000 basis points)
+    /// @dev Validate config parameters against stored guardrails
+    function _validateConfig(FactoryConfig memory cfg, bool validateProtocolFee) private view {
+        ILevrFactory_v1.ConfigBounds memory bounds = _configBounds;
         if (
             cfg.quorumBps > 10000 ||
             cfg.approvalBps > 10000 ||
@@ -429,12 +462,32 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
         if (validateProtocolFee && cfg.protocolFeeBps > 10000) revert InvalidConfig();
 
-        // Prevent zero values that disable functionality
+        if (cfg.maxActiveProposals == 0) revert InvalidConfig();
+        if (cfg.proposalWindowSeconds < bounds.minProposalWindowSeconds) revert InvalidConfig();
+        if (cfg.votingWindowSeconds < bounds.minVotingWindowSeconds) revert InvalidConfig();
+        if (cfg.streamWindowSeconds < bounds.minStreamWindowSeconds) revert InvalidConfig();
+        if (cfg.quorumBps < bounds.minQuorumBps) revert InvalidConfig();
+        if (cfg.approvalBps < bounds.minApprovalBps) revert InvalidConfig();
+        if (cfg.minSTokenBpsToSubmit < bounds.minMinSTokenBpsToSubmit) revert InvalidConfig();
+        if (cfg.minimumQuorumBps < bounds.minMinimumQuorumBps) revert InvalidConfig();
+    }
+
+    function _validateBounds(ILevrFactory_v1.ConfigBounds memory bounds) private pure {
         if (
-            cfg.maxActiveProposals == 0 ||
-            cfg.proposalWindowSeconds == 0 ||
-            cfg.votingWindowSeconds == 0 ||
-            cfg.streamWindowSeconds == 0
+            bounds.minStreamWindowSeconds == 0 ||
+            bounds.minProposalWindowSeconds == 0 ||
+            bounds.minVotingWindowSeconds == 0 ||
+            bounds.minQuorumBps == 0 ||
+            bounds.minApprovalBps == 0 ||
+            bounds.minMinSTokenBpsToSubmit == 0 ||
+            bounds.minMinimumQuorumBps == 0
+        ) revert InvalidConfig();
+
+        if (
+            bounds.minQuorumBps > 10000 ||
+            bounds.minApprovalBps > 10000 ||
+            bounds.minMinSTokenBpsToSubmit > 10000 ||
+            bounds.minMinimumQuorumBps > 10000
         ) revert InvalidConfig();
     }
 

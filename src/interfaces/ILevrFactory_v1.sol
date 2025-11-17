@@ -36,6 +36,17 @@ interface ILevrFactory_v1 {
         uint16 minimumQuorumBps;
     }
 
+    /// @notice Guardrails enforced for both global and project configs.
+    struct ConfigBounds {
+        uint32 minStreamWindowSeconds;
+        uint32 minProposalWindowSeconds;
+        uint32 minVotingWindowSeconds;
+        uint16 minQuorumBps;
+        uint16 minApprovalBps;
+        uint16 minMinSTokenBpsToSubmit;
+        uint16 minMinimumQuorumBps;
+    }
+
     /// @notice Project contract addresses.
     struct Project {
         address treasury;
@@ -144,6 +155,17 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Address of the project token whose config changed
     event ProjectConfigUpdated(address indexed clankerToken);
 
+    /// @notice Emitted when the config guardrails are updated.
+    event ConfigBoundsUpdated(
+        uint32 minStreamWindowSeconds,
+        uint32 minProposalWindowSeconds,
+        uint32 minVotingWindowSeconds,
+        uint16 minQuorumBps,
+        uint16 minApprovalBps,
+        uint16 minMinSTokenBpsToSubmit,
+        uint16 minMinimumQuorumBps
+    );
+
     // ============ Functions ============
 
     /// @notice Prepare for deployment by deploying treasury and staking modules.
@@ -185,6 +207,10 @@ interface ILevrFactory_v1 {
     /// @param clankerToken Token address of the project
     /// @param cfg New project configuration
     function updateProjectConfig(address clankerToken, ProjectConfig calldata cfg) external;
+
+    /// @notice Update the factory-wide guardrails for configuration values.
+    /// @param bounds New guardrail bounds
+    function updateConfigBounds(ConfigBounds calldata bounds) external;
 
     /// @notice Add a trusted Clanker factory for token validation.
     /// @dev Only callable by owner. Supports multiple factory versions.
@@ -230,6 +256,9 @@ interface ILevrFactory_v1 {
         uint256 offset,
         uint256 limit
     ) external view returns (ProjectInfo[] memory projects, uint256 total);
+
+    /// @notice Get the current guardrails enforced on configuration overrides.
+    function getConfigBounds() external view returns (ConfigBounds memory);
 
     // Config getters for periphery contracts
     // NOTE: Optional clankerToken parameter - if provided and project is verified, returns project config

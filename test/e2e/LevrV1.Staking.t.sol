@@ -48,9 +48,9 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 7,
-            quorumBps: 0, // No governance requirements for staking tests
-            approvalBps: 0, // No governance requirements for staking tests
-            minSTokenBpsToSubmit: 0,
+            quorumBps: 1, // Effectively disabled for staking tests
+            approvalBps: 1,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
