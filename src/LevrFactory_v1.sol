@@ -449,16 +449,9 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
         }
     }
 
-    /// @dev Validate config parameters
+    /// @dev Validate config parameters against stored guardrails
     function _validateConfig(FactoryConfig memory cfg, bool validateProtocolFee) private view {
-        _validateConfigAgainstBounds(cfg, validateProtocolFee, _configBounds);
-    }
-
-    function _validateConfigAgainstBounds(
-        FactoryConfig memory cfg,
-        bool validateProtocolFee,
-        ILevrFactory_v1.ConfigBounds memory bounds
-    ) private pure {
+        ILevrFactory_v1.ConfigBounds memory bounds = _configBounds;
         if (
             cfg.quorumBps > 10000 ||
             cfg.approvalBps > 10000 ||
