@@ -51,6 +51,7 @@ contract Phase7_MissingTrueBranches_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
         
@@ -96,6 +97,7 @@ contract Phase7_MissingTrueBranches_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
         
@@ -131,6 +133,7 @@ contract Phase7_MissingTrueBranches_Test is Test, LevrFactoryDeployHelper {
         }
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // Vote on each
         for (uint256 i = 0; i < 3; i++) {

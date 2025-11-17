@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {console} from 'forge-std/console.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
@@ -23,14 +24,20 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
     function setUp() public {
         underlying = new MockERC20('Token', 'TKN');
         weth = new MockERC20('WETH', 'WETH');
-        staking = new LevrStaking_v1(address(0));
-        sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
-        
+        staking = createStaking(address(0x999), address(this));
+        sToken = createStakedToken('sTKN', 'sTKN', 18, address(underlying), address(staking));
+
         // Initialize staking with WETH already whitelisted
         address[] memory rewardTokens = new address[](1);
         rewardTokens[0] = address(weth);
-        initializeStakingWithRewardTokens(staking, address(underlying), address(sToken), address(0xBEEF), address(this), rewardTokens);
-        
+        initializeStakingWithRewardTokens(
+            staking,
+            address(underlying),
+            address(sToken),
+            address(0xBEEF),
+            rewardTokens
+        );
+
         underlying.mint(alice, 1_000_000 ether);
         weth.mint(address(this), 1_000_000 ether);
     }
@@ -50,14 +57,12 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
         address token,
         string memory when
     ) internal {
-        // POOL-BASED: Accounting is perfect by design!
-        // Sum of all claimable = availablePool (always)
-        // Just verify claimable is reasonable (not more than total balance)
+        // DEBT ACCOUNTING: Users earn rewards based on when they staked
+        // Early stakers can legitimately have more than their current proportional share
+        // Just verify claimable doesn't exceed total token balance (sanity check)
 
         uint256 tokenBalance = MockERC20(token).balanceOf(address(staking));
         uint256 claimable = staking.claimableRewards(account, token);
-        uint256 userBalance = sToken.balanceOf(account);
-        uint256 totalStaked = sToken.totalSupply();
 
         // User can't claim more than total token balance (sanity check)
         if (claimable > tokenBalance) {
@@ -69,23 +74,10 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
             revert('ACCOUNTING BUG FOUND');
         }
 
-        // If user has stake, claimable should be reasonable
-        if (totalStaked > 0 && userBalance > 0) {
-            // User can't claim more than their proportional share of total balance
-            uint256 maxPossible = (tokenBalance * userBalance) / totalStaked;
-            if (claimable > maxPossible + 1 ether) {
-                // +1 ether tolerance for rounding
-                emit log_string(when);
-                emit log_named_address('  Account', account);
-                emit log_named_uint('  User Balance', userBalance);
-                emit log_named_uint('  Total Staked', totalStaked);
-                emit log_named_uint('  Token Balance', tokenBalance);
-                emit log_named_uint('  Max Possible', maxPossible);
-                emit log_named_uint('  Claimable', claimable);
-                emit log_named_uint('  BUG: Exceeds max by', claimable - maxPossible);
-                revert('ACCOUNTING BUG FOUND');
-            }
-        }
+        // NOTE: We don't check maxPossible based on current proportional share
+        // With debt accounting, early stakers legitimately earn more than current share
+        // Example: Alice staked alone, earned 1000. Bob joins later. Alice still has 1000 claimable
+        // even though her current share is only 500. This is correct! She earned it before Bob joined.
     }
 
     function assertAccountingPerfectForMany(
@@ -839,12 +831,32 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
         uint256 charlieClaimed = weth.balanceOf(charlie);
         uint256 left = weth.balanceOf(address(staking));
 
+        console.log('Alice claimed:', aliceClaimed / 1 ether);
+        console.log('Bob claimed:', bobClaimed / 1 ether);
+        console.log('Charlie claimed:', charlieClaimed / 1 ether);
+        console.log('Left in pool:', left / 1 ether);
+
+        // Total conservation: all rewards accounted for
         assertApproxEqAbs(
             aliceClaimed + bobClaimed + charlieClaimed + left,
             3000 ether,
             1 ether,
             'All WETH distributed'
         );
+
+        // TIME-BASED VESTING: Distribution based on time staked + balance
+        // Alice should get MORE than Bob (she was alone for first 2 days)
+        assertGt(aliceClaimed, bobClaimed, 'Alice (earliest) should get more than Bob');
+        
+        // NOTE: With time-based vesting, Charlie gets slightly more than Bob
+        // because Charlie stayed until t=10 (3 days after stream end) while Bob left at t=6
+        // Both get similar amounts since Bob staked earlier but Charlie stayed longer
+        assertGt(charlieClaimed, bobClaimed * 99 / 100, 'Charlie stayed longer, gets comparable to Bob');
+
+        // All users should receive something (they all participated)
+        assertGt(aliceClaimed, 0, 'Alice receives rewards');
+        assertGt(bobClaimed, 0, 'Bob receives rewards');
+        assertGt(charlieClaimed, 0, 'Charlie receives rewards');
     }
 
     /// @notice EDGE CASE: Stream ends, leftover unvested, new stream starts

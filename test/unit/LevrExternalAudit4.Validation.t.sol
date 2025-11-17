@@ -208,6 +208,7 @@ contract LevrExternalAudit4ValidationTest is Test, LevrFactoryDeployHelper {
         // Wait for proposal window to close so voting can start
         uint32 proposalWindow = factory.proposalWindowSeconds(address(underlying));
         vm.warp(block.timestamp + proposalWindow + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes with her 5k tokens worth of VP
         // After 1 day, she has ~5000 token-days of voting power
@@ -500,6 +501,7 @@ contract LevrExternalAudit4ValidationTest is Test, LevrFactoryDeployHelper {
 
         // Wait for voting to start (use ORIGINAL timing from proposal, not new config)
         vm.warp(votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes (she has 1000e18 balance = 100% of supply)
         vm.prank(alice);
@@ -600,17 +602,17 @@ contract LevrExternalAudit4ValidationTest is Test, LevrFactoryDeployHelper {
             '%'
         );
 
-        // Note: Pool-based rewards mean Alice CAN be diluted, but this is expected behavior
-        // After investigation, this is NOT a vulnerability (standard DeFi design)
-        // This test documents the behavior - dilution can happen but is not exploitable
-        // See: test/unit/LevrHigh4Investigation.t.sol for full analysis
+        // FIXED: With new debt accounting system, Alice is PROTECTED from dilution
+        // Alice staked before rewards accrued, so her debt was set before attacker joined
+        // Attacker's stake doesn't dilute Alice because rewards are tracked per-user via debt
+        // This fix prevents the flash loan attack documented in spec/sherlock/
 
-        // Alice gets diluted amount (this is expected in pool-based systems)
+        // Alice gets her FULL share (not diluted by attacker's front-run)
         assertApproxEqRel(
             aliceReceived,
-            55.5e18, // Alice's diluted share (500/9000 of 1000 WETH)
-            0.1e18,
-            'Alice receives diluted share (expected pool-based behavior)'
+            500e18, // Alice's protected share (50% of rewards, she staked before attacker)
+            0.01e18, // 1% tolerance for rounding
+            'Alice receives her full share (protected by debt accounting)'
         );
     }
 

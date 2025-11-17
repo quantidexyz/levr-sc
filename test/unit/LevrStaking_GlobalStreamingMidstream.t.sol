@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console} from 'forge-std/console.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -14,7 +15,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Comprehensive tests for global streaming with midstream accruals
  * @dev CRITICAL: Verifies no fund loss when multiple tokens accrue at different times
  */
-contract LevrStaking_GlobalStreamingMidstreamTest is Test {
+contract LevrStaking_GlobalStreamingMidstreamTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
@@ -43,8 +44,19 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),
@@ -55,14 +67,8 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         weth = new MockERC20('Wrapped Ether', 'WETH');
         usdc = new MockERC20('USD Coin', 'USDC');
 
-        staking = new LevrStaking_v1(address(0));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked UND',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked UND', 'sUND', 18, address(underlying), address(staking));
 
         // Initialize staking with reward tokens already whitelisted
         address[] memory rewardTokens = new address[](2);
@@ -74,7 +80,6 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
             address(underlying),
             address(stakedToken),
             address(this),
-            address(factory),
             rewardTokens
         );
 
@@ -356,15 +361,24 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         console.log('Alice underlying:', aliceUnderlying);
         console.log('Bob underlying:', bobUnderlying);
 
-        // POOL-BASED: Claim timing affects distribution
+        // DEBT ACCOUNTING: Claim timing NO LONGER affects distribution
         uint256 totalWeth = aliceWeth + bobWeth;
         uint256 totalUnderlying = aliceUnderlying + bobUnderlying;
 
-        // Alice claims first, gets 50% of each pool
-        // Bob claims second, gets 50% of REMAINING pool
-        // Result: Alice gets more due to claim timing (expected behavior)
-        assertGt(aliceWeth, bobWeth, 'Alice claims first, gets more');
-        assertGt(aliceUnderlying, bobUnderlying, 'Alice claims first, gets more');
+        // With debt accounting, both get equal shares (50/50) regardless of claim order
+        // Alice and Bob both staked before rewards, so both have debt = 0
+        assertApproxEqAbs(
+            aliceWeth,
+            bobWeth,
+            1 ether,
+            'Equal stakes = equal WETH (debt accounting)'
+        );
+        assertApproxEqAbs(
+            aliceUnderlying,
+            bobUnderlying,
+            1 ether,
+            'Equal stakes = equal underlying'
+        );
 
         // Both should receive something
         assertGt(aliceWeth, 0, 'Alice gets WETH');
@@ -372,9 +386,9 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test {
         assertGt(aliceUnderlying, 0, 'Alice gets underlying');
         assertGt(bobUnderlying, 0, 'Bob gets underlying');
 
-        // Total claimed should be reasonable (some may remain in pool due to claim timing)
-        assertGt(totalWeth, 1000 ether, 'Significant WETH distributed');
-        assertGt(totalUnderlying, 500 ether, 'Significant underlying distributed');
+        // Total claimed should equal accrued (no remainder from claim timing with debt accounting)
+        assertApproxEqAbs(totalWeth, 2000 ether, 1 ether, 'All WETH distributed');
+        assertApproxEqAbs(totalUnderlying, 1000 ether, 1 ether, 'All underlying distributed');
     }
 
     /// @notice Test edge case: Accrue same token twice within same second

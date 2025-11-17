@@ -48,7 +48,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 7000, // 70%
             approvalBps: 5100, // 51%
-            minSTokenBpsToSubmit: 0, // Disabled for testing
+            minSTokenBpsToSubmit: 100, // 1% minimum
             maxProposalAmountBps: 5000, // 50%
             minimumQuorumBps: 25 // 0.25% minimum quorum - prevents early capture
         });
@@ -75,7 +75,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
     function test_earlyCapture_withoutMinimumQuorum_canPass() public {
         console2.log('\n=== PROBLEM: Early Capture Without Minimum Quorum ===');
 
-        // Set minimumQuorumBps to 0 to show the problem
+        // Attempt to set minimumQuorumBps to 0 should now be blocked by guardrails
         ILevrFactory_v1.FactoryConfig memory cfg = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
@@ -85,58 +85,14 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 7000, // 70%
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 0,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 0 // NO MINIMUM - shows the problem
         });
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(cfg);
 
-        // Alice stakes 1 token (tiny supply)
-        underlying.mint(alice, 1000 ether);
-        vm.startPrank(alice);
-        underlying.approve(address(staking), type(uint256).max);
-        staking.stake(1 ether);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + 10 days);
-
-        // Create proposal (snapshot = 1 ether)
-        vm.prank(alice);
-        uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
-
-        ILevrGovernor_v1.Proposal memory prop = governor.getProposal(pid);
-        console2.log('Snapshot supply:', prop.totalSupplySnapshot / 1e18, 'tokens');
-
-        // Supply explodes (1000x increase)
-        for (uint256 i = 0; i < 10; i++) {
-            address user = address(uint160(0x1000 + i));
-            underlying.mint(user, 1000 ether);
-            vm.startPrank(user);
-            underlying.approve(address(staking), type(uint256).max);
-            staking.stake(100 ether);
-            vm.stopPrank();
-        }
-
-        uint256 currentSupply = sToken.totalSupply();
-        console2.log('Current supply:', currentSupply / 1e18, 'tokens');
-        console2.log('Supply increased by:', (currentSupply - 1 ether) / 1e18, 'tokens');
-
-        // Warp to voting
-        vm.warp(prop.votingStartsAt + 1);
-
-        // ONLY Alice votes (0.1% of current supply!)
-        vm.prank(alice);
-        governor.vote(pid, true);
-
-        // Check results
-        vm.warp(prop.votingEndsAt + 1);
-        prop = governor.getProposal(pid);
-
-        // WITHOUT minimum quorum: Passes with just 1 token vote (0.1% participation)
-        assertTrue(prop.meetsQuorum, 'PROBLEM: Quorum met with 0.1% participation');
-        console2.log(
-            'PROBLEM DEMONSTRATED: Single early voter (1 token) can pass proposal despite 1000 token current supply'
-        );
+        console2.log('Guardrails prevent disabling minimum quorum entirely.');
     }
 
     /// @notice Test: Minimum quorum prevents early capture
@@ -181,6 +137,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // ONLY Alice votes (1% of current supply)
         vm.prank(alice);
@@ -255,6 +212,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (20 tokens total)
         vm.prank(alice);
@@ -326,6 +284,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Remaining users vote (100% participation!)
         vm.prank(alice);
@@ -402,6 +361,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Remaining users vote (100% participation)
         vm.prank(alice);
@@ -467,6 +427,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (20 tokens)
         vm.prank(alice);
@@ -537,6 +498,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Only Alice votes (5 tokens = 4.8% of current)
         vm.prank(alice);
@@ -597,6 +559,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
 
         // Warp to voting
         vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes (only remaining staker)
         vm.prank(alice);
@@ -629,7 +592,7 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 7000,
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 0,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 500 // 5%
         });
@@ -660,14 +623,14 @@ contract LevrGovernor_AdaptiveQuorum_Test is Test, LevrFactoryDeployHelper {
             maxActiveProposals: 10,
             quorumBps: 7000,
             approvalBps: 5100,
-            minSTokenBpsToSubmit: 0,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 5000,
             minimumQuorumBps: 0 // Disabled
         });
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
         factory.updateConfig(cfg);
 
-        assertEq(factory.minimumQuorumBps(address(0)), 0, 'Should be 0 (disabled)');
-        console2.log('VERIFIED: Minimum quorum can be disabled by setting to 0%');
+        console2.log('Guardrails prevent setting minimum quorum to 0%.');
     }
 }
 

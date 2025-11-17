@@ -2,76 +2,61 @@
 pragma solidity 0.8.30;
 
 /// @title RewardMath Library
-/// @notice Pure calculation functions for pool-based reward distribution
+/// @notice Pure calculation functions for time-based reward distribution
 /// @dev All reward math in one place - keeps staking contract clean
 library RewardMath {
-    /// @notice Calculate vested amount from streaming rewards
-    /// @param total Total amount to vest over the duration
+    /// @notice Calculate newly vested amount using time-based linear vesting
+    /// @dev Calculates vesting based on time elapsed from stream start, not remaining amount
+    /// @param originalTotal Original stream amount at stream start
+    /// @param alreadyVested Amount already vested from this stream
     /// @param start Stream start timestamp
     /// @param end Stream end timestamp
-    /// @param last Last update timestamp
     /// @param current Current timestamp
-    /// @return vested Amount that has vested since last update
-    /// @return newLast New last update timestamp (clamped to end)
-    function calculateVestedAmount(
-        uint256 total,
+    /// @return newlyVested Amount that has vested since last settlement
+    function calculateTimeBasedVesting(
+        uint256 originalTotal,
+        uint256 alreadyVested,
         uint64 start,
         uint64 end,
-        uint64 last,
         uint64 current
-    ) internal pure returns (uint256 vested, uint64 newLast) {
-        // No active stream
-        if (end == 0 || start == 0) return (0, last);
+    ) internal pure returns (uint256 newlyVested) {
+        if (end == 0 || start == 0 || originalTotal == 0) return 0;
 
-        // Determine the time range to calculate vesting for
-        uint64 from = last < start ? start : last;
-        uint64 to = current;
-        if (to > end) to = end;
-        if (to <= from) return (0, last);
+        uint64 settleTo = current > end ? end : current;
+        if (settleTo <= start) return 0;
 
         uint256 duration = end - start;
         require(duration != 0, 'ZERO_DURATION');
-        if (total == 0) return (0, to);
 
-        // Calculate vested amount linearly
-        vested = (total * (to - from)) / duration;
-        newLast = to;
+        uint256 timeElapsed = settleTo - start;
+
+        // Linear vesting: total vested = (original × timeElapsed) / duration
+        uint256 totalVestedNow = (originalTotal * timeElapsed) / duration;
+
+        // Return only newly vested amount since last settlement
+        if (totalVestedNow > alreadyVested) {
+            newlyVested = totalVestedNow - alreadyVested;
+        }
     }
 
-    /// @notice Calculate user's proportional share of pool
-    /// @param userBalance User's staked token balance
-    /// @param totalStaked Total staked token supply
-    /// @param availablePool Total claimable pool for this token
-    /// @return claimable User's claimable amount
-    function calculateProportionalClaim(
+    /// @notice Calculate pending rewards using debt accounting (MasterChef pattern)
+    /// @dev Prevents dilution attack by tracking what user has already accounted for
+    /// @param userBalance User's staked balance
+    /// @param accRewardPerShare Accumulated rewards per share (scaled by precision)
+    /// @param debtPerShare User's reward debt per share (what they've accounted for)
+    /// @param precision Scaling precision (e.g., 1e18)
+    /// @return pending Amount of pending claimable rewards
+    function calculatePendingRewards(
         uint256 userBalance,
-        uint256 totalStaked,
-        uint256 availablePool
-    ) internal pure returns (uint256 claimable) {
-        if (userBalance == 0 || totalStaked == 0 || availablePool == 0) return 0;
+        uint256 accRewardPerShare,
+        uint256 debtPerShare,
+        uint256 precision
+    ) internal pure returns (uint256 pending) {
+        if (userBalance == 0) return 0;
 
-        // User's share = (userBalance / totalStaked) × availablePool
-        // This is mathematically perfect: sum of all claims = pool
-        return (availablePool * userBalance) / totalStaked;
-    }
+        uint256 accumulatedRewards = (userBalance * accRewardPerShare) / precision;
+        uint256 debtAmount = (userBalance * debtPerShare) / precision;
 
-    /// @notice Calculate current available pool including vested rewards
-    /// @param basePool Current pool amount
-    /// @param streamTotal Total amount streaming
-    /// @param start Stream start timestamp
-    /// @param end Stream end timestamp
-    /// @param last Last update timestamp
-    /// @param current Current timestamp
-    /// @return totalPool Base pool + newly vested amount
-    function calculateCurrentPool(
-        uint256 basePool,
-        uint256 streamTotal,
-        uint64 start,
-        uint64 end,
-        uint64 last,
-        uint64 current
-    ) internal pure returns (uint256 totalPool) {
-        (uint256 vested, ) = calculateVestedAmount(streamTotal, start, end, last, current);
-        return basePool + vested;
+        pending = accumulatedRewards > debtAmount ? accumulatedRewards - debtAmount : 0;
     }
 }

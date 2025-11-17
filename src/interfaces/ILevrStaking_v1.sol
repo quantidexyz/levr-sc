@@ -15,25 +15,31 @@ interface ILevrStaking_v1 {
     /// @notice Basis points for APR calculations (10000 = 100%)
     function BASIS_POINTS() external view returns (uint256);
 
-    /// @notice Minimum reward amount to prevent DoS attack
+    /// @notice Minimum reward amount required to start a new stream
     function MIN_REWARD_AMOUNT() external view returns (uint256);
 
     // ============ Structs ============
 
-    /// @notice Pool-based token state - simple and efficient
+    /// @notice Reward token state with time-based linear vesting
     /// @param availablePool Current claimable pool (grows as rewards vest)
-    /// @param streamTotal Total amount to vest in current stream
+    /// @param streamTotal Remaining amount to vest in current stream
     /// @param lastUpdate Last streaming settlement timestamp
     /// @param exists Whether token is registered
     /// @param whitelisted Whether token is whitelisted (exempt from MAX_REWARD_TOKENS)
+    /// @param streamStart Per-token stream start timestamp
+    /// @param streamEnd Per-token stream end timestamp
+    /// @param originalStreamTotal Original stream amount at stream start (immutable during stream)
+    /// @param totalVested Total amount vested so far from current stream
     struct RewardTokenState {
         uint256 availablePool;
         uint256 streamTotal;
         uint64 lastUpdate;
         bool exists;
         bool whitelisted;
-        uint64 streamStart; // Per-token stream start (isolation fix for CRITICAL-3)
-        uint64 streamEnd; // Per-token stream end (isolation fix for CRITICAL-3)
+        uint64 streamStart;
+        uint64 streamEnd;
+        uint256 originalStreamTotal;
+        uint256 totalVested;
     }
 
     // ============ Errors ============
@@ -51,14 +57,13 @@ interface ILevrStaking_v1 {
     error CannotWhitelistWithPendingRewards();
     error CannotUnwhitelistUnderlying();
     error TokenNotRegistered();
-    error NotWhitelisted();
     error CannotUnwhitelistWithPendingRewards();
     error CannotRemoveUnderlying();
     error CannotRemoveWhitelisted();
-    error RewardsTillPending();
+    error RewardsStillPending();
     error RewardTooSmall();
     error TokenNotWhitelisted();
-    error InsufficientAvailable();
+    error InvalidTokenDecimals();
 
     // ============ Events ============
 
@@ -96,7 +101,14 @@ interface ILevrStaking_v1 {
     /// @notice Emitted when a token is removed from the whitelist
     event TokenUnwhitelisted(address indexed token);
 
-    // ============ State Variables ============
+    /// @notice Emitted when the staking contract is initialized
+    event Initialized(
+        address indexed underlying,
+        address indexed stakedToken,
+        address indexed treasury
+    );
+
+    // ============ Functions ============
 
     /// @notice The underlying token being staked
     function underlying() external view returns (address);
@@ -110,44 +122,47 @@ interface ILevrStaking_v1 {
     /// @notice The Levr factory instance
     function factory() external view returns (address);
 
-    // ============ Functions ============
-
     /// @notice Initialize staking module.
     /// @param underlying The underlying token to stake (auto-whitelisted - not in array)
     /// @param stakedToken The staked token to mint/burn
     /// @param treasury The treasury address
-    /// @param factory The Levr factory instance
     /// @param initialWhitelistedTokens Initial whitelist (e.g., WETH - excludes underlying)
+    /// @dev Factory address is set immutably in constructor to prevent front-run attacks
     function initialize(
         address underlying,
         address stakedToken,
         address treasury,
-        address factory,
         address[] memory initialWhitelistedTokens
     ) external;
 
     /// @notice Stake underlying; mints staked token to msg.sender.
+    /// @dev Handles fee-on-transfer tokens by measuring actual received amount.
+    ///      First staker resumes paused reward streams.
+    ///      Auto-claims existing rewards before staking more to prevent self-dilution.
+    /// @param amount Amount of underlying tokens to stake
     function stake(uint256 amount) external;
 
     /// @notice Unstake; burns staked token and returns underlying to `to`.
+    /// @dev Automatically claims all rewards before unstaking to prevent loss.
+    ///      Returns new voting power for UI convenience (reflects partial unstake impact).
     /// @param amount Amount to unstake
     /// @param to Address to receive the unstaked tokens
     /// @return newVotingPower The user's voting power after unstaking (useful for UI simulation)
     function unstake(uint256 amount, address to) external returns (uint256 newVotingPower);
 
     /// @notice Claim rewards for tokens to `to`.
+    /// @dev Pool-based rewards: user gets (balance/totalStaked) × available pool.
+    ///      Each token can have different decimals (handled in native units).
+    /// @param tokens Array of reward token addresses to claim
+    /// @param to Address to receive the claimed rewards
     function claimRewards(address[] calldata tokens, address to) external;
 
     /// @notice Accrue rewards for token
-    /// @dev Fee collection handled externally via SDK
+    /// @dev Permissionless: Anyone can trigger accrual of unaccounted token balances.
+    ///      Useful after fee collection or direct transfers to staking contract.
+    ///      Fee collection handled externally via SDK.
     /// @param token Reward token to accrue
     function accrueRewards(address token) external;
-
-    /// @notice Accrue rewards from treasury, optionally pulling tokens from treasury first.
-    /// @param token Reward token
-    /// @param amount Amount to accrue
-    /// @param pullFromTreasury If true, transfer `amount` from treasury before accrual
-    function accrueFromTreasury(address token, uint256 amount, bool pullFromTreasury) external;
 
     /// @notice Get outstanding rewards for a token - available rewards in the contract balance
     /// @param token The reward token to check
@@ -164,8 +179,6 @@ interface ILevrStaking_v1 {
     ) external view returns (uint256 claimable);
 
     /// @notice View streaming parameters.
-    function streamWindowSeconds() external view returns (uint32);
-
     /// @notice Get stream info for a specific reward token
     /// @param token The reward token address
     /// @return streamStart Per-token stream start timestamp
@@ -181,8 +194,7 @@ interface ILevrStaking_v1 {
     /// @notice Pool APR in basis points for the underlying token, annualized from current stream.
     function aprBps() external view returns (uint256);
 
-    /// @notice View functions.
-    function stakedBalanceOf(address account) external view returns (uint256);
+    /// @notice Total amount of underlying currently staked.
     function totalStaked() external view returns (uint256);
 
     /// @notice Escrow balance per token (non-reward reserves held for users).
@@ -194,6 +206,17 @@ interface ILevrStaking_v1 {
     /// @dev Only token admin can call - useful for trusted tokens like WETH, USDC
     ///      CANNOT modify underlying token (always whitelisted).
     ///      If token already exists, it MUST have no pending rewards (prevents state corruption).
+    ///
+    /// @dev WARNING - Token Re-addition Edge Case (User Responsibility):
+    ///      When a token is removed via cleanupFinishedRewardToken and then re-added via
+    ///      whitelistToken, the accRewardPerShare is reset to 0. Users with unclaimed rewards
+    ///      from before the removal will have their rewardDebt auto-reset on their next claim.
+    ///      However, if a user doesn't claim for an extended period after re-addition, the new
+    ///      accRewardPerShare may eventually reach or exceed their old rewardDebt value. In this
+    ///      case, the stale debt detection won't trigger, and the user will lose rewards accrued
+    ///      between re-addition and when the new accRewardPerShare surpasses the old debt.
+    ///      Users should claim rewards promptly after token re-addition to avoid this edge case.
+    ///
     /// @param token The token to whitelist (cannot be underlying)
     function whitelistToken(address token) external;
 
@@ -229,11 +252,18 @@ interface ILevrStaking_v1 {
     /// @return timestamp The timestamp when staking started
     function stakeStartTime(address user) external view returns (uint256 timestamp);
 
+    /// @notice Get the block number of the last stake action (MEV/flash-loan protection)
+    /// @param user The user address
+    /// @return blockNumber The block number of the last stake (0 if never staked)
+    function lastStakeBlock(address user) external view returns (uint256 blockNumber);
+
     /// @notice Calculate voting power for a user
     /// @dev VP = (staked balance × time staked) / (1e18 × 86400)
-    ///      Normalized to token-days for UI-friendly numbers
-    ///      Example: 1000 tokens staked for 100 days = 100,000 token-days
-    ///      Returns 0 if user has never staked or has unstaked completely
+    ///      Returns voting power in token-days (e.g., 1000 tokens × 100 days = 100,000 VP).
+    ///      Normalizes all balances to 18 decimals for fair cross-token governance.
+    ///      Examples: 1000 USDC (6 decimals) = 1000 DAI (18 decimals) in voting power.
+    ///      Normalized to token-days for UI-friendly numbers.
+    ///      Returns 0 if user has never staked or has unstaked completely.
     /// @param user The user address
     /// @return votingPower The user's voting power in token-days
     function getVotingPower(address user) external view returns (uint256 votingPower);

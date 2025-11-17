@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console2} from 'forge-std/console2.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -15,7 +16,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Verify that governance boost doesn't lose rewards when called mid-stream
  * @dev The boost path also calls _creditRewards(), so it had the same bug
  */
-contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
+contract LevrStakingV1GovernanceBoostMidstreamTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
@@ -40,19 +41,23 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
-        factory = new LevrFactory_v1(config, address(this), address(0), address(0), new address[](0));
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
+        factory = new LevrFactory_v1(config, bounds, address(this), address(0), address(0), new address[](0));
         underlying = new MockERC20('Underlying Token', 'UND');
 
         // Deploy treasury, staking, staked token
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        treasury = createTreasury(address(0), address(factory));
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked Token', 'sUND', 18, address(underlying), address(staking));
 
         // Initialize contracts
         vm.prank(address(factory));
@@ -60,7 +65,6 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
             address(underlying),
             address(stakedToken),
             address(treasury),
-            address(factory),
             new address[](0)
         );
 
@@ -78,7 +82,7 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
         underlying.mint(address(treasury), 1_000_000 * 1e18);
     }
 
-    /// @notice Test that treasury boost (accrueFromTreasury) mid-stream preserves unvested rewards
+    /// @notice Test that treasury boost via direct transfer mid-stream preserves unvested rewards
     function test_treasuryBoostMidstream_preservesUnvestedRewards() public {
         console2.log('=== TREASURY BOOST MID-STREAM TEST ===\n');
 
@@ -95,16 +99,15 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
         console2.log('  Vested: ~200K (1/3)');
         console2.log('  Unvested: ~400K (2/3)');
 
-        // Treasury boost: Simulate governance boost via accrueFromTreasury
+        // Treasury boost: Simulate governance boost via direct transfer + accrue
         console2.log('\nTreasury boost: 50K tokens');
 
         // Transfer from treasury to staking and accrue
         underlying.mint(address(staking), 50_000 * 1e18);
 
-        vm.prank(address(treasury));
-        staking.accrueFromTreasury(address(underlying), 50_000 * 1e18, false);
+        staking.accrueRewards(address(underlying));
 
-        console2.log('  accrueFromTreasury() called');
+        console2.log('  accrueRewards() called');
 
         // Complete the stream
         (, uint64 streamEnd, ) = staking.getTokenStreamInfo(address(underlying));
@@ -156,16 +159,14 @@ contract LevrStakingV1GovernanceBoostMidstreamTest is Test {
         // Boost 1: After 1 day
         vm.warp(block.timestamp + 1 days);
         underlying.mint(address(staking), 100_000 * 1e18);
-        vm.prank(address(treasury));
-        staking.accrueFromTreasury(address(underlying), 100_000 * 1e18, false);
+        staking.accrueRewards(address(underlying));
         totalAccrued += 100_000 * 1e18;
         console2.log('Boost 1 (day 1): 100K tokens');
 
         // Boost 2: After another day
         vm.warp(block.timestamp + 1 days);
         underlying.mint(address(staking), 50_000 * 1e18);
-        vm.prank(address(treasury));
-        staking.accrueFromTreasury(address(underlying), 50_000 * 1e18, false);
+        staking.accrueRewards(address(underlying));
         totalAccrued += 50_000 * 1e18;
         console2.log('Boost 2 (day 2): 50K tokens');
 

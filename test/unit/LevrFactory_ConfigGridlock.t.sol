@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -17,7 +18,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Tests if factory config changes can break processes or cause gridlocks
  * @dev Tests cleanup operations, recovery mechanisms, and extreme config values
  */
-contract LevrFactory_ConfigGridlockTest is Test {
+contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrGovernor_v1 internal governor;
     LevrStaking_v1 internal staking;
@@ -48,8 +49,19 @@ contract LevrFactory_ConfigGridlockTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),
@@ -57,16 +69,16 @@ contract LevrFactory_ConfigGridlockTest is Test {
         );
 
         // Deploy contracts
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0));
-        sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
-        governor = new LevrGovernor_v1(
+        treasury = createTreasury(address(0), address(factory));
+        staking = createStaking(address(0), address(factory));
+        sToken = createStakedToken('sTKN', 'sTKN', 18, address(underlying), address(staking));
+        governor = createGovernor(
+            address(0),
             address(factory),
             address(treasury),
             address(staking),
             address(sToken),
-            address(underlying),
-            address(0)
+            address(underlying)
         );
 
         // Initialize
@@ -77,7 +89,6 @@ contract LevrFactory_ConfigGridlockTest is Test {
             address(underlying),
             address(sToken),
             address(treasury),
-            address(factory),
             new address[](0)
         );
 
@@ -351,6 +362,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
         uint256 pid = governor.proposeBoost(address(underlying), 1000 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // During voting, change maxProposalAmountBps to 1% (would block this proposal if checked)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
@@ -423,6 +435,7 @@ contract LevrFactory_ConfigGridlockTest is Test {
 
         // Alice's existing proposal should still be votable/executable
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         vm.prank(alice);
         governor.vote(pid, true);

@@ -1,11 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 /// @title Levr Staked Token v1 Interface
 /// @notice ERC20 representing staked positions; mint/burn controlled by staking contract.
 interface ILevrStakedToken_v1 is IERC20 {
+    // ============ Errors ============
+
+    /// @notice Revert if caller is not the staking contract
+    error OnlyStaking();
+
+    /// @notice Revert if zero address provided
+    error ZeroAddress();
+
+    /// @notice Revert if attempting to modify underlying (staked tokens are non-transferable)
+    error CannotModifyUnderlying();
+
     // ============ Events ============
 
     /// @notice Emitted when tokens are minted to `to`.

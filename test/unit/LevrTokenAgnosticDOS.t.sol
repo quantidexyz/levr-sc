@@ -103,6 +103,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
 
         // Fast forward to voting
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote
         governor.vote(proposalId, true);
@@ -113,20 +114,31 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
 
         vm.stopPrank();
 
-        // Execute and verify it doesn't revert
-        governor.execute(proposalId);
-        console2.log('Execution completed (with internal failure)');
+        // Execute multiple times (will fail due to reverting token)
+        governor.execute(proposalId); // Attempt 1
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
+        governor.execute(proposalId); // Attempt 2
+        vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
+        governor.execute(proposalId); // Attempt 3
+        console2.log('Executed 3 times (all failed due to reverting token)');
 
-        // Verify cycle advanced
+        // NEW BEHAVIOR: Cycle does NOT auto-advance on failure
         uint256 newCycleId = governor.currentCycleId();
-        assertEq(newCycleId, cycleId + 1, 'Cycle should advance');
-        console2.log('New cycle:', newCycleId);
+        assertEq(newCycleId, cycleId, 'Cycle should NOT advance on failure');
+        console2.log('Cycle stayed at:', newCycleId);
 
-        // Verify proposal marked executed
+        // NEW BEHAVIOR: Proposal NOT marked executed (can retry)
         ILevrGovernor_v1.Proposal memory proposal = governor.getProposal(proposalId);
-        assertTrue(proposal.executed, 'Proposal should be marked executed');
+        assertFalse(proposal.executed, 'Proposal should NOT be marked executed');
+        
+        // Execution attempts tracked
+        assertEq(governor.executionAttempts(proposalId).count, 3, 'Should have 3 attempts');
+        
+        // Manual cycle advance (after 3 attempts)
+        governor.startNewCycle();
+        assertEq(governor.currentCycleId(), cycleId + 1, 'Cycle advances manually');
 
-        console2.log('RESULT: Cycle advanced despite reverting transfer');
+        console2.log('RESULT: Failed execution allows retry + manual advance');
     }
 
     /// @notice Test that execution failure emits ProposalExecutionFailed event
@@ -143,6 +155,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         vm.startPrank(alice);
         uint256 proposalId = governor.proposeBoost(address(revertingToken), 50 ether);
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         governor.vote(proposalId, true);
         vm.warp(block.timestamp + 5.1 days);
         vm.stopPrank();
@@ -159,6 +172,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         vm.startPrank(alice);
         uint256 proposalId = governor.proposeBoost(address(weth), 50 ether);
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         governor.vote(proposalId, true);
         vm.warp(block.timestamp + 5.1 days);
         vm.stopPrank();
@@ -427,6 +441,7 @@ contract LevrTokenAgnosticDOSTest is Test, LevrFactoryDeployHelper {
         // Create proposal to trigger accrueAll with many tokens
         uint256 proposalId = governor.proposeBoost(address(weth), 50 ether);
         vm.warp(block.timestamp + 2.1 days);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         governor.vote(proposalId, true);
         vm.warp(block.timestamp + 5.1 days);
         vm.stopPrank();

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -20,7 +21,7 @@ import {MockClankerToken} from '../mocks/MockClankerToken.sol';
  * @notice End-to-end tests for stuck-funds scenarios and recovery paths
  * @dev Tests multi-contract interactions and complete recovery flows
  */
-contract LevrV1_StuckFundsRecoveryTest is Test {
+contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 internal factory;
     LevrGovernor_v1 internal governor;
     LevrStaking_v1 internal staking;
@@ -56,25 +57,36 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),
             new address[](0)
         );
 
-        // Deploy contracts
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        staking = new LevrStaking_v1(address(0));
-        sToken = new LevrStakedToken_v1('sTKN', 'sTKN', 18, address(underlying), address(staking));
-        governor = new LevrGovernor_v1(
+        // Deploy contracts (factory = address(factory) to match initialization prank)
+        treasury = createTreasury(address(0), address(factory));
+        staking = createStaking(address(0), address(factory)); // factory matches prank below
+        sToken = createStakedToken('sTKN', 'sTKN', 18, address(underlying), address(staking));
+        governor = createGovernor(
+            address(0),
             address(factory),
             address(treasury),
             address(staking),
             address(sToken),
-            address(underlying),
-            address(0)
+            address(underlying)
         );
         feeSplitter = new LevrFeeSplitter_v1(address(clankerToken), address(this), address(0));
 
@@ -87,7 +99,6 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
             address(underlying),
             address(sToken),
             address(treasury),
-            address(factory),
             new address[](0)
         );
 
@@ -109,7 +120,6 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
                 verified: false
             });
     }
-
 
     // ============ E2E Stuck Funds Recovery Tests ============
 
@@ -145,6 +155,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         // 3. Voting window - only Bob votes (insufficient quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         vm.prank(bob);
         governor.vote(pid1, false); // Bob votes no (to create a failed proposal)
@@ -343,6 +354,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
 
         // 3. Both vote - but vote differently to ensure clear winner/loser
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Both vote YES on pidLarge (winner)
         vm.prank(alice);
@@ -365,20 +377,34 @@ contract LevrV1_StuckFundsRecoveryTest is Test {
         vm.warp(block.timestamp + 5 days);
 
         // 5. Large proposal fails - FIX [OCT-31-CRITICAL-1]: no longer reverts
-        // OLD: vm.expectRevert();
-        governor.execute(pidLarge);
+        // Execute 3 times to allow manual cycle advance (with explicit timing)
+        uint256 attemptDelay = 12 minutes; // 720 seconds, > 10 minute requirement
+        uint256 time1 = block.timestamp;
+        governor.execute(pidLarge); // Attempt 1
 
-        // Verify marked as executed (defeated)
+        uint256 time2 = time1 + attemptDelay;
+        vm.warp(time2);
+        governor.execute(pidLarge); // Attempt 2
+
+        uint256 time3 = time2 + attemptDelay;
+        vm.warp(time3);
+        governor.execute(pidLarge); // Attempt 3
+
+        // Verify NOT marked as executed (can retry, but allows manual advance after 3 attempts)
         assertEq(
             governor.getProposal(pidLarge).executed,
-            true,
-            'Large proposal should be executed'
+            false,
+            'Large proposal should NOT be executed (allows retry)'
         );
 
-        console2.log('Large proposal failed (insufficient balance, marked as defeated)');
+        console2.log('Large proposal failed 3 times (insufficient balance, allows manual advance)');
 
-        // 6. FIX [OCT-31-CRITICAL-1]: Cycle does NOT advance (defeated proposals don't trigger new cycle)
-        assertEq(governor.currentCycleId(), 1, 'Cycle unchanged (defeated proposals dont advance)');
+        // 6. FIX [OCT-31-CRITICAL-1]: Cycle does NOT auto-advance (failed proposals don't trigger new cycle)
+        assertEq(
+            governor.currentCycleId(),
+            1,
+            'Cycle unchanged (failed proposals dont auto-advance)'
+        );
 
         // Winner is pidLarge (only one that got YES votes)
         uint256 winner = governor.getWinner(1);

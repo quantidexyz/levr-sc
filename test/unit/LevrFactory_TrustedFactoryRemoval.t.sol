@@ -3,6 +3,7 @@ pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
 import {console2} from 'forge-std/console2.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
@@ -61,7 +62,7 @@ contract MockClankerFactory {
 
 /// @title Trusted Factory Removal Test
 /// @notice Tests that removing a Clanker factory from trusted list doesn't break existing projects
-contract LevrFactory_TrustedFactoryRemovalTest is Test {
+contract LevrFactory_TrustedFactoryRemovalTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrDeployer_v1 deployer;
     LevrForwarder_v1 forwarder;
@@ -75,9 +76,6 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
     ILevrFactory_v1.Project project1;
 
     function setUp() public {
-        // Deploy infrastructure
-        forwarder = new LevrForwarder_v1('Levr Forwarder');
-
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 50,
             streamWindowSeconds: 7 days,
@@ -92,18 +90,8 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
             minimumQuorumBps: 25
         });
 
-        // Predict factory address
-        uint64 nonce = vm.getNonce(address(this));
-        address predictedFactory = vm.computeCreateAddress(address(this), nonce + 1);
-
-        deployer = new LevrDeployer_v1(predictedFactory);
-        factory = new LevrFactory_v1(
-            config,
-            owner,
-            address(forwarder),
-            address(deployer),
-            new address[](0)
-        );
+        // Use the factory deployment helper to properly set up everything with correct nonce handling
+        (factory, forwarder, deployer) = deployFactory(config, address(this), address(0));
 
         // Deploy mock Clanker factory
         clankerFactory = new MockClankerFactory();
@@ -205,6 +193,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
 
         // Fast forward to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Vote
         vm.prank(alice);
@@ -271,7 +260,8 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test {
         token1.mint(project1.treasury, 10000 ether);
 
         vm.prank(project1.governor);
-        LevrTreasury_v1(project1.treasury).applyBoost(address(token1), 5000 ether);
+        LevrTreasury_v1(project1.treasury).transfer(address(token1), project1.staking, 5000 ether);
+        LevrStaking_v1(project1.staking).accrueRewards(address(token1));
 
         console2.log('Applied 5000 token boost to staking');
 

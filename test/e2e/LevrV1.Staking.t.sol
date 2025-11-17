@@ -48,9 +48,9 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 7,
-            quorumBps: 0, // No governance requirements for staking tests
-            approvalBps: 0, // No governance requirements for staking tests
-            minSTokenBpsToSubmit: 0,
+            quorumBps: 1, // Effectively disabled for staking tests
+            approvalBps: 1,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
@@ -96,12 +96,9 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test staking with treasury-funded boost rewards
      */
     function test_stake_with_treasury_boost() public {
-        (
-            address governor,
-            address treasury,
-            address staking,
-            
-        ) = _deployRegisterAndGet(address(factory));
+        (address governor, address treasury, address staking, ) = _deployRegisterAndGet(
+            address(factory)
+        );
 
         // Get tokens from LP locker - but LP locker has very little, so let's use deal instead
         // uint256 userTokens = _acquireFromLocker(address(this), 2000 ether);
@@ -133,6 +130,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Vote to make it winner (quorum=0, approval=0 for this test config)
         vm.warp(block.timestamp + 2 days + 1); // In voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         ILevrGovernor_v1(governor).vote(proposalId, true);
 
         vm.warp(block.timestamp + 5 days + 1); // Past voting window
@@ -175,12 +173,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @dev Uses actual Uniswap V4 swaps to generate fees and test ClankerFeeLocker integration
      */
     function test_staking_with_real_v4_swaps() public {
-        (
-            ,
-            ,
-            address staking,
-            address stakedToken
-        ) = _deployRegisterAndGet(address(factory));
+        (, , address staking, address stakedToken) = _deployRegisterAndGet(address(factory));
 
         // Get tokens from LP locker for testing - but use deal for realistic amounts
         // uint256 userTokens = _acquireFromLocker(address(this), 10000 ether);
@@ -194,11 +187,6 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         ILevrStaking_v1(staking).stake(stakeAmount);
 
         // Verify initial staking state
-        assertEq(
-            ILevrStaking_v1(staking).stakedBalanceOf(address(this)),
-            stakeAmount,
-            'Initial stake verification'
-        );
         assertEq(
             IERC20(stakedToken).balanceOf(address(this)),
             stakeAmount,
@@ -299,7 +287,6 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
                 } catch {
                     // Sell swap failed, but buy swap worked - that's still valuable validation
                 }
-
                 break; // Exit after one successful swap to avoid MEV/RPC issues
             } catch {
                 // Swap failed - continue to next iteration
@@ -374,11 +361,6 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
             'Unstake should return staked tokens'
         );
         assertEq(
-            ILevrStaking_v1(staking).stakedBalanceOf(address(this)),
-            0,
-            'Staked balance should be 0'
-        );
-        assertEq(
             IERC20(stakedToken).balanceOf(address(this)),
             0,
             'Staked token balance should be 0'
@@ -392,12 +374,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @dev Tests the fix for double-crediting issue in _claimFromClankerFeeLocker
      */
     function test_streaming_logic_fix() public {
-        (
-            ,
-            ,
-            address staking,
-            
-        ) = _deployRegisterAndGet(address(factory));
+        (, , address staking, ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
         uint256 userTokens = 10000 ether;
@@ -408,11 +385,8 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         ILevrStaking_v1(staking).stake(stakeAmount);
 
         // Verify initial state
-        assertEq(
-            ILevrStaking_v1(staking).stakedBalanceOf(address(this)),
-            stakeAmount,
-            'Should be staked'
-        );
+        address stakedTokenAddr = ILevrStaking_v1(staking).stakedToken();
+        assertEq(IERC20(stakedTokenAddr).balanceOf(address(this)), stakeAmount, 'Should be staked');
 
         // Simulate some WETH rewards being available for accrual
         uint256 rewardAmount = 1 ether;
@@ -491,12 +465,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @dev Tests that claimableRewards doesn't incorrectly show rewards for non-accrued tokens
      */
     function test_claimable_rewards_accuracy() public {
-        (
-            ,
-            ,
-            address staking,
-            
-        ) = _deployRegisterAndGet(address(factory));
+        (, , address staking, ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
         uint256 userTokens = 10000 ether;
@@ -612,12 +581,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @dev Demonstrates that SwapV4Helper properly integrates with production contracts
      */
     function test_swap_v4_helper_integration() public {
-        (
-            ,
-            ,
-            address staking,
-            
-        ) = _deployRegisterAndGet(address(factory));
+        (, , address staking, ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
         uint256 userTokens = 10000 ether;
@@ -650,13 +614,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
         });
 
         // Validate SwapV4Helper can read pool state correctly
-        (
-            uint160 sqrtPriceX96,
-            ,
-            ,
-            ,
-            
-        ) = swapHelper.getPoolInfo(poolKey);
+        (uint160 sqrtPriceX96, , , , ) = swapHelper.getPoolInfo(poolKey);
         assertTrue(sqrtPriceX96 > 0, 'Pool should have valid price');
 
         // Validate swap parameter construction
@@ -705,10 +663,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Test unstaking
         ILevrStaking_v1(staking).unstake(stakeAmount, address(this));
-        assertEq(
-            ILevrStaking_v1(staking).stakedBalanceOf(address(this)),
-            0,
-            'Should fully unstake'
-        );
+        address stakedTokenAddr2 = ILevrStaking_v1(staking).stakedToken();
+        assertEq(IERC20(stakedTokenAddr2).balanceOf(address(this)), 0, 'Should fully unstake');
     }
 }

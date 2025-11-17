@@ -49,6 +49,7 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
         vm.prank(user);
         uint256 pid = governor.proposeBoost(address(underlying), 5 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
         vm.warp(block.timestamp + 5 days + 1);
@@ -83,6 +84,7 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
         vm.prank(users[0]);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(users[i]);
@@ -106,11 +108,26 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
             uint256 pid = governor.proposeBoost(address(underlying), 10 + i * 5 ether);
             
             vm.warp(block.timestamp + 2 days + 1);
+            vm.roll(block.number + 1); // Advance blocks for voting eligibility
             vm.prank(user);
             governor.vote(pid, true);
             
             vm.warp(block.timestamp + 5 days + 1);
+            
+            // Execute (might fail due to RewardTooSmall)
             governor.execute(pid);
+            
+            // Check if proposal executed successfully
+            bool executed = governor.getProposal(pid).executed;
+            if (!executed) {
+                // Failed execution - need 3 attempts before manual advance
+                vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
+                governor.execute(pid); // Attempt 2
+                vm.warp(block.timestamp + 10 minutes + 1); // Wait for delay
+                governor.execute(pid); // Attempt 3
+                // Manually advance cycle (after 3 attempts)
+                governor.startNewCycle();
+            }
             
             vm.warp(block.timestamp + 2 days);
         }
@@ -127,6 +144,7 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
         vm.prank(user);
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, false);
         vm.warp(block.timestamp + 5 days + 1);
@@ -237,7 +255,7 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
         
         for (uint256 i = 0; i < 10; i++) {
             vm.prank(gov);
-            treasury.applyBoost(address(underlying), 1_000 ether);
+            treasury.transfer(address(underlying), address(staking), 1_000 ether);
         }
     }
 
@@ -250,7 +268,7 @@ contract Phase6_ExhaustiveStateSpaces_Test is Test, LevrFactoryDeployHelper {
                 treasury.transfer(address(underlying), address(uint160(0x5000 + i)), 100 ether);
             } else {
                 vm.prank(gov);
-                treasury.applyBoost(address(underlying), 500 ether);
+                treasury.transfer(address(underlying), address(staking), 500 ether);
             }
         }
     }

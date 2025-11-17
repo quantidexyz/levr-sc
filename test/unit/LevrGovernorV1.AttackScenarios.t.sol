@@ -140,6 +140,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Attackers vote YES (60% of tokens voting)
         vm.prank(attacker1);
@@ -282,6 +283,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // All whales vote YES
         vm.prank(attacker1);
@@ -371,6 +373,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Attacker votes YES (37%)
         vm.prank(attacker1);
@@ -490,6 +493,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // STRATEGIC VOTING: Attackers manipulate to make P2 the winner
 
@@ -570,8 +574,11 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
         );
         assertEq(treasuryBalanceBefore - treasuryBalanceAfter, 50_000 ether, 'Treasury drained');
         assertEq(underlying.balanceOf(maliciousRecipient), 50_000 ether, 'Attacker received funds');
+        
+        // Cycle does NOT auto-advance (advances on next propose)
+        assertEq(governor.currentCycleId(), 1, 'Cycle does NOT auto-advance');
 
-        // Verify other proposals CANNOT execute (not winner)
+        // Verify other proposals CANNOT execute (NotWinner, cycle hasn't advanced yet)
         vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
         governor.execute(pid1);
 
@@ -630,6 +637,7 @@ contract LevrGovernorV1_AttackScenarios is Test, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // All sybil wallets vote YES (75% guaranteed)
         for (uint256 i = 0; i < 10; i++) {

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console2} from 'forge-std/console2.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -9,7 +10,7 @@ import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
-contract LevrStakingV1AprSpikeTest is Test {
+contract LevrStakingV1AprSpikeTest is Test, LevrFactoryDeployHelper {
     // ---
     // CONSTANTS
 
@@ -46,8 +47,19 @@ contract LevrStakingV1AprSpikeTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),
@@ -59,14 +71,8 @@ contract LevrStakingV1AprSpikeTest is Test {
         weth = new MockERC20('Wrapped ETH', 'WETH');
 
         // Deploy staking and staked token
-        staking = new LevrStaking_v1(address(0));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked Token',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked Token', 'sUND', 18, address(underlying), address(staking));
 
         // Initialize staking only (stakedToken is immutable)
         // Must call from factory address
@@ -74,13 +80,7 @@ contract LevrStakingV1AprSpikeTest is Test {
         address[] memory rewardTokens = new address[](1);
         rewardTokens[0] = address(weth);
         vm.prank(address(factory));
-        staking.initialize(
-            address(underlying),
-            address(stakedToken),
-            treasury,
-            address(factory),
-            rewardTokens
-        );
+        staking.initialize(address(underlying), address(stakedToken), treasury, rewardTokens);
 
         // Setup alice with initial stake
         underlying.mint(alice, INITIAL_STAKE);
@@ -296,21 +296,14 @@ contract LevrStakingV1AprSpikeTest is Test {
         console2.log('=== APR WITH LOW TOTAL STAKE ===\n');
 
         // Create a new scenario with low stake
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
-        LevrStakedToken_v1 newStakedToken = new LevrStakedToken_v1(
-            'Staked Token Low',
-            'sUND2',
-            18,
-            address(underlying),
-            address(newStaking)
-        );
+        LevrStaking_v1 newStaking = createStaking(address(0), address(factory));
+        LevrStakedToken_v1 newStakedToken = createStakedToken('Staked Token Low', 'sUND2', 18, address(underlying), address(newStaking));
 
         vm.prank(address(factory));
         newStaking.initialize(
             address(underlying),
             address(newStakedToken),
             treasury,
-            address(factory),
             new address[](0)
         );
 
@@ -352,21 +345,14 @@ contract LevrStakingV1AprSpikeTest is Test {
         // totalStaked = (1000 * 365 / 3 * 10_000) / 12500
         // totalStaked ≈ 97,333 tokens
 
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
-        LevrStakedToken_v1 newStakedToken = new LevrStakedToken_v1(
-            'Staked Token 125',
-            'sUND3',
-            18,
-            address(underlying),
-            address(newStaking)
-        );
+        LevrStaking_v1 newStaking = createStaking(address(0), address(factory));
+        LevrStakedToken_v1 newStakedToken = createStakedToken('Staked Token 125', 'sUND3', 18, address(underlying), address(newStaking));
 
         vm.prank(address(factory));
         newStaking.initialize(
             address(underlying),
             address(newStakedToken),
             treasury,
-            address(factory),
             new address[](0)
         );
 

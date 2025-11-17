@@ -7,6 +7,9 @@ import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
 import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
 import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
+import {LevrTreasury_v1} from '../src/LevrTreasury_v1.sol';
+import {LevrStaking_v1} from '../src/LevrStaking_v1.sol';
+import {LevrGovernor_v1} from '../src/LevrGovernor_v1.sol';
 
 /**
  * @title DeployLevr
@@ -307,23 +310,39 @@ contract DeployLevr is Script {
         console.log('- Forwarder deployed at:', address(forwarder));
         console.log('');
 
-        // 2. Calculate the factory address before deploying deployer logic
-        // The factory will be deployed at nonce = vm.getNonce(params.deployer) + 1
-        // (current nonce is after forwarder, +1 for deployer logic, +1 for factory)
+        // 2. Calculate the factory address BEFORE deploying implementations
+        // The factory will be deployed at nonce = vm.getNonce(params.deployer) + 4
+        // (current nonce + forwarder=1, +3 implementations, +1 deployer logic, +1 factory)
         uint64 currentNonce = vm.getNonce(params.deployer);
-        address predictedFactory = vm.computeCreateAddress(params.deployer, currentNonce + 1);
+        address predictedFactory = vm.computeCreateAddress(params.deployer, currentNonce + 4);
         console.log('Predicted Factory Address:', predictedFactory);
         console.log('Current Deployer Nonce:', currentNonce);
         console.log('');
 
-        // 3. Deploy the deployer logic contract with predicted factory address
+        // 3. Deploy implementation contracts with real factory and forwarder addresses
+        console.log('Deploying implementation contracts...');
+        LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
+        LevrStaking_v1 stakingImpl = new LevrStaking_v1(address(forwarder), predictedFactory);
+        LevrGovernor_v1 governorImpl = new LevrGovernor_v1(address(forwarder), predictedFactory);
+        console.log('- Treasury Implementation:', address(treasuryImpl));
+        console.log('- Staking Implementation:', address(stakingImpl));
+        console.log('- Governor Implementation:', address(governorImpl));
+        console.log('- Note: StakedToken is deployed as new instance per project, not cloned');
+        console.log('');
+
+        // 4. Deploy the deployer logic contract with predicted factory address and implementations
         console.log('Deploying LevrDeployer_v1...');
-        LevrDeployer_v1 levrDeployer = new LevrDeployer_v1(predictedFactory);
+        LevrDeployer_v1 levrDeployer = new LevrDeployer_v1(
+            predictedFactory,
+            address(treasuryImpl),
+            address(stakingImpl),
+            address(governorImpl)
+        );
         console.log('- Deployer Logic deployed at:', address(levrDeployer));
         console.log('- Authorized Factory:', levrDeployer.authorizedFactory());
         console.log('');
 
-        // 4. Build initial whitelist (WETH always included)
+        // 5. Build initial whitelist (WETH always included)
         address weth = getWETH(block.chainid);
         address[] memory initialWhitelist = new address[](1);
         initialWhitelist[0] = weth;
@@ -331,10 +350,21 @@ contract DeployLevr is Script {
         console.log('- WETH:', weth);
         console.log('');
 
-        // 5. Deploy the factory with forwarder, deployer logic, and initial whitelist
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1 days,
+            minProposalWindowSeconds: 6 hours,
+            minVotingWindowSeconds: 2 days,
+            minQuorumBps: 2000,
+            minApprovalBps: 5000,
+            minMinSTokenBpsToSubmit: 100,
+            minMinimumQuorumBps: 25
+        });
+
+        // 6. Deploy the factory with forwarder, deployer logic, and initial whitelist
         console.log('Deploying LevrFactory_v1...');
         LevrFactory_v1 factory = new LevrFactory_v1(
             config,
+            bounds,
             params.deployer,
             address(forwarder),
             address(levrDeployer),

@@ -13,63 +13,81 @@ import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 
 /// @title Levr Governor v1
 /// @notice Time-weighted voting governance with cycle-based proposal management
+/// @dev Key features:
+///      - Proposals belong to cycles and expire when cycle advances
+///      - Failed executions can be retried immediately (no permanent state corruption)
+///      - Successful execution auto-advances to next cycle
+///      - Failed execution requires manual cycle advancement after 3 attempts
+///      - Prevents EIP-150 gas griefing and malicious token DoS attacks
 contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBase {
+    // ============ Constants ============
+
+    /// @inheritdoc ILevrGovernor_v1
+    uint32 public constant EXECUTION_ATTEMPT_DELAY = 10 minutes;
+
     // ============ Immutable Storage ============
 
+    /// @inheritdoc ILevrGovernor_v1
     address public immutable factory;
-    address public immutable treasury;
-    address public immutable staking;
-    address public immutable stakedToken;
-    address public immutable underlying;
 
     // ============ Mutable Storage ============
 
+    /// @inheritdoc ILevrGovernor_v1
+    address public treasury;
+
+    /// @inheritdoc ILevrGovernor_v1
+    address public staking;
+
+    /// @inheritdoc ILevrGovernor_v1
+    address public stakedToken;
+
+    /// @inheritdoc ILevrGovernor_v1
+    address public underlying;
+    bool private _initialized;
+
     uint256 private _proposalCount;
-    uint256 private _currentCycleId;
 
-    // Governance cycle timing
-    struct Cycle {
-        uint256 proposalWindowStart;
-        uint256 proposalWindowEnd;
-        uint256 votingWindowEnd;
-        bool executed; // Track if a proposal has been executed for this cycle
-    }
+    /// @inheritdoc ILevrGovernor_v1
+    uint256 public currentCycleId;
 
-    mapping(uint256 => Cycle) private _cycles;
+    mapping(uint256 => ILevrGovernor_v1.Cycle) private _cycles;
     mapping(uint256 => ILevrGovernor_v1.Proposal) private _proposals;
     mapping(uint256 => mapping(address => ILevrGovernor_v1.VoteReceipt)) private _voteReceipts;
-
-    // Track active proposals per type
     mapping(ILevrGovernor_v1.ProposalType => uint256) private _activeProposalCount;
-
-    // Proposals per cycle for winner determination
     mapping(uint256 => uint256[]) private _cycleProposals;
-
-    // Track if user has proposed a type in a cycle: cycleId => proposalType => user => hasProposed
     mapping(uint256 => mapping(ILevrGovernor_v1.ProposalType => mapping(address => bool)))
         private _hasProposedInCycle;
+    mapping(uint256 => ILevrGovernor_v1.ExecutionAttemptInfo) private _executionAttempts;
 
     // ============ Constructor ============
 
-    constructor(
-        address factory_,
+    constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
+        if (factory_ == address(0)) revert InvalidRecipient();
+        factory = factory_;
+    }
+
+    /// @notice Initialize the cloned governor
+    /// @dev Can only be called once per clone. Only callable by factory to prevent frontrunning.
+    function initialize(
         address treasury_,
         address staking_,
         address stakedToken_,
-        address underlying_,
-        address trustedForwarder
-    ) ERC2771ContextBase(trustedForwarder) {
-        if (factory_ == address(0)) revert InvalidRecipient();
+        address underlying_
+    ) external {
+        if (_initialized) revert AlreadyInitialized();
+        if (_msgSender() != factory) revert ILevrGovernor_v1.OnlyFactory();
         if (treasury_ == address(0)) revert InvalidRecipient();
         if (staking_ == address(0)) revert InvalidRecipient();
         if (stakedToken_ == address(0)) revert InvalidRecipient();
         if (underlying_ == address(0)) revert InvalidRecipient();
 
-        factory = factory_;
+        _initialized = true;
         treasury = treasury_;
         staking = staking_;
         stakedToken = stakedToken_;
         underlying = underlying_;
+
+        emit Initialized(treasury_, staking_, stakedToken_, underlying_);
     }
 
     // ============ External Functions ============
@@ -111,7 +129,14 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         uint256 votes = ILevrStaking_v1(staking).getVotingPower(voter);
         if (votes == 0) revert InsufficientVotingPower();
 
+        // Get balance for quorum
         uint256 voterBalance = IERC20(stakedToken).balanceOf(voter);
+
+        // Prevent flash loan attacks by requiring at least 1 block since last stake
+        // Flash loans cannot span multiple blocks, so this protects against manipulation
+        uint256 lastStake = ILevrStaking_v1(staking).lastStakeBlock(voter);
+        uint256 minBlocksSinceStake = 1;
+        if (block.number < lastStake + minBlocksSinceStake) revert StakeActionTooRecent();
 
         // Two-tier system: VP for approval (merit), balance for quorum (participation)
         if (support) {
@@ -132,11 +157,9 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     /// @inheritdoc ILevrGovernor_v1
     function startNewCycle() external {
-        // Permissionless cycle recovery if current cycle has ended
-        if (_currentCycleId == 0) {
-            _startNewCycle();
-        } else if (_needsNewCycle()) {
-            _checkNoExecutableProposals();
+        if (_needsNewCycle()) {
+            // Manual cycle advancement requires 3+ failed execution attempts
+            _checkNoExecutableProposals(true);
             _startNewCycle();
         } else {
             revert CycleStillActive();
@@ -147,55 +170,52 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     function execute(uint256 proposalId) external nonReentrant {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
 
-        // Check voting ended
+        // Verify voting has ended
         if (block.timestamp <= proposal.votingEndsAt) {
             revert VotingNotEnded();
         }
 
-        // Check not already executed
-        if (proposal.executed) {
-            revert AlreadyExecuted();
+        // Verify proposal is from current cycle
+        // Allows retry attempts within the same cycle
+        if (proposal.cycleId != currentCycleId) {
+            revert ProposalNotInCurrentCycle();
         }
 
-        // Defeat if quorum not met (state persists to prevent retry attacks)
+        // Enforce delay between execution attempts to prevent griefing
+        ILevrGovernor_v1.ExecutionAttemptInfo storage attemptInfo = _executionAttempts[proposalId];
+        if (attemptInfo.lastAttemptTime > 0) {
+            if (block.timestamp < attemptInfo.lastAttemptTime + EXECUTION_ATTEMPT_DELAY) {
+                revert ExecutionAttemptTooSoon();
+            }
+        }
+
+        // Mark as defeated if quorum not met
         if (!_meetsQuorum(proposalId)) {
             proposal.executed = true;
             emit ProposalDefeated(proposalId);
             return;
         }
 
-        // Defeat if approval not met
+        // Mark as defeated if approval threshold not met
         if (!_meetsApproval(proposalId)) {
             proposal.executed = true;
             emit ProposalDefeated(proposalId);
             return;
         }
 
-        // Defeat if treasury lacks sufficient balance
-        uint256 treasuryBalance = IERC20(proposal.token).balanceOf(treasury);
-        if (treasuryBalance < proposal.amount) {
-            proposal.executed = true;
-            emit ProposalDefeated(proposalId);
-            return;
-        }
-
-        // Check this is the winner for the cycle
+        // Verify this is the winning proposal for the cycle
         uint256 winnerId = _getWinner(proposal.cycleId);
         if (winnerId != proposalId) {
             revert NotWinner();
         }
 
-        // Mark cycle as having executed a proposal
-        Cycle storage cycle = _cycles[proposal.cycleId];
+        // Verify cycle hasn't already executed a proposal
+        ILevrGovernor_v1.Cycle storage cycle = _cycles[proposal.cycleId];
         if (cycle.executed) {
             revert AlreadyExecuted();
         }
-        cycle.executed = true;
 
-        // Mark executed before external calls (prevents reverting tokens from blocking cycle)
-        proposal.executed = true;
-
-        // Execute proposal (try-catch handles reverting tokens gracefully)
+        // Attempt execution with graceful failure handling
         try
             this._executeProposal(
                 proposalId,
@@ -205,33 +225,42 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
                 proposal.recipient
             )
         {
+            // Execution succeeded
+            proposal.executed = true;
+            cycle.executed = true;
             emit ProposalExecuted(proposalId, _msgSender());
-        } catch Error(string memory reason) {
-            emit ProposalExecutionFailed(proposalId, reason);
-        } catch (bytes memory) {
-            emit ProposalExecutionFailed(proposalId, 'execution_reverted');
+        } catch {
+            // Execution failed - track attempt and allow retry after delay
+            attemptInfo.count++;
+            attemptInfo.lastAttemptTime = uint64(block.timestamp);
+            emit ProposalExecutionFailed(proposalId, 'execution_failed');
         }
-
-        // Automatically start new cycle after execution attempt (executor pays gas)
-        _startNewCycle();
     }
 
-    /// @notice Internal execution helper (external visibility for try-catch pattern)
+    /// @notice Internal execution helper (external visibility required for try-catch pattern)
     /// @dev Only callable by this contract to prevent unauthorized treasury access
+    /// @param proposalType Type of proposal (BoostStakingPool or TransferToAddress)
+    /// @param token ERC20 token address
+    /// @param amount Amount to transfer
+    /// @param recipient Recipient address (for TransferToAddress type)
     function _executeProposal(
-        uint256, // proposalId - unused but kept for future extensibility
+        uint256, // proposalId - reserved for future use
         ProposalType proposalType,
         address token,
         uint256 amount,
         address recipient
     ) external {
-        // Only callable by this contract (via try-catch)
+        // Only callable by this contract
         if (_msgSender() != address(this)) revert ILevrGovernor_v1.InternalOnly();
 
         if (proposalType == ProposalType.BoostStakingPool) {
-            ILevrTreasury_v1(treasury).applyBoost(token, amount);
+            ILevrTreasury_v1(treasury).transfer(token, staking, amount);
+            // Accrual is permissionless; swallow errors so boosts can't be blocked
+            try ILevrStaking_v1(staking).accrueRewards(token) {} catch {}
         } else if (proposalType == ProposalType.TransferToAddress) {
             ILevrTreasury_v1(treasury).transfer(token, recipient, amount);
+        } else {
+            revert InvalidProposalType();
         }
     }
 
@@ -265,8 +294,10 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
     }
 
     /// @inheritdoc ILevrGovernor_v1
-    function currentCycleId() external view returns (uint256) {
-        return _currentCycleId;
+    function executionAttempts(
+        uint256 proposalId
+    ) external view returns (ExecutionAttemptInfo memory) {
+        return _executionAttempts[proposalId];
     }
 
     /// @inheritdoc ILevrGovernor_v1
@@ -303,17 +334,17 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
         address proposer = _msgSender();
 
-        // Auto-start new cycle if needed (prevents orphaning executable proposals)
-        if (_currentCycleId == 0 || _needsNewCycle()) {
-            _checkNoExecutableProposals();
+        // Auto-start new cycle if needed
+        if (_needsNewCycle()) {
+            _checkNoExecutableProposals(false);
             _startNewCycle();
         }
 
-        uint256 cycleId = _currentCycleId;
+        uint256 cycleId = currentCycleId;
 
         // Validate proposal timing
         {
-            Cycle memory cycle = _cycles[cycleId];
+            ILevrGovernor_v1.Cycle memory cycle = _cycles[cycleId];
             if (
                 block.timestamp < cycle.proposalWindowStart ||
                 block.timestamp > cycle.proposalWindowEnd
@@ -347,7 +378,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
-        // Rate limiting: max proposals per type, one per user per type per cycle
+        // Enforce rate limits
         if (
             _activeProposalCount[proposalType] >=
             ILevrFactory_v1(factory).maxActiveProposals(underlying)
@@ -358,11 +389,11 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             revert AlreadyProposedInCycle();
         }
 
-        // Create proposal with config snapshots (prevents manipulation)
+        // Create proposal with snapshotted configuration
         proposalId = ++_proposalCount;
 
         {
-            Cycle memory cycle = _cycles[cycleId];
+            ILevrGovernor_v1.Cycle memory cycle = _cycles[cycleId];
             _proposals[proposalId] = Proposal({
                 id: proposalId,
                 proposalType: proposalType,
@@ -403,16 +434,36 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         );
     }
 
+    /// @notice Computes the current state of a proposal
+    /// @dev State transitions: Pending → Active → (Succeeded|Defeated) → Executed
+    ///      In cycle-based governance, only the winner can succeed
+    /// @param proposalId The proposal ID to check
+    /// @return The current proposal state
     function _state(uint256 proposalId) internal view returns (ProposalState) {
         ILevrGovernor_v1.Proposal storage proposal = _proposals[proposalId];
 
-        if (proposal.id == 0) revert InvalidProposalType();
+        if (proposal.id == 0) revert ProposalNotFound();
+
+        // Terminal state: Executed (only set on successful execution)
         if (proposal.executed) return ProposalState.Executed;
+
+        // Proposals from previous cycles are expired and cannot be executed
+        if (proposal.cycleId < currentCycleId) {
+            return ProposalState.Defeated;
+        }
+
+        // Time-based states
         if (block.timestamp < proposal.votingStartsAt) return ProposalState.Pending;
         if (block.timestamp <= proposal.votingEndsAt) return ProposalState.Active;
 
-        // After voting: check quorum and approval
+        // Post-voting states: Check if proposal met voting thresholds
         if (!_meetsQuorum(proposalId) || !_meetsApproval(proposalId)) {
+            return ProposalState.Defeated;
+        }
+
+        // Only the cycle winner can succeed; non-winners are defeated
+        uint256 winnerId = _getWinner(proposal.cycleId);
+        if (winnerId != proposalId) {
             return ProposalState.Defeated;
         }
 
@@ -472,7 +523,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
                 uint256 totalVotes = proposal.yesVotes + proposal.noVotes;
                 if (totalVotes == 0) continue;
 
-                // Use approval ratio (not absolute votes) to prevent strategic NO voting
+                // Winner determined by approval ratio to prevent strategic voting
                 uint256 approvalRatio = (proposal.yesVotes * 10000) / totalVotes;
 
                 if (approvalRatio > bestApprovalRatio) {
@@ -482,34 +533,33 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
             }
         }
 
-        return winnerId; // 0 if no winner
+        return winnerId;
     }
 
-    /// @dev Check if a new cycle needs to be started
+    /// @dev Determine if a new cycle should be started
     function _needsNewCycle() internal view returns (bool) {
-        if (_currentCycleId == 0) return true;
+        if (currentCycleId == 0) return true;
 
-        Cycle memory cycle = _cycles[_currentCycleId];
-
-        // New cycle needed if voting window has ended
+        ILevrGovernor_v1.Cycle memory cycle = _cycles[currentCycleId];
         return block.timestamp > cycle.votingWindowEnd;
     }
 
-    /// @dev Start a new governance cycle
+    /// @notice Starts a new governance cycle
+    /// @dev Called automatically when proposing after voting ends, or manually via startNewCycle()
     function _startNewCycle() internal {
         uint32 proposalWindow = ILevrFactory_v1(factory).proposalWindowSeconds(underlying);
         uint32 votingWindow = ILevrFactory_v1(factory).votingWindowSeconds(underlying);
 
-        uint256 cycleId = ++_currentCycleId;
+        uint256 cycleId = ++currentCycleId;
         uint256 start = block.timestamp;
         uint256 proposalEnd = start + proposalWindow;
         uint256 voteEnd = proposalEnd + votingWindow;
 
-        // Reset proposal counts (proposals are cycle-scoped)
+        // Reset proposal counts for the new cycle
         _activeProposalCount[ProposalType.BoostStakingPool] = 0;
         _activeProposalCount[ProposalType.TransferToAddress] = 0;
 
-        _cycles[cycleId] = Cycle({
+        _cycles[cycleId] = ILevrGovernor_v1.Cycle({
             proposalWindowStart: start,
             proposalWindowEnd: proposalEnd,
             votingWindowEnd: voteEnd,
@@ -519,17 +569,37 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
         emit CycleStarted(cycleId, start, proposalEnd, voteEnd);
     }
 
-    /// @dev Prevent cycle advancement if executable proposals remain (prevents orphaning)
-    function _checkNoExecutableProposals() internal view {
-        uint256[] memory proposals = _cycleProposals[_currentCycleId];
+    /// @notice Validates that cycle advancement is safe
+    /// @dev Prevents advancing while proposals are active or executable
+    /// @param enforceAttempts If true, allow advancement after 3+ failed execution attempts
+    function _checkNoExecutableProposals(bool enforceAttempts) internal view {
+        uint256[] memory proposals = _cycleProposals[currentCycleId];
+
         for (uint256 i = 0; i < proposals.length; i++) {
             uint256 pid = proposals[i];
             ILevrGovernor_v1.Proposal storage proposal = _proposals[pid];
 
+            // Skip already executed proposals
             if (proposal.executed) continue;
 
-            if (_state(pid) == ProposalState.Succeeded) {
+            ProposalState currentState = _state(pid);
+
+            // Block if voting is still in progress
+            if (currentState == ProposalState.Pending || currentState == ProposalState.Active) {
                 revert ExecutableProposalsRemaining();
+            }
+
+            // Block if proposal succeeded and hasn't been executed
+            if (currentState == ProposalState.Succeeded) {
+                if (!enforceAttempts) {
+                    // Auto-advancement: must execute winning proposal first
+                    revert ExecutableProposalsRemaining();
+                } else {
+                    // Manual advancement: require 3+ failed attempts
+                    if (_executionAttempts[pid].count < 3) {
+                        revert ExecutableProposalsRemaining();
+                    }
+                }
             }
         }
     }

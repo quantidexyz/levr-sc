@@ -407,7 +407,6 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
             address(clankerToken),
             project.stakedToken,
             project.treasury,
-            address(factory),
             emptyRewardTokens
         );
     }
@@ -491,7 +490,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
 
         vm.prank(address(this)); // Owner
         factory.updateConfig(newConfig);
-        
+
         // Verify no error on update
         assertTrue(true);
     }
@@ -514,12 +513,12 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
 
         vm.prank(address(this));
         factory.updateConfig(newConfig);
-        
+
         // Register project after update
         factory.prepareForDeployment();
         MockERC20 token = new MockERC20('Token', 'TKN');
         ILevrFactory_v1.Project memory project = factory.register(address(token));
-        
+
         assertEq(project.treasury, project.treasury);
     }
 
@@ -642,7 +641,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
             );
             factory.register(address(token));
         }
-        
+
         assertTrue(true);
     }
 
@@ -659,7 +658,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
             vm.prank(address(this));
             factory.verifyProject(address(token));
         }
-        
+
         assertTrue(true);
     }
 

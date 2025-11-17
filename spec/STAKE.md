@@ -546,7 +546,7 @@ Admin Flow:
 | `CannotUnwhitelistWithPendingRewards()` | Pending rewards exist             | Settle rewards first          |
 | `CannotRemoveUnderlying()`              | Tried to remove underlying        | Underlying cannot be removed  |
 | `CannotRemoveWhitelisted()`             | Tried to remove whitelisted token | Unwhitelist first             |
-| `RewardsTillPending()`                  | Pending rewards exist             | Settle all rewards first      |
+| `RewardsStillPending()`                 | Pending rewards exist             | Settle all rewards first      |
 | `RewardTooSmall()`                      | < MIN_REWARD_AMOUNT               | Use larger reward amount      |
 | `TokenNotWhitelisted()`                 | Token not whitelisted for rewards | Whitelist token first         |
 | `InsufficientAvailable()`               | Not enough rewards available      | Add more rewards first        |
@@ -589,6 +589,13 @@ event TokenUnwhitelisted(address indexed token)
 
 event RewardTokenRemoved(address indexed token)
   ↓ Emitted when finished token cleaned up
+
+event Initialized(
+  address indexed underlying,
+  address indexed stakedToken,
+  address indexed treasury
+)
+  ↓ Emitted once when the factory initializes the staking module
 ```
 
 ---

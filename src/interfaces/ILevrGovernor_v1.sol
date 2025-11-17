@@ -17,9 +17,9 @@ interface ILevrGovernor_v1 {
     enum ProposalState {
         Pending, // Created, voting not started
         Active, // Voting in progress
-        Succeeded, // Eligible for execution
+        Succeeded, // Eligible for execution (can be retried if previous attempts failed)
         Defeated, // Quorum or approval not met
-        Executed // Winner executed on-chain
+        Executed // Winner executed successfully (funds transferred)
     }
 
     // ============ Structs ============
@@ -38,8 +38,8 @@ interface ILevrGovernor_v1 {
         uint256 votingEndsAt; // Timestamp when voting ends
         uint256 yesVotes; // Total yes votes (VP)
         uint256 noVotes; // Total no votes (VP)
-        uint256 totalBalanceVoted; // Total sToken balance that voted (for quorum)
-        bool executed; // Whether proposal has been executed
+        uint256 totalBalanceVoted; // Total voting power that voted (for quorum, flash loan protected)
+        bool executed; // Whether proposal was successfully executed (funds transferred)
         uint256 cycleId; // Governance cycle ID
         ProposalState state; // Current state (computed)
         bool meetsQuorum; // Whether quorum threshold met (computed)
@@ -54,6 +54,20 @@ interface ILevrGovernor_v1 {
         bool hasVoted; // Whether user has voted
         bool support; // True = yes, false = no
         uint256 votes; // Voting power used
+    }
+
+    /// @notice Execution attempt info for a proposal
+    struct ExecutionAttemptInfo {
+        uint8 count; // Number of failed execution attempts
+        uint64 lastAttemptTime; // Timestamp of last attempt (0 if never attempted)
+    }
+
+    /// @notice Per-cycle governance timing and execution status
+    struct Cycle {
+        uint256 proposalWindowStart;
+        uint256 proposalWindowEnd;
+        uint256 votingWindowEnd;
+        bool executed;
     }
 
     // ============ Errors ============
@@ -97,6 +111,9 @@ interface ILevrGovernor_v1 {
     /// @notice Insufficient voting power to vote
     error InsufficientVotingPower();
 
+    /// @notice Stake or unstake action too recent (MEV protection)
+    error StakeActionTooRecent();
+
     /// @notice Cycle is still active, cannot start new one
     error CycleStillActive();
 
@@ -109,8 +126,23 @@ interface ILevrGovernor_v1 {
     /// @notice Proposal amount exceeds maximum allowed percentage of treasury balance
     error ProposalAmountExceedsLimit();
 
+    /// @notice Proposal does not exist
+    error ProposalNotFound();
+
     /// @notice Function is internal only (cannot be called directly)
     error InternalOnly();
+
+    /// @notice Only the factory can call this function
+    error OnlyFactory();
+
+    /// @notice Proposal is not in the current cycle (cannot execute old proposals)
+    error ProposalNotInCurrentCycle();
+
+    /// @notice Contract is already initialized (double initialization prevented)
+    error AlreadyInitialized();
+
+    /// @notice Execution attempt too soon after previous attempt (anti-griefing delay)
+    error ExecutionAttemptTooSoon();
 
     // ============ Events ============
 
@@ -165,7 +197,25 @@ interface ILevrGovernor_v1 {
         uint256 votingWindowEnd
     );
 
+    /// @notice Emitted when the governor is initialized
+    /// @param treasury Treasury address
+    /// @param staking Staking contract address
+    /// @param stakedToken Staked token address
+    /// @param underlying Underlying token address
+    event Initialized(address treasury, address staking, address stakedToken, address underlying);
+
     // ============ Functions ============
+
+    /// @notice Minimum delay between execution attempts
+    function EXECUTION_ATTEMPT_DELAY() external view returns (uint32);
+
+    /// @notice Initialize the cloned governor (clone-only, called once by factory).
+    function initialize(
+        address treasury_,
+        address staking_,
+        address stakedToken_,
+        address underlying_
+    ) external;
 
     /// @notice Create a proposal to boost the staking pool
     /// @dev Requires minimum staked balance (minSTokenBpsToSubmit)
@@ -245,6 +295,14 @@ interface ILevrGovernor_v1 {
     /// @return cycleId The current cycle ID (0 if no active cycle)
     function currentCycleId() external view returns (uint256 cycleId);
 
+    /// @notice Get execution attempt info for a proposal
+    /// @dev Used to determine if manual cycle advancement is allowed (requires 3+ attempts)
+    /// @param proposalId The proposal ID
+    /// @return info Execution attempt info (count and last attempt timestamp)
+    function executionAttempts(
+        uint256 proposalId
+    ) external view returns (ExecutionAttemptInfo memory info);
+
     /// @notice Get the winning proposal for a cycle
     /// @dev Returns the proposal with highest yes votes that met quorum + approval
     /// @param cycleId The cycle ID
@@ -281,4 +339,8 @@ interface ILevrGovernor_v1 {
     /// @notice Get the staked token address
     /// @return The staked token address (for balance checks)
     function stakedToken() external view returns (address);
+
+    /// @notice Get the underlying token address managed by this governor
+    /// @return The underlying token address
+    function underlying() external view returns (address);
 }

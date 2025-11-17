@@ -50,8 +50,8 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         rewardToken = new MockERC20('Reward', 'RWD');
         factory = address(this);
 
-        staking = new LevrStaking_v1(address(0));
-        sToken = new LevrStakedToken_v1(
+        staking = createStaking(address(0), address(this));
+        sToken = createStakedToken(
             'Staked Token',
             'sTKN',
             18,
@@ -65,7 +65,6 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
             address(underlying),
             address(sToken),
             treasury,
-            factory,
             new address[](0)
         );
 
@@ -82,13 +81,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     function test_initialize_alreadyInitialized_reverts() public {
         // Try to initialize again
         vm.expectRevert(ILevrStaking_v1.AlreadyInitialized.selector);
-        staking.initialize(
-            address(underlying),
-            address(sToken),
-            treasury,
-            factory,
-            new address[](0)
-        );
+        staking.initialize(address(underlying), address(sToken), treasury, new address[](0));
     }
 
     // ============================================================================
@@ -97,18 +90,12 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     /// @dev Covers line 67: Only factory can initialize
     function test_initialize_onlyFactory_whenNotFactory_reverts() public {
         // Deploy new staking contract
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         // Try to initialize from non-factory address
         vm.prank(alice);
         vm.expectRevert(ILevrStaking_v1.OnlyFactory.selector);
-        newStaking.initialize(
-            address(underlying),
-            address(sToken),
-            treasury,
-            factory,
-            new address[](0)
-        );
+        newStaking.initialize(address(underlying), address(sToken), treasury, new address[](0));
     }
 
     // ============================================================================
@@ -116,43 +103,30 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     // ============================================================================
     /// @dev Covers lines 59-64: Zero address checks
     function test_initialize_zeroAddressUnderlying_reverts() public {
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
-        newStaking.initialize(address(0), address(sToken), treasury, factory, new address[](0));
+        newStaking.initialize(address(0), address(sToken), treasury, new address[](0));
     }
 
     function test_initialize_zeroAddressStakedToken_reverts() public {
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
-        newStaking.initialize(address(underlying), address(0), treasury, factory, new address[](0));
+        newStaking.initialize(address(underlying), address(0), treasury, new address[](0));
     }
 
     function test_initialize_zeroAddressTreasury_reverts() public {
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
+        LevrStaking_v1 newStaking = createStaking(address(0), address(this));
 
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
-        newStaking.initialize(
-            address(underlying),
-            address(sToken),
-            address(0),
-            factory,
-            new address[](0)
-        );
+        newStaking.initialize(address(underlying), address(sToken), address(0), new address[](0));
     }
 
     function test_initialize_zeroAddressFactory_reverts() public {
-        LevrStaking_v1 newStaking = new LevrStaking_v1(address(0));
-
+        // Factory is now set in constructor, so test constructor revert
         vm.expectRevert(ILevrStaking_v1.ZeroAddress.selector);
-        newStaking.initialize(
-            address(underlying),
-            address(sToken),
-            treasury,
-            address(0),
-            new address[](0)
-        );
+        new LevrStaking_v1(address(0), address(0)); // zero factory should revert
     }
 
     // ============================================================================
@@ -288,7 +262,7 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
 
         // Try to unwhitelist again
         vm.prank(admin);
-        vm.expectRevert(ILevrStaking_v1.NotWhitelisted.selector);
+        vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
         staking.unwhitelistToken(address(rewardToken));
     }
 
@@ -418,36 +392,34 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
     // TEST 18: Stream Window Seconds - View Function
     // ============================================================================
     /// @dev Covers lines 394-395: streamWindowSeconds view function
-    function test_streamWindowSeconds_returnsCorrectValue() public {
-        uint32 window = staking.streamWindowSeconds();
+    function test_streamWindowSeconds_returnsCorrectValue() public view {
+        uint32 window = ILevrFactory_v1(factory).streamWindowSeconds(address(underlying));
         assertEq(window, 3 days, 'Should return 3 days');
     }
 
     // ============================================================================
-    // TEST 19: Accrue From Treasury - Not Treasury Caller
+    // TEST 19: Accrue Rewards - Permissionless Caller
     // ============================================================================
-    /// @dev Covers line 363: Only treasury can pull
-    function test_accrueFromTreasury_notTreasury_reverts() public {
-        // Whitelist reward token
+    /// @dev Anyone should be able to call accrueRewards after treasury pushes funds
+    function test_accrueRewards_permissionlessAfterTreasuryTransfer() public {
         address admin = underlying.admin();
         whitelistRewardToken(staking, address(rewardToken), admin);
 
-        // Fund treasury
-        rewardToken.mint(treasury, 10_000 ether);
+        // Treasury pushes tokens
+        rewardToken.mint(treasury, 5_000 ether);
         vm.prank(treasury);
-        rewardToken.approve(address(staking), type(uint256).max);
+        rewardToken.transfer(address(staking), 5_000 ether);
 
-        // Try to pull from non-treasury address
+        // Random user accrues rewards
         vm.prank(alice);
-        vm.expectRevert(ILevrFactory_v1.UnauthorizedCaller.selector);
-        staking.accrueFromTreasury(address(rewardToken), 1000 ether, true);
+        staking.accrueRewards(address(rewardToken));
     }
 
     // ============================================================================
-    // TEST 20: Accrue From Treasury - Insufficient Available
+    // TEST 20: Accrue Rewards - Below Minimum Amount Reverts
     // ============================================================================
-    /// @dev Covers line 373: Insufficient available for non-pull flow
-    function test_accrueFromTreasury_insufficientAvailable_reverts() public {
+    /// @dev Ensures we enforce MIN_REWARD_AMOUNT when accruing transfers
+    function test_accrueRewards_belowMinimum_reverts() public {
         address admin = underlying.admin();
         whitelistRewardToken(staking, address(rewardToken), admin);
 
@@ -457,18 +429,17 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Transfer small amount
-        rewardToken.transfer(address(staking), 100 ether);
+        // Transfer amount smaller than MIN_REWARD_AMOUNT (1e4)
+        rewardToken.transfer(address(staking), 100);
 
-        // Try to accrue more than available (non-pull flow)
-        vm.expectRevert(ILevrStaking_v1.InsufficientAvailable.selector);
-        staking.accrueFromTreasury(address(rewardToken), 200 ether, false);
+        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
+        staking.accrueRewards(address(rewardToken));
     }
 
     // ============================================================================
-    // TEST 21: Credit Rewards - Reward Too Small
+    // TEST 21: Credit Rewards - Small amounts work for whitelisted tokens
     // ============================================================================
-    /// @dev Covers line 494: Reward too small check
+    /// @dev Verifies small amounts are accepted for whitelisted tokens
     function test_creditRewards_rewardTooSmall_reverts() public {
         address admin = underlying.admin();
         whitelistRewardToken(staking, address(rewardToken), admin);
@@ -479,11 +450,10 @@ contract LevrStaking_CoverageGaps_Test is Test, LevrFactoryDeployHelper {
         staking.stake(1000 ether);
         vm.stopPrank();
 
-        // Transfer very small amount (below MIN_REWARD_AMOUNT = 1e15)
+        // Transfer small amount (any amount works for whitelisted tokens)
         rewardToken.transfer(address(staking), 1e14);
 
-        // Try to accrue (should fail - too small)
-        vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
+        // Should succeed - no minimum check for whitelisted tokens
         staking.accrueRewards(address(rewardToken));
     }
 

@@ -85,6 +85,7 @@ contract LevrGovernor_CrossContract_Test is Test, LevrFactoryDeployHelper {
 
         // Enter voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes
         vm.prank(alice);
@@ -118,6 +119,7 @@ contract LevrGovernor_CrossContract_Test is Test, LevrFactoryDeployHelper {
 
         // Vote first
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -148,6 +150,7 @@ contract LevrGovernor_CrossContract_Test is Test, LevrFactoryDeployHelper {
 
         // Vote
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid, true);
 
@@ -205,6 +208,7 @@ contract LevrGovernor_CrossContract_Test is Test, LevrFactoryDeployHelper {
 
         // Vote on both to ensure they meet quorum
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid1, true);
         vm.prank(bob);
@@ -232,6 +236,7 @@ contract LevrGovernor_CrossContract_Test is Test, LevrFactoryDeployHelper {
 
         // Both vote with equal VP (roughly)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(alice);
         governor.vote(pid1, true);
         vm.prank(bob);

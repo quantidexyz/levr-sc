@@ -29,16 +29,18 @@
 
 ### Security & Audits
 
-| Document                                                                | Purpose                        | Priority                    |
-| ----------------------------------------------------------------------- | ------------------------------ | --------------------------- |
-| **[AUDIT_STATUS.md](./AUDIT_STATUS.md)**                                | Current audit dashboard        | ⭐ **Read First**           |
-| **[EXTERNAL_AUDIT_4_ACTIONS.md](./EXTERNAL_AUDIT_4_ACTIONS.md)** 🆕     | Latest action plan (17 items)  | 🔴 **URGENT - Active Work** |
-| **[SECURITY_AUDIT_OCT_31_2025.md](./SECURITY_AUDIT_OCT_31_2025.md)** 🆕 | Source audit report            | 📖 **Fresh Perspective**    |
-| **[EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)**        | Previous work (Phase 1 done)   | ✅ Reference                |
-| **[EXTERNAL_AUDIT_2_COMPLETE.md](./EXTERNAL_AUDIT_2_COMPLETE.md)**      | Previous fixes (13/13)         | ✅ Reference                |
-| **[AUDIT.md](./AUDIT.md)**                                              | Complete security log (master) | 📖 Deep Dive                |
-| **[HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)**                        | Past vulnerabilities           | 📖 Learning                 |
-| **[COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)**                      | vs Compound/MakerDAO/Optimism  | 📖 Benchmarking             |
+| Document                                                                                    | Purpose                            | Priority                    |
+| ------------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------- |
+| **[AUDIT_STATUS.md](./AUDIT_STATUS.md)**                                                    | Current audit dashboard            | ⭐ **Read First**           |
+| **[sherlock/](./sherlock/)** 🆕                                                             | Sherlock audit POCs & analysis     | 🔴 **ACTIVE VALIDATION**    |
+| **[CLONE_DEPLOYMENT_SECURITY_VALIDATION.md](./CLONE_DEPLOYMENT_SECURITY_VALIDATION.md)** 🆕 | Clone deployment security analysis | ✅ **SECURE**               |
+| **[EXTERNAL_AUDIT_4_ACTIONS.md](./EXTERNAL_AUDIT_4_ACTIONS.md)** 🆕                         | Latest action plan (17 items)      | 🔴 **URGENT - Active Work** |
+| **[SECURITY_AUDIT_OCT_31_2025.md](./SECURITY_AUDIT_OCT_31_2025.md)** 🆕                     | Source audit report                | 📖 **Fresh Perspective**    |
+| **[EXTERNAL_AUDIT_3_ACTIONS.md](./EXTERNAL_AUDIT_3_ACTIONS.md)**                            | Previous work (Phase 1 done)       | ✅ Reference                |
+| **[EXTERNAL_AUDIT_2_COMPLETE.md](./EXTERNAL_AUDIT_2_COMPLETE.md)**                          | Previous fixes (13/13)             | ✅ Reference                |
+| **[AUDIT.md](./AUDIT.md)**                                                                  | Complete security log (master)     | 📖 Deep Dive                |
+| **[HISTORICAL_FIXES.md](./HISTORICAL_FIXES.md)**                                            | Past vulnerabilities               | 📖 Learning                 |
+| **[COMPARATIVE_AUDIT.md](./COMPARATIVE_AUDIT.md)**                                          | vs Compound/MakerDAO/Optimism      | 📖 Benchmarking             |
 
 ### Protocol Specifications
 

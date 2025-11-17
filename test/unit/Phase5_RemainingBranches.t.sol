@@ -205,6 +205,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
         
         // Vote at exact boundary
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         vm.prank(user);
         governor.vote(pid, true);
     }
@@ -253,6 +254,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // Multiple votes
         for (uint256 i = 0; i < 3; i++) {
@@ -285,6 +287,7 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
         uint256 pid = governor.proposeBoost(address(underlying), 10 ether);
         
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
         
         // Voter votes NO (defeats proposal)
         vm.prank(voter);
@@ -319,20 +322,14 @@ contract Phase5_RemainingBranches_Test is Test, LevrFactoryDeployHelper {
         treasury.transfer(address(otherToken), address(0x6002), 100 ether);
     }
 
-    /// Boost operation paths
-    function test_treasury_002_boostSuccessAndRevert() public {
+    /// Transfers to staking (boost equivalent) paths
+    function test_treasury_002_transferToStakingMultipleAmounts() public {
         address gov = address(governor);
         
-        // Valid boost
         vm.prank(gov);
-        treasury.applyBoost(address(underlying), 1000 ether);
-        
-        // Boost insufficient amount (if there's a minimum)
+        treasury.transfer(address(underlying), address(staking), 1000 ether);
+
         vm.prank(gov);
-        try treasury.applyBoost(address(underlying), 1 ether) {
-            // May succeed or fail
-        } catch {
-            // Expected
-        }
+        treasury.transfer(address(underlying), address(staking), 1 ether);
     }
 }

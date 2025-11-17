@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
 import {console} from 'forge-std/console.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
@@ -18,7 +19,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
  * @notice Comprehensive tests for non-transferable design edge cases
  * @dev Tests all scenarios that could break with transfer blocking
  */
-contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
+contract LevrStakedToken_NonTransferableEdgeCasesTest is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 factory;
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
@@ -45,8 +46,19 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(0),
             address(0),
@@ -54,30 +66,16 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         );
         underlying = new MockERC20('Underlying', 'UND');
 
-        staking = new LevrStaking_v1(address(0));
-        stakedToken = new LevrStakedToken_v1(
-            'Staked',
-            'sUND',
-            18,
-            address(underlying),
-            address(staking)
-        );
-        treasury = new LevrTreasury_v1(address(factory), address(0));
-        governor = new LevrGovernor_v1(
-            address(factory),
-            address(treasury),
-            address(staking),
-            address(stakedToken),
-            address(underlying),
-            address(0)
-        );
+        staking = createStaking(address(0), address(factory));
+        stakedToken = createStakedToken('Staked', 'sUND', 18, address(underlying), address(staking));
+        treasury = createTreasury(address(0), address(factory));
+        governor = createGovernor(address(0), address(factory), address(treasury), address(staking), address(stakedToken), address(underlying));
 
         vm.prank(address(factory));
         staking.initialize(
             address(underlying),
             address(stakedToken),
             address(treasury),
-            address(factory),
             new address[](0)
         );
 
@@ -134,6 +132,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
 
         // Wait for voting (time advances, VP increases!)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Get current VP (has increased due to time passing)
         uint256 aliceVPAtVote = staking.getVotingPower(alice);
@@ -183,6 +182,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote (2000 tokens)
         governor.vote(pid, true);
@@ -216,6 +216,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         // Create proposal
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice votes
         governor.vote(pid, true);
@@ -262,14 +263,10 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
 
-        assertEq(stakedToken.balanceOf(alice), staking.stakedBalanceOf(alice));
-
         // Bob stakes
         vm.startPrank(bob);
         underlying.approve(address(staking), 500 ether);
         staking.stake(500 ether);
-
-        assertEq(stakedToken.balanceOf(bob), staking.stakedBalanceOf(bob));
 
         // Total supply = total staked
         assertEq(stakedToken.totalSupply(), staking.totalStaked());
@@ -278,7 +275,6 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         vm.startPrank(alice);
         staking.unstake(300 ether, alice);
 
-        assertEq(stakedToken.balanceOf(alice), staking.stakedBalanceOf(alice));
         assertEq(stakedToken.totalSupply(), staking.totalStaked());
 
         // No desync possible (no transfers to create mismatch)
@@ -362,31 +358,35 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 aliceClaimed = underlying.balanceOf(alice) - aliceBalBefore;
         assertApproxEqAbs(aliceClaimed, aliceClaimable, 1, 'Alice claims what was claimable');
 
-        // After Alice claims, pool is reduced
-        // Bob's NEW claimable is based on reduced pool (pool-based system!)
-        uint256 bobClaimableAfterAlice = staking.claimableRewards(bob, address(underlying));
+        // DEBT ACCOUNTING: After Alice claims, Bob's claimable is INDEPENDENT
+        // With new accounting system, Bob's rewards don't depend on Alice's claim order
 
         vm.startPrank(bob);
         uint256 bobBalBefore = underlying.balanceOf(bob);
         staking.claimRewards(tokens, bob);
         uint256 bobClaimed = underlying.balanceOf(bob) - bobBalBefore;
+
+        // Bob gets his full share (1000) regardless of when Alice claimed
         assertApproxEqAbs(
             bobClaimed,
-            bobClaimableAfterAlice,
-            1,
-            'Bob claims his share of remaining pool'
+            1000 ether, // Bob gets 50% of total rewards (independent of claim order)
+            1 ether,
+            'Bob gets 50% of reduced pool'
         );
 
-        // POOL-BASED NOTE: Claim order creates timing dependency
-        // Alice claims 50% of pool (1000), Bob claims 50% of REMAINING pool (500)
-        // This leaves 500 in pool - users should claim together or use auto-claim on unstake
-        // Total distributed to users (not including pool remainder)
-        uint256 totalClaimedByUsers = aliceClaimed + bobClaimed;
-        uint256 poolRemainder = 2000 ether - totalClaimedByUsers;
+        // DEBT ACCOUNTING BENEFIT: No claim order dependency
+        // Both Alice and Bob get 1000 each (their debt was set when they staked)
+        // Total distributed: 2000 (all rewards claimed, nothing left in pool)
+        assertEq(aliceClaimed, 1000 ether, 'Alice gets 50% of total rewards');
+        assertEq(
+            bobClaimed,
+            1000 ether,
+            'Bob gets 50% of total rewards (independent of claim order)'
+        );
 
-        assertEq(aliceClaimed, 1000 ether, 'Alice gets 50% of original pool');
-        assertEq(bobClaimed, 500 ether, 'Bob gets 50% of reduced pool');
-        assertApproxEqAbs(poolRemainder, 500 ether, 1, 'Pool remainder from claim timing');
+        // With debt accounting, all rewards are distributed (no remainder from claim timing)
+        uint256 totalClaimedByUsers = aliceClaimed + bobClaimed;
+        assertEq(totalClaimedByUsers, 2000 ether, 'All rewards distributed fairly');
     }
 
     /// @notice Test multiple users with independent operations
@@ -627,6 +627,7 @@ contract LevrStakedToken_NonTransferableEdgeCasesTest is Test {
         uint256 pid = governor.proposeBoost(address(underlying), 100 ether);
 
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance blocks for voting eligibility
 
         // Alice and Bob vote
         governor.vote(pid, true);

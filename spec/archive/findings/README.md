@@ -3,14 +3,14 @@
 **Purpose:** Security analysis, audit findings, and implementation analysis documents from various stages of Levr V1 development.
 
 **Added:** November 3, 2025  
-**Last Updated:** November 3, 2025  
-**Total Files:** 55 files (4 root-level + 21 implementation-analysis + 30 oct-2025)
+**Last Updated:** November 12, 2025  
+**Total Files:** 58 files (7 root-level + 21 implementation-analysis + 30 oct-2025)
 
 ---
 
 ## Contents
 
-### Root-Level Findings (4 files)
+### Root-Level Findings (7 files)
 
 | File | Description |
 |------|-------------|
@@ -18,6 +18,9 @@
 | COMPARATIVE_AUDIT.md | Industry benchmarks vs Compound, MakerDAO, Optimism |
 | CONFIG_GRIDLOCK_FINDINGS.md | Configuration and governance findings |
 | SECURITY_FIX_OCT_30_2025.md | Security fixes implemented Oct 30 |
+| DUST_ACCUMULATION_BUG.md | **[ARCHIVED 11/12]** Original bug discovery: 30-36% dust accumulation |
+| DUST_SOLUTION_ANALYSIS.md | **[ARCHIVED 11/12]** Analysis of solution attempts (why precision failed) |
+| TIME_BASED_VESTING_FIX.md | **[ARCHIVED 11/12]** Implementation of time-based vesting fix |
 
 ### Implementation Analysis (21 files)
 

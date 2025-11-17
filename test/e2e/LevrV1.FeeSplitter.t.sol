@@ -59,9 +59,9 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 7,
-            quorumBps: 0,
-            approvalBps: 0,
-            minSTokenBpsToSubmit: 0,
+            quorumBps: 1,
+            approvalBps: 1,
+            minSTokenBpsToSubmit: 100,
             maxProposalAmountBps: 500,
             minimumQuorumBps: 25 // 0.25% minimum quorum
         });

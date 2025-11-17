@@ -142,6 +142,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Alice and Bob vote (15 of 20 = 75% participation - meets 70% quorum)
         vm.prank(alice);
@@ -209,6 +210,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Only Alice votes (5 of 25 = 20% participation - doesn't meet 70% quorum)
         vm.prank(alice);
@@ -280,6 +282,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // All vote: Alice YES, Bob YES, Charlie NO
         // 2/3 of votes = ~66% approval (meets 51% requirement)
@@ -416,6 +419,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Existing proposal should still be valid and executable
         vm.warp(block.timestamp + 2 days + 1); // voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
         vm.prank(bob);
@@ -520,6 +524,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Verify both proposals work with original timeline
         vm.warp(cycleProposalEnd + 1); // Start of voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // All users vote on both proposals (100% participation meets 70% quorum)
         vm.prank(alice);
@@ -661,6 +666,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(p1.votingStartsAt + 1);
         console2.log('Voting starts at:', p1.votingStartsAt);
 
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid1, true);
         vm.prank(bob);
@@ -701,6 +707,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Vote but make it fail (low quorum - only alice votes = 20% < 70%)
         vm.warp(block.timestamp + 2 days + 1); // Voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
 
@@ -756,6 +763,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Vote but make it fail (only alice votes = 20% < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid1, true);
 
@@ -800,6 +808,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Vote but insufficient participation (only alice votes = 20% < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
 

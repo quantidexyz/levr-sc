@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {console} from 'forge-std/console.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -13,7 +14,7 @@ import {MockERC20} from '../mocks/MockERC20.sol';
 /// @title EXTERNAL_AUDIT_0 HIGH-1: Voting Power Precision Loss Tests
 /// @notice Tests for [HIGH-1] Voting Power Precision Loss on Large Unstakes
 /// @dev Issue: Integer division rounding can cause complete loss of voting power
-contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
+contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test, LevrFactoryDeployHelper {
     LevrStaking_v1 staking;
     LevrStakedToken_v1 stakedToken;
     LevrFactory_v1 factory;
@@ -43,9 +44,20 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
         // Deploy forwarder
         forwarder = new LevrForwarder_v1('Levr Forwarder');
 
+        ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+            minStreamWindowSeconds: 1,
+            minProposalWindowSeconds: 1,
+            minVotingWindowSeconds: 1,
+            minQuorumBps: 1,
+            minApprovalBps: 1,
+            minMinSTokenBpsToSubmit: 1,
+            minMinimumQuorumBps: 1
+        });
+
         // Deploy factory with correct constructor
         factory = new LevrFactory_v1(
             config,
+            bounds,
             address(this),
             address(forwarder),
             address(0),
@@ -56,8 +68,8 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
         underlying = new MockERC20('Underlying', 'UND');
 
         // Create staking and staked token directly
-        staking = new LevrStaking_v1(address(forwarder));
-        stakedToken = new LevrStakedToken_v1(
+        staking = createStaking(address(forwarder), address(factory));
+        stakedToken = createStakedToken(
             'Staked Token',
             'sUND',
             18,
@@ -70,7 +82,6 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
         staking.initialize(
             address(underlying),
             address(stakedToken),
-            address(factory),
             address(factory),
             new address[](0)
         );
@@ -157,7 +168,7 @@ contract EXTERNAL_AUDIT_0_LevrStakingVotingPowerPrecisionTest is Test {
         staking.unstake(999000 ether, alice);
 
         uint256 vpAfter = staking.getVotingPower(alice);
-        uint256 balanceAfter = staking.stakedBalanceOf(alice);
+        uint256 balanceAfter = stakedToken.balanceOf(alice);
 
         console.log('VP AFTER 99.9% unstake:', vpAfter);
         console.log('Balance after unstake:', balanceAfter);
