@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {ERC2771Context} from '@openzeppelin/contracts/metatx/ERC2771Context.sol';
@@ -28,14 +28,12 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
         uint256 length = calls.length;
         results = new Result[](length);
 
-        // Validate msg.value matches total required
+        // Validate ETH sent matches sum of call values
         uint256 totalValue = 0;
         for (uint256 i = 0; i < length; i++) {
             totalValue += calls[i].value;
         }
-        if (msg.value != totalValue) {
-            revert ValueMismatch(msg.value, totalValue);
-        }
+        if (msg.value != totalValue) revert ValueMismatch(msg.value, totalValue);
 
         SingleCall calldata calli;
         bytes memory data;
@@ -46,25 +44,20 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
         for (uint256 i = 0; i < length; i++) {
             calli = calls[i];
 
-            // Special case: if target is this forwarder, execute directly without ERC2771 modifications
+            // Self-calls: executeTransaction only (prevents recursion)
             if (calli.target == address(this)) {
-                // Only allow executeTransaction selector to prevent recursive executeMulticall
                 bytes4 selector = bytes4(calli.callData);
                 if (selector != this.executeTransaction.selector) {
                     revert ForbiddenSelectorOnSelf(selector);
                 }
                 (success, returnData) = calli.target.call{value: calli.value}(calli.callData);
             } else {
-                // Check if the target trusts this forwarder
+                // External calls: append sender for ERC2771Context
                 if (!_isTrustedByTarget(calli.target)) {
                     revert ERC2771UntrustfulTarget(calli.target, address(this));
                 }
 
-                // Append the real caller's address to calldata
-                // This will be extracted by ERC2771Context in the target contract
                 data = abi.encodePacked(calli.callData, msg.sender);
-
-                // Execute the call with value
                 (success, returnData) = calli.target.call{value: calli.value}(data);
             }
 
@@ -82,13 +75,9 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
         address target,
         bytes calldata data
     ) external payable returns (bool success, bytes memory returnData) {
-        // Only allow calls from the forwarder itself (via executeMulticall)
-        // to prevent address impersonation attacks
-        if (msg.sender != address(this)) {
-            revert OnlyMulticallCanExecuteTransaction();
-        }
+        // Only callable via executeMulticall (prevents impersonation)
+        if (msg.sender != address(this)) revert OnlyMulticallCanExecuteTransaction();
 
-        // Execute call directly without appending sender (non-ERC2771)
         (success, returnData) = target.call{value: msg.value}(data);
     }
 

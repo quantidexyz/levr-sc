@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 /// @title Levr Fee Splitter v1 Interface
 /// @notice Per-project fee splitter for flexible fee distribution
@@ -23,7 +23,6 @@ interface ILevrFeeSplitter_v1 {
     // ============ Errors ============
 
     error OnlyTokenAdmin();
-    error InvalidSplits();
     error InvalidTotalBps();
     error ZeroAddress();
     error ZeroBps();
@@ -31,11 +30,8 @@ interface ILevrFeeSplitter_v1 {
     error DuplicateReceiver();
     error TooManyReceivers();
     error SplitsNotConfigured();
-    error NoPendingFees();
     error NoReceivers();
     error ProjectNotRegistered();
-    error ClankerMetadataNotFound();
-    error LpLockerNotConfigured();
 
     // ============ Events ============
 
@@ -102,10 +98,9 @@ interface ILevrFeeSplitter_v1 {
 
     // ============ Distribution Functions ============
 
-    /// @notice Collect rewards from LP locker and distribute according to configured splits
+    /// @notice Distribute fees according to configured splits
     /// @dev Permissionless - anyone can trigger distribution
-    ///      Supports multiple tokens (ETH, WETH, underlying, etc.)
-    /// @param rewardToken The reward token to distribute (e.g., WETH, clankerToken itself)
+    /// @param rewardToken The reward token to distribute
     function distribute(address rewardToken) external;
 
     /// @notice Batch distribute multiple reward tokens
@@ -122,17 +117,6 @@ interface ILevrFeeSplitter_v1 {
     /// @notice Get total configured split percentage
     /// @return totalBps Total basis points (should always be 10,000 if configured)
     function getTotalBps() external view returns (uint256 totalBps);
-
-    /// @notice Get pending fees for a reward token (in fee locker only)
-    /// @param rewardToken The reward token to check
-    /// @return pending Pending fees in fee locker
-    function pendingFees(address rewardToken) external view returns (uint256 pending);
-
-    /// @notice Get total pending fees including tokens already in the splitter's balance
-    /// @dev This includes tokens from fee locker AND any tokens in contract balance
-    /// @param rewardToken The reward token to check
-    /// @return pending Total pending fees (fee locker + contract balance)
-    function pendingFeesInclBalance(address rewardToken) external view returns (uint256 pending);
 
     /// @notice Get distribution state for a reward token
     /// @param rewardToken The reward token to check

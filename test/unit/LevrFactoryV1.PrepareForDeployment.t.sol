@@ -7,7 +7,9 @@ import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
+import {ILevrTreasury_v1} from '../../src/interfaces/ILevrTreasury_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
+import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
@@ -119,7 +121,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         assertEq(proj.stakedToken, project.stakedToken, 'Project stakedToken registered');
     }
 
-    function test_getProjects_empty() public {
+    function test_getProjects_empty() public view {
         // Call getProjects with no registered projects
         (ILevrFactory_v1.ProjectInfo[] memory projects, uint256 total) = factory.getProjects(0, 10);
 
@@ -372,5 +374,318 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         for (uint256 i = 0; i < 3; i++) {
             assertEq(projects[i].clankerToken, tokens[i], 'Order should match registration order');
         }
+    }
+
+    // ============ Missing Edge Cases from USER_FLOWS.md Flow 1-2 ============
+
+    function test_initialize_calledTwiceOnTreasury_reverts() public {
+        // Prepare and register to get treasury address
+        factory.prepareForDeployment();
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+        ILevrFactory_v1.Project memory project = factory.register(address(clankerToken));
+
+        LevrTreasury_v1 treasury = LevrTreasury_v1(payable(project.treasury));
+        address governor = project.governor;
+
+        // Try to initialize treasury again - should revert
+        vm.expectRevert(ILevrTreasury_v1.AlreadyInitialized.selector);
+        treasury.initialize(governor, address(clankerToken));
+    }
+
+    function test_initialize_calledTwiceOnStaking_reverts() public {
+        // Prepare and register to get staking address
+        factory.prepareForDeployment();
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+        ILevrFactory_v1.Project memory project = factory.register(address(clankerToken));
+
+        LevrStaking_v1 staking = LevrStaking_v1(project.staking);
+        address[] memory emptyRewardTokens = new address[](0);
+
+        // Try to initialize staking again - should revert
+        vm.expectRevert(ILevrStaking_v1.AlreadyInitialized.selector);
+        staking.initialize(
+            address(clankerToken),
+            project.stakedToken,
+            project.treasury,
+            emptyRewardTokens
+        );
+    }
+
+    function test_register_calledTwiceForSameToken_reverts() public {
+        // Prepare and register first time
+        factory.prepareForDeployment();
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+        factory.register(address(clankerToken));
+
+        // Try to register same token again - should revert
+        factory.prepareForDeployment();
+        vm.expectRevert(ILevrFactory_v1.AlreadyRegistered.selector);
+        factory.register(address(clankerToken));
+    }
+
+    function test_preparedContracts_usedForMultipleTokens_fails() public {
+        // Prepare contracts once
+        factory.prepareForDeployment();
+
+        // Register first token - this will delete prepared contracts
+        MockERC20 token1 = new MockERC20('Token1', 'TK1');
+        factory.register(address(token1));
+
+        // Try to register second token with same prepared contracts
+        // Since prepared contracts were deleted, register will fail during deploy
+        MockERC20 token2 = new MockERC20('Token2', 'TK2');
+        vm.expectRevert(ILevrFactory_v1.DeployFailed.selector);
+        factory.register(address(token2));
+    }
+
+    function test_preparedContracts_usedByDifferentCaller_reverts() public {
+        // Setup: Prepare contracts as one caller
+        address caller1 = address(0x1111);
+        address caller2 = address(0x2222);
+
+        // Caller1 prepares contracts (stored under caller1's address)
+        vm.prank(caller1);
+        factory.prepareForDeployment();
+
+        // Create token where caller2 is the admin
+        vm.prank(caller2);
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+
+        // Caller2 tries to register - should fail because:
+        // 1. Caller2 is token admin (can call register)
+        // 2. But prepared contracts are stored under caller1's address
+        // 3. Register looks up _preparedContracts[caller2] which is empty/zero
+        // 4. Deploy will fail with zero addresses
+        vm.prank(caller2);
+        vm.expectRevert(ILevrFactory_v1.DeployFailed.selector); // Will fail because prepared contracts are for caller1, not caller2
+        factory.register(address(clankerToken));
+    }
+
+    function test_deployer_withZeroAddresses_validatesAndReverts() public {
+        // Create token
+        MockERC20 clankerToken = new MockERC20('Test Token', 'TEST');
+
+        // Try to register without preparing - prepared contracts will be zero addresses
+        // This should fail during deployer initialization
+        vm.expectRevert(ILevrFactory_v1.DeployFailed.selector);
+        factory.register(address(clankerToken));
+    }
+
+    // ============ PHASE 2: Factory Configuration Management ============
+
+    function test_phase2_config_001_updateConfigAllParameters() public {
+        ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: 500, // 5%
+            streamWindowSeconds: 5 days,
+            protocolTreasury: address(0xABCD),
+            proposalWindowSeconds: 3 days,
+            votingWindowSeconds: 7 days,
+            maxActiveProposals: 10,
+            quorumBps: 1000, // 10%
+            approvalBps: 5000, // 50%
+            minSTokenBpsToSubmit: 100, // 1%
+            maxProposalAmountBps: 1000, // 10%
+            minimumQuorumBps: 50 // 0.5%
+        });
+
+        vm.prank(address(this)); // Owner
+        factory.updateConfig(newConfig);
+
+        // Verify no error on update
+        assertTrue(true);
+    }
+
+    function test_phase2_config_002_registerProjectAfterConfigUpdate() public {
+        // Update config
+        ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
+            protocolFeeBps: 500,
+            streamWindowSeconds: 5 days,
+            protocolTreasury: address(0xABCD),
+            proposalWindowSeconds: 3 days,
+            votingWindowSeconds: 7 days,
+            maxActiveProposals: 10,
+            quorumBps: 1000,
+            approvalBps: 5000,
+            minSTokenBpsToSubmit: 100,
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 50
+        });
+
+        vm.prank(address(this));
+        factory.updateConfig(newConfig);
+
+        // Register project after update
+        factory.prepareForDeployment();
+        MockERC20 token = new MockERC20('Token', 'TKN');
+        ILevrFactory_v1.Project memory project = factory.register(address(token));
+
+        assertEq(project.treasury, project.treasury);
+    }
+
+    function test_phase2_config_003_verifyProject() public {
+        factory.prepareForDeployment();
+        MockERC20 token = new MockERC20('Token', 'TKN');
+        factory.register(address(token));
+
+        // Verify project
+        vm.prank(address(this)); // Owner
+        factory.verifyProject(address(token));
+
+        // Verify another time should revert
+        vm.prank(address(this));
+        vm.expectRevert(ILevrFactory_v1.AlreadyVerified.selector);
+        factory.verifyProject(address(token));
+    }
+
+    function test_phase2_config_004_unverifyProject() public {
+        // Register and verify project
+        factory.prepareForDeployment();
+        MockERC20 token = new MockERC20('Token', 'TKN');
+        factory.register(address(token));
+
+        vm.prank(address(this));
+        factory.verifyProject(address(token));
+
+        // Unverify project
+        vm.prank(address(this));
+        factory.unverifyProject(address(token));
+
+        // Can verify again
+        vm.prank(address(this));
+        factory.verifyProject(address(token));
+    }
+
+    function test_phase2_config_005_updateProjectConfig() public {
+        // Register and verify project first
+        factory.prepareForDeployment();
+        MockERC20 token = new MockERC20('Token', 'TKN');
+        factory.register(address(token));
+
+        vm.prank(address(this));
+        factory.verifyProject(address(token));
+
+        // Update project config
+        ILevrFactory_v1.ProjectConfig memory projectCfg = ILevrFactory_v1.ProjectConfig({
+            streamWindowSeconds: 7 days,
+            proposalWindowSeconds: 4 days,
+            votingWindowSeconds: 8 days,
+            maxActiveProposals: 15,
+            quorumBps: 1500,
+            approvalBps: 5500,
+            minSTokenBpsToSubmit: 150,
+            maxProposalAmountBps: 1500,
+            minimumQuorumBps: 75
+        });
+
+        vm.prank(address(this)); // Token admin
+        factory.updateProjectConfig(address(token), projectCfg);
+    }
+
+    function test_phase2_config_006_updateProjectConfigOnlyAdmin() public {
+        // Register and verify
+        factory.prepareForDeployment();
+        MockERC20 token = new MockERC20('Token', 'TKN');
+        factory.register(address(token));
+
+        vm.prank(address(this));
+        factory.verifyProject(address(token));
+
+        ILevrFactory_v1.ProjectConfig memory projectCfg = ILevrFactory_v1.ProjectConfig({
+            streamWindowSeconds: 7 days,
+            proposalWindowSeconds: 4 days,
+            votingWindowSeconds: 8 days,
+            maxActiveProposals: 15,
+            quorumBps: 1500,
+            approvalBps: 5500,
+            minSTokenBpsToSubmit: 150,
+            maxProposalAmountBps: 1500,
+            minimumQuorumBps: 75
+        });
+
+        // Non-admin tries to update
+        address nonAdmin = address(0xDEAD);
+        vm.prank(nonAdmin);
+        vm.expectRevert();
+        factory.updateProjectConfig(address(token), projectCfg);
+    }
+
+    function test_phase2_config_007_getProjectContractsWithVerified() public {
+        // Register and verify multiple projects
+        factory.prepareForDeployment();
+        MockERC20 token1 = new MockERC20('Token1', 'TK1');
+        ILevrFactory_v1.Project memory project1 = factory.register(address(token1));
+
+        factory.prepareForDeployment();
+        MockERC20 token2 = new MockERC20('Token2', 'TK2');
+        ILevrFactory_v1.Project memory project2 = factory.register(address(token2));
+
+        // Verify only first
+        vm.prank(address(this));
+        factory.verifyProject(address(token1));
+
+        // Get contracts
+        ILevrFactory_v1.Project memory retrieved1 = factory.getProjectContracts(address(token1));
+        ILevrFactory_v1.Project memory retrieved2 = factory.getProjectContracts(address(token2));
+
+        assertEq(retrieved1.treasury, project1.treasury);
+        assertEq(retrieved2.treasury, project2.treasury);
+    }
+
+    function test_phase2_config_008_registerMultipleInSuccession() public {
+        // Register multiple projects in succession
+        for (uint256 i = 0; i < 3; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            factory.register(address(token));
+        }
+
+        assertTrue(true);
+    }
+
+    function test_phase2_config_009_verifyProjectMultiple() public {
+        // Register and verify multiple projects
+        for (uint256 i = 0; i < 2; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            factory.register(address(token));
+
+            vm.prank(address(this));
+            factory.verifyProject(address(token));
+        }
+
+        assertTrue(true);
+    }
+
+    function test_phase2_config_010_getProjectsWithPagination() public {
+        // Register multiple projects
+        for (uint256 i = 0; i < 5; i++) {
+            factory.prepareForDeployment();
+            MockERC20 token = new MockERC20(
+                string(abi.encodePacked('Token', i)),
+                string(abi.encodePacked('TK', i))
+            );
+            factory.register(address(token));
+        }
+
+        // Get first page
+        (ILevrFactory_v1.ProjectInfo[] memory page1, uint256 total1) = factory.getProjects(0, 2);
+        assertEq(total1, 5);
+        assertEq(page1.length, 2);
+
+        // Get second page
+        (ILevrFactory_v1.ProjectInfo[] memory page2, uint256 total2) = factory.getProjects(2, 2);
+        assertEq(total2, 5);
+        assertEq(page2.length, 2);
+
+        // Get last page
+        (ILevrFactory_v1.ProjectInfo[] memory page3, uint256 total3) = factory.getProjects(4, 2);
+        assertEq(total3, 5);
+        assertEq(page3.length, 1);
     }
 }

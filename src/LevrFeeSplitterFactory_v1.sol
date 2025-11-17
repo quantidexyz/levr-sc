@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 import {LevrFeeSplitter_v1} from './LevrFeeSplitter_v1.sol';
 import {ILevrFeeSplitterFactory_v1} from './interfaces/ILevrFeeSplitterFactory_v1.sol';

@@ -12,147 +12,12 @@ import {ILevrFeeSplitter_v1} from '../../src/interfaces/ILevrFeeSplitter_v1.sol'
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
-
-/**
- * @title Mock Clanker Token
- * @notice Mock token for testing that tracks admin
- */
-contract MockClankerToken is ERC20 {
-    address public admin;
-
-    constructor(address admin_) ERC20('Mock Clanker', 'MCLK') {
-        admin = admin_;
-        _mint(msg.sender, 1_000_000 ether);
-    }
-}
-
-/**
- * @title Mock Reward Token
- * @notice Mock ERC20 for testing fee distribution
- */
-contract MockRewardToken is ERC20 {
-    constructor() ERC20('Mock WETH', 'MWETH') {
-        _mint(msg.sender, 1_000_000 ether);
-    }
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
-
-/**
- * @title Mock Staking Contract
- * @notice Mock staking that can revert accrueRewards for testing
- */
-contract MockStaking is ILevrStaking_v1 {
-    bool public shouldRevertOnAccrue;
-
-    function setShouldRevertOnAccrue(bool _shouldRevert) external {
-        shouldRevertOnAccrue = _shouldRevert;
-    }
-
-    function accrueRewards(address) external {
-        if (shouldRevertOnAccrue) {
-            revert('Mock: Accrual failed');
-        }
-    }
-
-    // Minimal implementation for interface compliance
-    function stake(uint256) external {}
-    function unstake(uint256, address) external returns (uint256) {
-        return 0;
-    }
-    function claimRewards(address[] calldata, address) external {}
-    function accrueFromTreasury(address, uint256, bool) external {}
-    function outstandingRewards(address) external view returns (uint256, uint256) {
-        return (0, 0);
-    }
-    function claimableRewards(address, address) external view returns (uint256) {
-        return 0;
-    }
-    function stakeStartTime(address) external view returns (uint256) {
-        return 0;
-    }
-    function getVotingPower(address) external view returns (uint256) {
-        return 0;
-    }
-    function initialize(address, address, address, address) external {}
-    function streamWindowSeconds() external view returns (uint32) {
-        return 0;
-    }
-    function streamStart() external view returns (uint64) {
-        return 0;
-    }
-    function streamEnd() external view returns (uint64) {
-        return 0;
-    }
-    function rewardRatePerSecond(address) external view returns (uint256) {
-        return 0;
-    }
-    function aprBps() external view returns (uint256) {
-        return 0;
-    }
-    function stakedBalanceOf(address) external view returns (uint256) {
-        return 0;
-    }
-    function totalStaked() external view returns (uint256) {
-        return 0;
-    }
-    function escrowBalance(address) external view returns (uint256) {
-        return 0;
-    }
-}
-
-/**
- * @title Mock LP Locker
- * @notice Minimal mock for LP locker contract calls
- */
-contract MockLpLocker {
-    function collectRewards(address) external {
-        // Do nothing - just needs to not revert
-    }
-}
-
-/**
- * @title Mock Factory
- * @notice Mock factory for testing
- */
-contract MockFactory {
-    address public clankerToken;
-    address public staking;
-    address public lpLocker;
-    bool public metadataExists;
-
-    function setProject(address _clankerToken, address _staking, address _lpLocker) external {
-        clankerToken = _clankerToken;
-        staking = _staking;
-        lpLocker = _lpLocker;
-        metadataExists = true;
-    }
-
-    function getProjectContracts(address) external view returns (ILevrFactory_v1.Project memory) {
-        return
-            ILevrFactory_v1.Project({
-                treasury: address(0),
-                governor: address(0),
-                staking: staking,
-                stakedToken: address(0)
-            });
-    }
-
-    function getClankerMetadata(
-        address
-    ) external view returns (ILevrFactory_v1.ClankerMetadata memory) {
-        return
-            ILevrFactory_v1.ClankerMetadata({
-                feeLocker: address(0),
-                lpLocker: lpLocker,
-                hook: address(0),
-                exists: metadataExists
-            });
-    }
-}
+import {MockClankerToken} from '../mocks/MockClankerToken.sol';
+import {MockRewardToken} from '../mocks/MockRewardToken.sol';
+import {MockStaking} from '../mocks/MockStaking.sol';
+import {MockLpLocker} from '../mocks/MockLpLocker.sol';
+import {MockFactory} from '../mocks/MockFactory.sol';
+import {MockERC20} from '../mocks/MockERC20.sol';
 
 /**
  * @title LevrFeeSplitterV1 Unit Tests
@@ -174,22 +39,27 @@ contract LevrFeeSplitterV1Test is Test {
 
     function setUp() public {
         // Deploy mocks
-        clankerToken = new MockClankerToken(tokenAdmin);
+        clankerToken = new MockClankerToken('Mock Clanker', 'MCLK', tokenAdmin);
         rewardToken = new MockRewardToken();
         staking = new MockStaking();
         lpLocker = new MockLpLocker();
         factory = new MockFactory();
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
-        // Setup factory
-        factory.setProject(address(clankerToken), address(staking), address(lpLocker));
+        // Setup factory (use the wrapped token address for ERC20 operations)
+        MockERC20 clankerERC20 = clankerToken.token();
+        factory.setProject(address(clankerERC20), address(staking), address(lpLocker));
 
-        // Deploy fee splitter
+        // Deploy fee splitter (use wrapper address - it has admin() function)
         splitter = new LevrFeeSplitter_v1(
             address(clankerToken),
             address(factory),
             address(forwarder)
         );
+
+        // Whitelist rewardToken and clanker token in mock staking (required for whitelist-only system)
+        staking.whitelistToken(address(rewardToken));
+        staking.whitelistToken(address(clankerERC20));
     }
 
     // ============ Split Configuration Tests (6 tests) ============
@@ -387,6 +257,7 @@ contract LevrFeeSplitterV1Test is Test {
 
     function test_distributeBatch_multipleTokens() public {
         MockRewardToken token2 = new MockRewardToken();
+        staking.whitelistToken(address(token2));
 
         ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
         splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: alice, bps: 5000});
@@ -420,6 +291,7 @@ contract LevrFeeSplitterV1Test is Test {
     function test_distributeBatch_bothReceiversGetBothTokens() public {
         // Setup: Create wrapped ETH token to simulate real scenario
         MockRewardToken wrappedETH = new MockRewardToken();
+        staking.whitelistToken(address(wrappedETH));
 
         // Configure splits: 60% staking, 40% deployer (tokenAdmin)
         ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
@@ -434,18 +306,19 @@ contract LevrFeeSplitterV1Test is Test {
         uint256 wrappedETHFees = 5 ether;
 
         // Transfer fees to splitter (simulating fee accumulation)
-        clankerToken.transfer(address(splitter), clankerFees);
+        MockERC20 clankerERC20 = clankerToken.token();
+        clankerERC20.transfer(address(splitter), clankerFees);
         wrappedETH.transfer(address(splitter), wrappedETHFees);
 
         // Record balances before distribution
-        uint256 stakingClankerBefore = clankerToken.balanceOf(address(staking));
+        uint256 stakingClankerBefore = clankerERC20.balanceOf(address(staking));
         uint256 stakingWrappedETHBefore = wrappedETH.balanceOf(address(staking));
-        uint256 deployerClankerBefore = clankerToken.balanceOf(tokenAdmin);
+        uint256 deployerClankerBefore = clankerERC20.balanceOf(tokenAdmin);
         uint256 deployerWrappedETHBefore = wrappedETH.balanceOf(tokenAdmin);
 
         // Distribute both tokens via batch
         address[] memory tokens = new address[](2);
-        tokens[0] = address(clankerToken);
+        tokens[0] = address(clankerERC20); // Use wrapped token for ERC20
         tokens[1] = address(wrappedETH);
 
         splitter.distributeBatch(tokens);
@@ -462,7 +335,7 @@ contract LevrFeeSplitterV1Test is Test {
 
         // Verify staking pool received BOTH tokens
         assertEq(
-            clankerToken.balanceOf(address(staking)) - stakingClankerBefore,
+            clankerERC20.balanceOf(address(staking)) - stakingClankerBefore,
             expectedStakingClanker,
             'Staking MUST receive Clanker token fees'
         );
@@ -474,7 +347,7 @@ contract LevrFeeSplitterV1Test is Test {
 
         // Verify deployer received BOTH tokens
         assertEq(
-            clankerToken.balanceOf(tokenAdmin) - deployerClankerBefore,
+            clankerERC20.balanceOf(tokenAdmin) - deployerClankerBefore,
             expectedDeployerClanker,
             'Deployer MUST receive Clanker token fees'
         );
@@ -486,7 +359,7 @@ contract LevrFeeSplitterV1Test is Test {
 
         // Verify splitter is empty after distribution
         assertEq(
-            clankerToken.balanceOf(address(splitter)),
+            clankerERC20.balanceOf(address(splitter)),
             0,
             'Splitter should have no Clanker tokens left'
         );
@@ -504,6 +377,7 @@ contract LevrFeeSplitterV1Test is Test {
     function test_distribute_multipleTokensSequentially_bothReceiversGetBothTokens() public {
         // Create wrapped ETH token
         MockRewardToken wrappedETH = new MockRewardToken();
+        staking.whitelistToken(address(wrappedETH));
 
         // Configure splits: 70% staking, 30% deployer
         ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
@@ -517,11 +391,12 @@ contract LevrFeeSplitterV1Test is Test {
         uint256 clankerFees = 2000 ether;
         uint256 wrappedETHFees = 10 ether;
 
-        clankerToken.transfer(address(splitter), clankerFees);
+        MockERC20 clankerERC20_2 = clankerToken.token();
+        clankerERC20_2.transfer(address(splitter), clankerFees);
         wrappedETH.transfer(address(splitter), wrappedETHFees);
 
         // Distribute each token separately
-        splitter.distribute(address(clankerToken));
+        splitter.distribute(address(clankerERC20_2));
         splitter.distribute(address(wrappedETH));
 
         // Calculate expected amounts
@@ -532,7 +407,7 @@ contract LevrFeeSplitterV1Test is Test {
 
         // Verify both receivers got both tokens
         assertEq(
-            clankerToken.balanceOf(address(staking)),
+            clankerERC20_2.balanceOf(address(staking)),
             expectedStakingClanker,
             'Staking MUST receive Clanker token fees (sequential)'
         );
@@ -542,7 +417,7 @@ contract LevrFeeSplitterV1Test is Test {
             'Staking MUST receive wrapped ETH fees (sequential)'
         );
         assertEq(
-            clankerToken.balanceOf(tokenAdmin),
+            clankerERC20_2.balanceOf(tokenAdmin),
             expectedDeployerClanker,
             'Deployer MUST receive Clanker token fees (sequential)'
         );
@@ -636,8 +511,9 @@ contract LevrFeeSplitterV1Test is Test {
         rewardToken.transfer(address(splitter), 500 ether);
 
         // Check pending includes balance
-        uint256 pending = splitter.pendingFeesInclBalance(address(rewardToken));
-        assertEq(pending, 500 ether, 'Should include contract balance');
+        // AUDIT 2: pendingFeesInclBalance removed, query balance directly
+        uint256 balance = rewardToken.balanceOf(address(splitter));
+        assertEq(balance, 500 ether, 'Should have 500 ether in splitter');
     }
 
     function test_isSplitsConfigured_validatesTotal() public {

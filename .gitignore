@@ -16,4 +16,4 @@ broadcast/
 ref
 .DS_Store
 
-*log*
+*.log*

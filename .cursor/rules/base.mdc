@@ -1,12 +1,63 @@
 ---
-description:
-globs:
 alwaysApply: true
 ---
+
+## Testing Rules
 
 - **Always** run tests in -vvv verbose mode.
 - **Always** tests handle fork internally.
 - **Never** pass fork url in test command.
-- **Always** run relevent test cases/files/folders.
+- **Always** run relevant test cases/files/folders.
 - **Intelligently** determine if a test is written just to make the test pass, even when the source code is actually incorrect.
+- **Always** run tests from their dir i.e. if you are testing unit tests, run them with --match-path "test/unit/\*.t.sol"
+
+### Build & Test Performance Optimization
+
+The codebase uses Foundry profiles to optimize compilation speed:
+
+**Default Profile:**
+
+- Uses `via_ir = true` - works for all tests, scripts, e2e, and production deployments
+- Use for e2e tests, deployment scripts, or full test suite
+- Command: `forge test -vvv` or `forge script script/DeployLevr.s.sol`
+
+**Dev Profile (FAST - 20x faster):**
+
+- No `via_ir` compilation (unit tests only; scripts/e2e will fail)
+- **Always use this for unit test iteration during development**
+- Command: `FOUNDRY_PROFILE=dev forge test --match-path "test/unit/*.t.sol" -vvv`
+
+### Test Command Examples
+
+```bash
+# Unit tests (FAST - use dev profile for iteration)
+FOUNDRY_PROFILE=dev forge test --match-path "test/unit/*.t.sol" -vvv
+
+# Specific unit test file (FAST)
+FOUNDRY_PROFILE=dev forge test --match-path "test/unit/LevrStakingV1.t.sol" -vvv
+
+# Specific test function (FAST)
+FOUNDRY_PROFILE=dev forge test --match-test testStake -vvv
+
+# E2E tests (use default profile)
+forge test --match-path "test/e2e/*.sol" -vvv
+
+# All tests including e2e (slower, default profile)
+forge test -vvv
+
+# Production deployment (use default profile)
+forge script script/DeployLevr.s.sol --broadcast --verify
+```
+
+**Always** use `FOUNDRY_PROFILE=dev` when iterating on unit tests - it's 20x faster!
+
+> **When confirming a full test suite run (e.g. before merge, tag, or PR status check), you must always run `test/unit/` with the dev profile first (`FOUNDRY_PROFILE=dev`). Only run the full suite including e2e (with default profile) if the unit suite passes. Running all tests with IR enabled is 20-30x slower—avoid unless required.**
+
+## Code Organization Rules
+
 - **Always** define and import errors/events/enums/structs from interfaces.
+- **Always** put analysis md's to the spec folder.
+
+---
+
+**For comprehensive spec folder documentation rules, see:** `spec.mdc`

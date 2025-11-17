@@ -61,7 +61,8 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
             quorumBps: 7000, // 70% participation required
             approvalBps: 5100, // 51% approval required
             minSTokenBpsToSubmit: 100, // 1% of supply required to propose
-            maxProposalAmountBps: 1000 // 10% of total supply allowed per proposal
+            maxProposalAmountBps: 1000, // 10% of total supply allowed per proposal,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (factory, forwarder, levrDeployer) = deployFactory(cfg, address(this), CLANKER_FACTORY);
@@ -162,7 +163,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create first proposal (auto-starts governance cycle - proposer pays gas)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         uint256 cycleId = ILevrGovernor_v1(governor).currentCycleId();
         assertEq(cycleId, 1, 'cycle should be 1 after first proposal');
@@ -171,13 +172,14 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'Team allocation'
         );
 
         vm.prank(charlie);
-        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
 
         // Verify proposals created
         assertEq(pid1, 1);
@@ -186,6 +188,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // All users vote
         vm.prank(alice);
@@ -293,13 +296,14 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal (auto-starts cycle - proposer pays gas)
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Bob tries to stake AFTER proposal is created
         _stakeFor(bob, 10 ether); // Bob stakes 2x more than Alice
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Check current voting power (no snapshots - uses current VP from staking)
         uint256 aliceVP = ILevrStaking_v1(staking).getVotingPower(alice);
@@ -314,6 +318,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         assertGt(aliceVP, bobVP, 'alice VP > bob VP (time-weighted protection)');
 
         // Both can vote, but Alice's vote carries more weight
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
 
@@ -342,17 +347,18 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Alice can only propose once per type per cycle
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(10 ether); // First auto-starts cycle
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 10 ether); // First auto-starts cycle
         assertGt(pid1, 0, 'should create first boost proposal');
 
         // Alice tries to create another BoostStakingPool in same cycle (should revert)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
-        ILevrGovernor_v1(governor).proposeBoost(10 ether);
+        ILevrGovernor_v1(governor).proposeBoost(clankerToken, 10 ether);
 
         // But alice can create TransferToAddress proposal (different type)
         vm.prank(alice);
         uint256 pidTransfer = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             10 ether,
             'test'
@@ -362,7 +368,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Alice tries to create another TransferToAddress in same cycle (should revert)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
-        ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 10 ether, 'test');
+        ILevrGovernor_v1(governor).proposeTransfer(clankerToken, address(0xBEEF), 10 ether, 'test');
     }
 
     // ============ Test 5: Quorum Not Met ============
@@ -387,10 +393,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Only Alice votes (not enough for 70% quorum)
         vm.prank(alice);
@@ -403,14 +410,20 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         bool meetsQuorum = ILevrGovernor_v1(governor).meetsQuorum(pid);
         assertFalse(meetsQuorum, 'should not meet quorum');
 
-        // Try to execute (should revert)
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
 
-        // Check state is Defeated
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
+
+        // Check state is Executed (FIX: defeated proposals marked as executed)
+        // FIX [OCT-31-CRITICAL-1]: Defeated proposals now show as Executed because executed=true
         assertEq(
             uint256(ILevrGovernor_v1(governor).state(pid)),
-            uint256(ILevrGovernor_v1.ProposalState.Defeated)
+            uint256(ILevrGovernor_v1.ProposalState.Executed),
+            'Should be Executed (defeated but marked as executed)'
         );
     }
 
@@ -429,10 +442,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // All vote but majority vote NO
         vm.prank(alice);
@@ -451,9 +465,13 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         bool meetsApproval = ILevrGovernor_v1(governor).meetsApproval(pid);
         assertFalse(meetsApproval, 'should not meet approval threshold');
 
-        // Try to execute (should revert)
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute - FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
+
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
     }
 
     // ============ Test 7: Only Winner Executes ============
@@ -471,16 +489,17 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create 3 proposals
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         vm.prank(bob);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
 
         vm.prank(charlie);
-        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(150 ether);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 150 ether);
 
         // Warp to voting
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Voting pattern: pid2 gets most yes votes
         // pid1: Alice YES, Bob NO, Charlie NO -> low yes
@@ -545,7 +564,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Alice tries to propose (should revert)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
-        ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Alice stakes more to meet threshold
         uint256 additionalStake = (minStake - aliceAmount) + 0.01 ether;
@@ -557,7 +576,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Now Alice can propose
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertGt(pid, 0, 'proposal should be created');
     }
 
@@ -571,12 +590,13 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // First proposal auto-starts cycle 1
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertEq(pid1, 1, 'First proposal should have ID 1');
         assertEq(ILevrGovernor_v1(governor).currentCycleId(), 1, 'Should be in cycle 1');
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Note: Intentionally NOT voting on pid1 so it fails quorum
         // This allows the next proposal to auto-start a new cycle without orphaning pid1
@@ -593,7 +613,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // New proposal after cycle ended auto-starts cycle 2
         // pid1 failed quorum so it's defeated and can be orphaned safely
         vm.prank(alice);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
         assertEq(pid2, 2, 'Second proposal should have ID 2');
         assertEq(
             ILevrGovernor_v1(governor).currentCycleId(),
@@ -634,7 +654,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create single proposal (will auto-start cycle 1)
         vm.prank(alice);
-        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Get initial proposal state
         ILevrGovernor_v1.Proposal memory propAfterCreation = ILevrGovernor_v1(governor).getProposal(
@@ -645,6 +665,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Vote YES with high voting power
         vm.prank(alice);
@@ -728,10 +749,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal (auto-starts cycle 1)
         vm.prank(alice);
-        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Alice votes YES (100% yes votes = meets approval, 100% participation = meets quorum)
         vm.prank(alice);
@@ -756,11 +778,19 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // NOW: Execute the proposal
         ILevrGovernor_v1(governor).execute(proposalId);
 
-        // Verify execution automatically started cycle 2
+        // Cycle doesn't auto-advance immediately - it advances when next proposal is created
+        // But first, we need to wait for the cycle to end (voting window must pass)
+        vm.warp(block.timestamp + 5 days + 1); // Wait for cycle 1 voting window to end
+
+        // Create a new proposal to trigger cycle advancement (alice can propose again in new cycle)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).proposeBoost(clankerToken, 50 ether);
+
+        // Verify cycle 2 was auto-started when proposing
         assertEq(
             ILevrGovernor_v1(governor).currentCycleId(),
             2,
-            'Should be in cycle 2 after execution'
+            'Should be in cycle 2 after next proposal'
         );
 
         // Verify we can no longer call startNewCycle until voting window of cycle 2 ends
@@ -779,10 +809,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create two proposals (auto-starts cycle 1)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'test'
@@ -790,6 +821,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Alice votes YES on pid1, NO on pid2
         // Bob votes YES on both (pid1 wins with more votes)
@@ -812,12 +844,9 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         ILevrGovernor_v1.Proposal memory p1 = ILevrGovernor_v1(governor).getProposal(pid1);
         ILevrGovernor_v1.Proposal memory p2 = ILevrGovernor_v1(governor).getProposal(pid2);
 
-        assertEq(uint256(p1.state), 2, 'pid1 should be in Succeeded state');
-        assertEq(
-            uint256(p2.state),
-            2,
-            'pid2 should be in Succeeded state (non-winner but succeeded)'
-        );
+        assertEq(uint256(p1.state), 2, 'pid1 should be in Succeeded state (winner)');
+        // SHERLOCK #33 FIX: Non-winner now correctly shows as Defeated
+        assertEq(uint256(p2.state), 3, 'pid2 should be in Defeated state (non-winner)');
 
         // Try to start new cycle - should REVERT because pid1 is Succeeded
         vm.expectRevert(ILevrGovernor_v1.ExecutableProposalsRemaining.selector);
@@ -826,14 +855,34 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Execute the winning proposal
         ILevrGovernor_v1(governor).execute(pid1);
 
-        // Now cycle 2 should be auto-started
-        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should auto-start cycle 2');
+        // SHERLOCK #33 FIX: Cycle does NOT auto-advance on execution (stays at 1)
+        // Advancement happens when next proposal is created
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            1,
+            'Cycle stays at 1 until next propose'
+        );
 
-        // Verify pid2 is orphaned in cycle 1 (cannot execute in new cycle)
+        // Verify pid2 is now Defeated (non-winner)
         ILevrGovernor_v1.Proposal memory p2After = ILevrGovernor_v1(governor).getProposal(pid2);
         assertEq(p2After.cycleId, 1, 'pid2 should still be in cycle 1');
-        assertEq(uint256(p2After.state), 2, 'pid2 still in Succeeded state but orphaned');
+        assertEq(uint256(p2After.state), 3, 'pid2 now correctly shows as Defeated (non-winner)');
         assertFalse(p2After.executed, 'pid2 should not be executed');
+
+        // SHERLOCK #33 FIX: Because pid2 now shows as Defeated (not Succeeded),
+        // we can propose a new proposal which will trigger cycle advancement
+        vm.prank(alice);
+        uint256 pid3 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 25 ether);
+
+        // NOW the cycle advances to 2
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            2,
+            'Cycle advances to 2 on new propose'
+        );
+
+        ILevrGovernor_v1.Proposal memory p3 = ILevrGovernor_v1(governor).getProposal(pid3);
+        assertEq(p3.cycleId, 2, 'New proposal in cycle 2');
     }
 
     // ============ Test 13: Can Start New Cycle If Proposal Is Defeated ============
@@ -848,10 +897,11 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
         // Create proposal (auto-starts cycle 1)
         vm.prank(alice);
-        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 proposalId = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Only alice votes (33% participation < 70% quorum requirement)
         vm.prank(alice);
@@ -873,5 +923,330 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
             2,
             'Should be able to start new cycle'
         );
+    }
+
+    // ============ Test 14: Supply Invariant Testing - Comprehensive Snapshot Behavior ============
+
+    function test_supplyInvariant_tinySupplyAtCreation_singleVoterCanPass() public {
+        // SCENARIO 1: Proposal created with TINY supply (1 token), then supply explodes
+        // EDGE CASE: Single early voter can meet quorum alone (snapshot is tiny)
+        // This demonstrates potential manipulation if early proposer colludes
+
+        // Minimal initial stake
+        _stakeFor(alice, 1 ether);
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 1 ether)
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 1 ether, 'Snapshot: 1 ether');
+
+        // Supply explodes (1000x increase!)
+        for (uint256 i = 0; i < 10; i++) {
+            address newUser = address(uint160(0x1000 + i));
+            _stakeFor(newUser, 100 ether);
+        }
+        // Total: 1 ether (alice) + 1000 ether (10 users × 100) = 1001 ether
+
+        assertEq(IERC20(stakedToken).totalSupply(), 1001 ether, 'Current supply: 1001 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
+
+        // ONLY alice votes (0.1% of current supply)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (1) >= snapshot (1) × 70% = 0.7 ether ✅
+        // Alice's 1 ether vote meets quorum, even though it's only 0.1% of current supply!
+        assertTrue(prop.meetsQuorum, 'Quorum met with single voter (100% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met (100% yes)');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+
+        // This shows: Early proposals with tiny snapshots can pass with minimal participation
+        // if the original stakers vote, regardless of how much supply grows later
+    }
+
+    function test_supplyInvariant_supplyIncreaseAfterCreation() public {
+        // SCENARIO 2: Proposal created with 10 ether supply, then supply DOUBLES to 20 ether
+        // EXPECTED: Quorum uses snapshot (10 ether), so 70% quorum = 7 ether minimum
+
+        // Stake initial supply
+        _stakeFor(alice, 5 ether);
+        _stakeFor(bob, 5 ether);
+        // Total: 10 ether
+
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 10 ether)
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 10 ether, 'Snapshot: 10 ether');
+
+        // Now supply DOUBLES (new stakers join after proposal created)
+        _stakeFor(charlie, 10 ether);
+        // Total: 20 ether (100% increase)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 20 ether, 'Current supply: 20 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
+
+        // Only alice and bob vote (10 ether total, charlie doesn't vote)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (10) >= snapshot (10) * 70% = 7 ether ✅
+        // Even though only 50% of CURRENT supply voted, 100% of SNAPSHOT voted
+        assertTrue(prop.meetsQuorum, 'Quorum met (10/10 = 100% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+
+        // This demonstrates that new stakers AFTER proposal don't affect quorum calculation
+    }
+
+    function test_supplyInvariant_supplyDecreaseAfterCreation() public {
+        // SCENARIO 3: Proposal created with 20 ether supply, then supply HALVES to 10 ether
+        // EXPECTED: Quorum uses snapshot (20 ether), so 70% quorum = 14 ether minimum
+
+        // Stake initial supply
+        _stakeFor(alice, 5 ether);
+        _stakeFor(bob, 10 ether);
+        _stakeFor(charlie, 5 ether);
+        // Total: 20 ether
+
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 20 ether)
+        vm.prank(bob);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 20 ether, 'Snapshot: 20 ether');
+
+        // Now charlie unstakes (supply decreases by 25%)
+        vm.prank(charlie);
+        ILevrStaking_v1(staking).unstake(5 ether, charlie);
+        // Total: 15 ether (25% decrease)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 15 ether, 'Current supply: 15 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
+
+        // Alice and bob vote (15 ether total balance, but charlie can't vote - unstaked)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (15) >= snapshot (20) * 70% = 14 ether ✅
+        // 75% of snapshot supply voted (15/20), which exceeds 70% quorum
+        assertTrue(prop.meetsQuorum, 'Quorum met (15/20 = 75% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+    }
+
+    function test_supplyInvariant_extremeSupplyIncrease() public {
+        // SCENARIO 4: Proposal created with 1 ether supply, then 10x increase to 10 ether
+        // EXPECTED: Quorum uses snapshot (1 ether), so 70% = 0.7 ether minimum
+
+        // Minimal initial stake
+        _stakeFor(alice, 1 ether);
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 1 ether)
+        vm.prank(alice);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 1 ether, 'Snapshot: 1 ether');
+
+        // Extreme supply increase (10x growth)
+        _stakeFor(bob, 5 ether);
+        _stakeFor(charlie, 4 ether);
+        // Total: 10 ether (1000% increase!)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 10 ether, 'Current supply: 10 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
+
+        // Only alice votes (1 ether balance)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // Quorum: totalBalanceVoted (1) >= snapshot (1) * 70% = 0.7 ether ✅
+        // Alice's vote alone (100% of snapshot) exceeds quorum, even though it's only 10% of current supply
+        assertTrue(prop.meetsQuorum, 'Quorum met (1/1 = 100% of snapshot)');
+        assertTrue(prop.meetsApproval, 'Approval met');
+        assertEq(uint256(prop.state), 2, 'Succeeded');
+
+        // This shows that early proposals can pass with minimal absolute participation
+        // if most original stakers vote, even if supply explodes later
+    }
+
+    function test_supplyInvariant_extremeSupplyDecrease() public {
+        // SCENARIO 5: Proposal created with 10 ether supply, then 70% decrease to 3 ether
+        // WITH ADAPTIVE QUORUM: Quorum adapts to current supply to prevent deadlock
+        // Adaptive quorum = 70% of current (3 ether) = 2.1 ether (remaining voters can pass)
+
+        // Large initial stake
+        _stakeFor(alice, 2 ether);
+        _stakeFor(bob, 4 ether);
+        _stakeFor(charlie, 4 ether);
+        // Total: 10 ether
+
+        vm.warp(block.timestamp + 10 days); // Accumulate VP
+
+        // Create proposal (snapshot: 10 ether)
+        vm.prank(bob);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.totalSupplySnapshot, 10 ether, 'Snapshot: 10 ether');
+
+        // Extreme unstaking (70% of supply leaves)
+        vm.prank(bob);
+        ILevrStaking_v1(staking).unstake(4 ether, bob);
+        vm.prank(charlie);
+        ILevrStaking_v1(staking).unstake(3 ether, charlie);
+        // Remaining: 3 ether (alice 2, charlie 1)
+
+        assertEq(IERC20(stakedToken).totalSupply(), 3 ether, 'Current supply: 3 ether');
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
+
+        // Remaining users vote (alice 2 ether, charlie 1 ether = 100% participation!)
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid, true);
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid, true);
+
+        // Check results
+        vm.warp(prop.votingEndsAt + 1);
+        prop = ILevrGovernor_v1(governor).getProposal(pid);
+
+        // ADAPTIVE QUORUM: totalBalanceVoted (3) >= adaptive quorum (2.1 ether) ✅
+        // Adaptive quorum uses current supply (3 ether) because 3 < 10 (snapshot)
+        // Required = max(3 * 70%, 10 * 0.25%) = max(2.1, 0.025) = 2.1 ether
+        // All remaining stakers voted (100% participation of remaining supply)
+        assertTrue(prop.meetsQuorum, 'Quorum met with adaptive quorum (3 >= 2.1)');
+        assertTrue(prop.meetsApproval, 'Approval met (100% yes)');
+        assertEq(uint256(prop.state), 2, 'Succeeded with adaptive quorum');
+
+        // This demonstrates that adaptive quorum prevents mass unstaking deadlock
+        // Remaining stakers can pass proposals even after mass exodus
+    }
+
+    function test_supplyInvariant_multipleProposalsDifferentSnapshots() public {
+        // SCENARIO 6: Multiple proposals created at different times with different snapshots
+        // EXPECTED: Each proposal uses its own snapshot for quorum calculation
+
+        // Initial stake: 5 ether
+        _stakeFor(alice, 5 ether);
+        vm.warp(block.timestamp + 10 days);
+
+        // Proposal 1 created (snapshot: 5 ether)
+        vm.prank(alice);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
+
+        ILevrGovernor_v1.Proposal memory prop1 = ILevrGovernor_v1(governor).getProposal(pid1);
+        assertEq(prop1.totalSupplySnapshot, 5 ether, 'Prop1 snapshot: 5 ether');
+
+        // Supply doubles
+        _stakeFor(bob, 5 ether);
+        // Total: 10 ether
+
+        vm.warp(block.timestamp + 1 hours); // Still in proposal window
+
+        // Proposal 2 created (snapshot: 10 ether)
+        vm.prank(bob);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
+            address(0xBEEF),
+            50 ether,
+            'test'
+        );
+
+        ILevrGovernor_v1.Proposal memory prop2 = ILevrGovernor_v1(governor).getProposal(pid2);
+        assertEq(prop2.totalSupplySnapshot, 10 ether, 'Prop2 snapshot: 10 ether');
+
+        // Supply triples
+        _stakeFor(charlie, 10 ether);
+        // Total: 20 ether
+
+        // Warp to voting window (users have been staking, accumulating VP)
+        vm.warp(prop1.votingStartsAt + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
+
+        // All three vote on both proposals
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+        vm.prank(alice);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+        vm.prank(bob);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid1, true);
+        vm.prank(charlie);
+        ILevrGovernor_v1(governor).vote(pid2, true);
+
+        // Check results
+        vm.warp(prop1.votingEndsAt + 1);
+
+        prop1 = ILevrGovernor_v1(governor).getProposal(pid1);
+        prop2 = ILevrGovernor_v1(governor).getProposal(pid2);
+
+        // Prop1: totalBalanceVoted (20) >= snapshot (5) * 70% = 3.5 ether ✅ (400% participation!)
+        assertTrue(prop1.meetsQuorum, 'Prop1 quorum met (20/5 = 400% of snapshot)');
+
+        // Prop2: totalBalanceVoted (20) >= snapshot (10) * 70% = 7 ether ✅ (200% participation)
+        assertTrue(prop2.meetsQuorum, 'Prop2 quorum met (20/10 = 200% of snapshot)');
+
+        // Both proposals use their respective snapshots correctly
+        // SHERLOCK #33 FIX: Check which is the winner
+        uint256 winnerId = ILevrGovernor_v1(governor).getWinner(1);
+
+        // Winner shows as Succeeded, non-winner as Defeated
+        if (winnerId == pid1) {
+            assertEq(uint256(prop1.state), 2, 'Prop1 Succeeded (winner)');
+            assertEq(uint256(prop2.state), 3, 'Prop2 Defeated (non-winner)');
+        } else {
+            assertEq(uint256(prop2.state), 2, 'Prop2 Succeeded (winner)');
+            assertEq(uint256(prop1.state), 3, 'Prop1 Defeated (non-winner)');
+        }
     }
 }

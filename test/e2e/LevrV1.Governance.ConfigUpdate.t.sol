@@ -53,7 +53,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000, // 70% participation required
             approvalBps: 5100, // 51% approval required
             minSTokenBpsToSubmit: 100, // 1% of supply required to propose
-            maxProposalAmountBps: 1000 // 10% of supply max proposal amount
+            maxProposalAmountBps: 1000, // 10% of supply max proposal amount
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
 
         (factory, forwarder, levrDeployer) = deployFactory(cfg, factoryOwner, CLANKER_FACTORY);
@@ -137,10 +138,11 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Alice and Bob vote (15 of 20 = 75% participation - meets 70% quorum)
         vm.prank(alice);
@@ -165,7 +167,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 8000, // INCREASED from 70% to 80%
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -175,17 +178,20 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Warp to end of voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Now proposal should NOT meet quorum (75% < 80%)
-        assertFalse(
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL meets quorum
+        // because it uses the 70% threshold from when it was created, not the new 80%
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertTrue(
             ILevrGovernor_v1(governor).meetsQuorum(pid),
-            'Should NOT meet 80% quorum with 75% participation'
+            'Should still meet 70% quorum (snapshot) even though config changed to 80%'
         );
 
-        // Try to execute - should fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Execution should succeed because snapshot protects against config changes
         ILevrGovernor_v1(governor).execute(pid);
 
-        console2.log('[RESULT] Proposal failed due to mid-cycle quorum increase');
+        console2.log(
+            '[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes'
+        );
     }
 
     // ============ Test 2: Quorum Decrease Mid-Cycle (Allows Previously Failing Proposal) ============
@@ -200,10 +206,11 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // Only Alice votes (5 of 25 = 20% participation - doesn't meet 70% quorum)
         vm.prank(alice);
@@ -226,7 +233,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 1000, // DECREASED from 70% to 10%
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -236,19 +244,26 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Warp to end of voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Now proposal SHOULD meet quorum (20% > 10%)
-        assertTrue(
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL does NOT meet quorum
+        // because it uses the 70% threshold from when it was created, not the new 10%
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertFalse(
             ILevrGovernor_v1(governor).meetsQuorum(pid),
-            'Should meet 10% quorum with 20% participation'
+            'Should NOT meet 70% quorum (snapshot) even though config changed to 10%'
         );
 
-        // Should be able to execute now
+        // Execution should fail because snapshot protects against config changes
+        // FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
 
-        ILevrGovernor_v1.Proposal memory proposal = ILevrGovernor_v1(governor).getProposal(pid);
-        assertTrue(proposal.executed, 'Proposal should be executed');
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
 
-        console2.log('[RESULT] Proposal succeeded due to mid-cycle quorum decrease');
+        console2.log(
+            '[RESULT] Proposal still defeated - snapshot protects against mid-cycle config changes'
+        );
     }
 
     // ============ Test 3: Approval Threshold Change Mid-Cycle ============
@@ -263,10 +278,11 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Warp to voting window
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // All vote: Alice YES, Bob YES, Charlie NO
         // 2/3 of votes = ~66% approval (meets 51% requirement)
@@ -294,7 +310,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000,
             approvalBps: 7000, // INCREASED from 51% to 70%
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -304,17 +321,20 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Warp to end of voting
         vm.warp(block.timestamp + 5 days + 1);
 
-        // Now proposal should NOT meet approval (66% < 70%)
-        assertFalse(
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL meets approval
+        // because it uses the 51% threshold from when it was created, not the new 70%
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertTrue(
             ILevrGovernor_v1(governor).meetsApproval(pid),
-            'Should NOT meet 70% approval with 66% yes votes'
+            'Should still meet 51% approval (snapshot) even though config changed to 70%'
         );
 
-        // Try to execute - should fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Execution should succeed because snapshot protects against config changes
         ILevrGovernor_v1(governor).execute(pid);
 
-        console2.log('[RESULT] Proposal failed due to mid-cycle approval increase');
+        console2.log(
+            '[RESULT] Proposal succeeded - snapshot protects against mid-cycle config changes'
+        );
     }
 
     // ============ Test 4: MaxActiveProposals Change Mid-Cycle ============
@@ -327,7 +347,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates first proposal (maxActiveProposals = 7)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertGt(pid1, 0, 'First proposal should succeed');
 
         // Factory owner reduces maxActiveProposals to 1
@@ -341,7 +361,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -356,7 +377,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Note: MaxProposalsReached is checked BEFORE AlreadyProposedInCycle
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.MaxProposalsReached.selector);
-        ILevrGovernor_v1(governor).proposeBoost(200 ether);
+        ILevrGovernor_v1(governor).proposeBoost(clankerToken, 200 ether);
 
         console2.log(
             '[RESULT] New proposals blocked by reduced limit, existing proposals unaffected'
@@ -374,7 +395,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal (meets 1% requirement with 25%)
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
         assertGt(pid, 0, 'First proposal should succeed');
 
         // Factory owner increases minStake to 30% (alice now has insufficient stake for NEW proposals)
@@ -388,7 +409,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 3000, // INCREASED from 1% to 30%
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -397,6 +419,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Existing proposal should still be valid and executable
         vm.warp(block.timestamp + 2 days + 1); // voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
         vm.prank(bob);
@@ -417,7 +440,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // Alice tries to create new proposal in new cycle - should fail (25% < 30%)
         vm.prank(alice);
         vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
-        ILevrGovernor_v1(governor).proposeTransfer(address(0xBEEF), 50 ether, 'test');
+        ILevrGovernor_v1(governor).proposeTransfer(clankerToken, address(0xBEEF), 50 ether, 'test');
 
         console2.log('[RESULT] New proposals blocked by increased stake requirement');
     }
@@ -434,7 +457,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates FIRST proposal with original config (2 day proposal, 5 day voting)
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         ILevrGovernor_v1.Proposal memory p1Before = ILevrGovernor_v1(governor).getProposal(pid1);
         uint256 cycleProposalEnd = p1Before.votingStartsAt; // Should be now + 2 days
@@ -455,7 +478,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -466,6 +490,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(block.timestamp + 1 days); // Still within original proposal window
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'test'
@@ -499,6 +524,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Verify both proposals work with original timeline
         vm.warp(cycleProposalEnd + 1); // Start of voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
 
         // All users vote on both proposals (100% participation meets 70% quorum)
         vm.prank(alice);
@@ -551,7 +577,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         // STEP 1: First proposal auto-creates cycle
         console2.log('=== STEP 1: Alice proposes (auto-creates cycle 1) ===');
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         ILevrGovernor_v1.Proposal memory p1 = ILevrGovernor_v1(governor).getProposal(pid1);
         console2.log('Cycle 1 created at T0:', t0);
@@ -573,7 +599,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -589,6 +616,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         vm.prank(bob);
         uint256 pid2 = ILevrGovernor_v1(governor).proposeTransfer(
+            clankerToken,
             address(0xBEEF),
             50 ether,
             'test'
@@ -638,6 +666,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(p1.votingStartsAt + 1);
         console2.log('Voting starts at:', p1.votingStartsAt);
 
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid1, true);
         vm.prank(bob);
@@ -674,10 +703,11 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Vote but make it fail (low quorum - only alice votes = 20% < 70%)
         vm.warp(block.timestamp + 2 days + 1); // Voting window
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
 
@@ -686,9 +716,13 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         console2.log('[STATE] Voting window ended, proposal failed quorum (20% < 70%)');
 
-        // Try to execute - will fail
-        vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        // Try to execute - will fail - FIX [OCT-31-CRITICAL-1]
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
         ILevrGovernor_v1(governor).execute(pid);
+
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
 
         console2.log('[STATE] Proposal execution failed (as expected)');
 
@@ -709,7 +743,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(alice);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(50 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 50 ether);
         assertGt(pid2, 0, 'New proposal should work in cycle 2');
 
         console2.log('[RESULT] Governance recovered - new proposals work in cycle 2');
@@ -725,10 +759,11 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Create proposal in cycle 1
         vm.prank(alice);
-        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid1 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Vote but make it fail (only alice votes = 20% < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid1, true);
 
@@ -745,7 +780,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(alice);
-        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(50 ether);
+        uint256 pid2 = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 50 ether);
 
         // This should have auto-created cycle 2!
         assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should auto-advance to cycle 2');
@@ -769,10 +804,11 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Create proposal
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Vote but insufficient participation (only alice votes = 20% < 70% quorum)
         vm.warp(block.timestamp + 2 days + 1);
+        vm.roll(block.number + 1); // Advance block for flash loan protection
         vm.prank(alice);
         ILevrGovernor_v1(governor).vote(pid, true);
 
@@ -794,27 +830,41 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 1000, // LOWERED from 70% to 10% to help recovery
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
 
         console2.log('[RECOVERY] Quorum lowered from 70% to 10% to unblock proposal');
 
-        // Now proposal can execute!
-        assertTrue(ILevrGovernor_v1(governor).meetsQuorum(pid), 'Should now meet 10% quorum');
-
-        ILevrGovernor_v1(governor).execute(pid);
-
-        assertTrue(
-            ILevrGovernor_v1(governor).getProposal(pid).executed,
-            'Proposal should execute after quorum lowered'
+        // FIX [NEW-C-3]: With snapshot fix, proposal STILL does NOT meet quorum
+        // Config changes can no longer be used for recovery (security improvement)
+        // This is the CORRECT, SECURE behavior - prevents config manipulation
+        assertFalse(
+            ILevrGovernor_v1(governor).meetsQuorum(pid),
+            'Should still not meet 70% quorum (snapshot)'
         );
 
-        console2.log('[RESULT] Config update successfully recovered stuck proposal');
-        console2.log('[RESULT] New cycle auto-started after execution');
+        // Execution fails - config changes cannot unblock stuck proposals
+        // FIX [OCT-31-CRITICAL-1]: no longer reverts
+        // OLD: vm.expectRevert(ILevrGovernor_v1.ProposalNotSucceeded.selector);
+        ILevrGovernor_v1(governor).execute(pid);
 
-        assertEq(ILevrGovernor_v1(governor).currentCycleId(), 2, 'Should be in cycle 2');
+        // Verify marked as executed
+        ILevrGovernor_v1.Proposal memory prop = ILevrGovernor_v1(governor).getProposal(pid);
+        assertEq(prop.executed, true, 'Proposal should be marked as executed');
+
+        console2.log('[RESULT] Snapshot protection prevents config-based recovery');
+        console2.log('[RESULT] Must use manual startNewCycle() to recover instead');
+
+        // Proper recovery: manually start new cycle
+        ILevrGovernor_v1(governor).startNewCycle();
+        assertEq(
+            ILevrGovernor_v1(governor).currentCycleId(),
+            2,
+            'Should be in cycle 2 after manual restart'
+        );
     }
 
     // ============ Test 10: Auto-Cycle Creation After Config Update ============
@@ -836,7 +886,8 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
             quorumBps: 7000,
             approvalBps: 5100,
             minSTokenBpsToSubmit: 100,
-            maxProposalAmountBps: 1000
+            maxProposalAmountBps: 1000,
+            minimumQuorumBps: 25 // 0.25% minimum quorum
         });
         vm.prank(factoryOwner);
         factory.updateConfig(newCfg);
@@ -845,7 +896,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
         // Alice creates proposal - this will AUTO-CREATE cycle 1 with NEW config
         vm.prank(alice);
-        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(100 ether);
+        uint256 pid = ILevrGovernor_v1(governor).proposeBoost(clankerToken, 100 ether);
 
         // Verify the auto-created cycle used the NEW config
         ILevrGovernor_v1.Proposal memory proposal = ILevrGovernor_v1(governor).getProposal(pid);

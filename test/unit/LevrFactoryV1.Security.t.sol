@@ -25,7 +25,7 @@ contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
     function test_cannot_register_with_someone_elses_treasury() public {
         // Alice prepares her infrastructure
         vm.prank(alice);
-        (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
+        factory.prepareForDeployment();
 
         // Alice creates token (she's the admin since she deployed it)
         vm.prank(alice);
@@ -46,7 +46,7 @@ contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
     function test_cannot_register_with_someone_elses_staking() public {
         // Alice prepares her infrastructure
         vm.prank(alice);
-        (, address aliceStaking) = factory.prepareForDeployment();
+        factory.prepareForDeployment();
 
         // Bob prepares his own treasury but tries to use Alice's staking
         vm.prank(bob);
@@ -69,7 +69,7 @@ contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
     function test_can_register_with_own_prepared_contracts() public {
         // Alice prepares her infrastructure
         vm.prank(alice);
-        (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
+        (address _aliceTreasury, address _aliceStaking) = factory.prepareForDeployment();
 
         // Alice creates token (she's the admin)
         vm.prank(alice);
@@ -79,8 +79,8 @@ contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
         vm.prank(alice);
         ILevrFactory_v1.Project memory project = factory.register(address(aliceToken));
 
-        assertEq(project.treasury, aliceTreasury, 'Should use Alice treasury');
-        assertEq(project.staking, aliceStaking, 'Should use Alice staking');
+        assertEq(project.treasury, _aliceTreasury, 'Should use Alice treasury');
+        assertEq(project.staking, _aliceStaking, 'Should use Alice staking');
         assertTrue(project.governor != address(0), 'Governor deployed');
         assertTrue(project.stakedToken != address(0), 'StakedToken deployed');
     }
@@ -107,7 +107,7 @@ contract LevrFactoryV1_SecurityTest is Test, LevrFactoryDeployHelper {
     function test_tokenAdmin_gate_still_enforced() public {
         // Alice prepares infrastructure
         vm.prank(alice);
-        (address aliceTreasury, address aliceStaking) = factory.prepareForDeployment();
+        factory.prepareForDeployment();
 
         // Alice creates token (she's the admin)
         vm.prank(alice);

@@ -114,15 +114,33 @@ forge script script/DeployLevrFactoryDevnet.s.sol --chain-id 31337 --broadcast
 // 1. Deploy forwarder FIRST
 LevrForwarder_v1 forwarder = new LevrForwarder_v1("LevrForwarder_v1");
 
-// 2. Deploy factory with forwarder
-LevrFactory_v1 factory = new LevrFactory_v1(config, owner, address(forwarder));
+// 2. Define guardrails for governance overrides
+ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
+    minStreamWindowSeconds: 1 days,
+    minProposalWindowSeconds: 6 hours,
+    minVotingWindowSeconds: 2 days,
+    minQuorumBps: 2000,
+    minApprovalBps: 5000,
+    minMinSTokenBpsToSubmit: 100,
+    minMinimumQuorumBps: 25
+});
 
-// 3. Prepare (get addresses before Clanker exists)
+// 3. Deploy factory with forwarder, deployer logic, and whitelist
+LevrFactory_v1 factory = new LevrFactory_v1(
+    config,
+    bounds,
+    owner,
+    address(forwarder),
+    address(levrDeployer),
+    initialWhitelist
+);
+
+// 4. Prepare (get addresses before Clanker exists)
 (address treasury, address staking) = factory.prepareForDeployment();
 
-// 4. Deploy Clanker token (use treasury/staking addresses)
+// 5. Deploy Clanker token (use treasury/staking addresses)
 
-// 5. Register (as tokenAdmin)
+// 6. Register (as tokenAdmin)
 ILevrFactory_v1.Project memory project = factory.register(clankerToken);
 ```
 
@@ -165,6 +183,8 @@ struct FactoryConfig {
   uint16 quorumBps;                // Min participation threshold (7000 = 70%)
   uint16 approvalBps;              // Min approval threshold (5100 = 51%)
   uint16 minSTokenBpsToSubmit;     // Min % of supply to propose (100 = 1%)
+  uint16 maxProposalAmountBps;     // Max treasury spend per proposal
+  uint16 minimumQuorumBps;         // Minimum quorum floor (adaptive safety)
 }
 ```
 
@@ -182,9 +202,11 @@ struct FactoryConfig {
 
 ### Test Coverage
 
-- **57 total tests** (100% pass rate)
-- **Unit Tests** (41 tests): Individual contract security and functionality
-- **E2E Tests** (16 tests): Full protocol flows and integration
+- **310+ total tests** (100% pass rate) - Unit, E2E, edge cases, and integration
+- **Unit Tests** (125+ tests): Individual contract security and functionality
+- **E2E Tests** (50+ tests): Full protocol flows and integration
+- **Edge Case Tests** (85+ tests): Boundary conditions and attack scenarios
+- **Industry Comparison Tests** (50+ tests): Validation against known vulnerabilities
 
 ### Run Tests
 
@@ -207,15 +229,18 @@ forge test --fork-url $RPC_URL
 ```
 test/
 ├── e2e/
-│   ├── LevrV1.Governance.t.sol      # 9 governance E2E tests
-│   ├── LevrV1.Staking.t.sol         # 5 staking E2E tests
-│   └── LevrV1.Registration.t.sol    # 4 registration tests
+│   ├── LevrV1.Governance.t.sol      # Governance E2E tests
+│   ├── LevrV1.Staking.t.sol         # Staking E2E tests
+│   ├── LevrV1.Registration.t.sol    # Registration tests
+│   └── LevrV1.StuckFundsRecovery.t.sol # Recovery scenarios
 └── unit/
-    ├── LevrFactoryV1.*.t.sol        # 9 factory tests
-    ├── LevrStakingV1.t.sol          # 13 staking tests
-    ├── LevrGovernorV1.t.sol         # 1 governor test
-    ├── LevrTreasuryV1.t.sol         # 2 treasury tests
-    └── LevrStakedTokenV1.t.sol      # 2 staked token tests
+    ├── LevrFactory*.t.sol            # Factory unit tests
+    ├── LevrStaking*.t.sol            # Staking unit tests (40+ tests)
+    ├── LevrGovernor*.t.sol           # Governor tests (66+ tests)
+    ├── LevrTreasury*.t.sol           # Treasury tests
+    ├── LevrStakedToken*.t.sol        # Staked token tests
+    ├── LevrFeeSplitter*.t.sol        # Fee splitter tests (74 tests)
+    └── Levr*.t.sol                   # Integration & edge cases
 ```
 
 ## Security
@@ -318,9 +343,12 @@ governor.execute(proposalId);
 
 ## Documentation
 
-- **Protocol Guide**: [specs/gov.md](specs/gov.md) - Complete governance mechanics
-- **Security Audit**: [specs/audit.md](specs/audit.md) - Full security assessment
+- **Protocol Guide**: [spec/GOV.md](spec/GOV.md) - Complete governance mechanics
+- **Security Audit**: [spec/AUDIT.md](spec/AUDIT.md) - Full security assessment & findings
+- **Audit Status**: [spec/AUDIT_STATUS.md](spec/AUDIT_STATUS.md) - Current audit progress
 - **API Reference**: Inline NatSpec documentation in all contracts
+- **Historical Fixes**: [spec/HISTORICAL_FIXES.md](spec/HISTORICAL_FIXES.md) - Past bugs and lessons learned
+- **Detailed Reports**: [spec/archive/audits/](spec/archive/audits/) - Complete audit technical reports
 
 ## Contributing
 
