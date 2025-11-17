@@ -219,8 +219,10 @@ Test cases to add:
 
 ## Open Questions
 
-1. Do we also want to cap how frequently a project can update its config (e.g., enforce cooldown)?
-2. Should we allow individual projects to opt into stricter guardrails?
+1. Do we also want to cap how frequently a project can update its config (e.g., enforce cooldown)?  
+   **Decision:** No. Introducing a cooldown would complicate emergency parameter updates for verified teams without materially reducing the core risk now that guardrails/timelocks exist.
+2. Should we allow individual projects to opt into stricter guardrails?  
+   **Decision:** No. Guardrails stay uniform at the factory level so integrators can rely on a single set of invariants.
 
 ---
 
