@@ -25,6 +25,7 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
     }
 
     function setUp() public {
+        _setMockProtocolFee(0, address(0));
         underlying = new MockERC20('Token', 'TKN');
         // Pass address(0) for forwarder since we're not testing meta-transactions here
         staking = createStaking(address(0), address(this));
@@ -62,6 +63,73 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
             staking.escrowBalance(address(underlying)),
             stakeAmount,
             'Should escrow underlying'
+        );
+    }
+
+    function test_stake_collectsProtocolFee_whenConfigured() public {
+        address feeRecipient = address(0xFEE1);
+        uint16 feeBps = 250; // 2.5%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        uint256 stakeAmount = 10_000 ether;
+        underlying.approve(address(staking), stakeAmount);
+        staking.stake(stakeAmount);
+
+        uint256 expectedFee = (stakeAmount * feeBps) / staking.BASIS_POINTS();
+        uint256 expectedNet = stakeAmount - expectedFee;
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            expectedFee,
+            'Protocol fee should be collected during stake'
+        );
+        assertEq(
+            sToken.balanceOf(address(this)),
+            expectedNet,
+            'Should mint net staked tokens after fee'
+        );
+        assertEq(
+            staking.escrowBalance(address(underlying)),
+            expectedNet,
+            'Escrow should track net stake amount'
+        );
+        assertEq(staking.totalStaked(), expectedNet, 'Total staked should be net of fee');
+    }
+
+    function test_unstake_collectsProtocolFee_whenConfigured() public {
+        address feeRecipient = address(0xFEE2);
+        uint16 feeBps = 100; // 1%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        uint256 stakeAmount = 5_000 ether;
+        underlying.approve(address(staking), stakeAmount);
+        staking.stake(stakeAmount);
+
+        uint256 stakeFee = (stakeAmount * feeBps) / staking.BASIS_POINTS();
+        uint256 netStake = stakeAmount - stakeFee;
+
+        uint256 userBalanceBefore = underlying.balanceOf(address(this));
+        staking.unstake(netStake, address(this));
+        uint256 userBalanceAfter = underlying.balanceOf(address(this));
+
+        uint256 unstakeFee = (netStake * feeBps) / staking.BASIS_POINTS();
+        uint256 expectedUserPayout = netStake - unstakeFee;
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            stakeFee + unstakeFee,
+            'Protocol should earn fees on stake and unstake'
+        );
+        assertEq(
+            userBalanceAfter - userBalanceBefore,
+            expectedUserPayout,
+            'User should receive unstake amount minus fee'
+        );
+        assertEq(staking.totalStaked(), 0, 'Total staked should be zero after full exit');
+        assertEq(
+            staking.escrowBalance(address(underlying)),
+            0,
+            'Escrow should be empty after full exit'
         );
     }
 

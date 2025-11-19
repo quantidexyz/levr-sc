@@ -21,10 +21,26 @@ contract LevrFactoryDeployHelper is Test {
     /// @dev Store the mock Clanker factory address for use in tests
     address internal mockClankerFactory;
 
+    uint16 internal _mockProtocolFeeBps;
+    address internal _mockProtocolTreasury;
+
     /// @dev Cached implementations for creating test instances
     LevrTreasury_v1 internal _treasuryImpl;
     LevrStaking_v1 internal _stakingImpl;
     LevrGovernor_v1 internal _governorImpl;
+
+    function protocolFeeBps() external view returns (uint16) {
+        return _mockProtocolFeeBps;
+    }
+
+    function protocolTreasury() external view returns (address) {
+        return _mockProtocolTreasury;
+    }
+
+    function _setMockProtocolFee(uint16 feeBps, address treasury) internal {
+        _mockProtocolFeeBps = feeBps;
+        _mockProtocolTreasury = treasury;
+    }
 
     /// @notice Deploy a complete factory with forwarder and deployer logic
     /// @dev This handles the tricky nonce calculation to ensure deployer logic is authorized

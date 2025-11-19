@@ -18,6 +18,7 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
     LevrStakedToken_v1 internal sToken;
     LevrStaking_v1 internal staking;
     address internal alice = address(0x1111);
+    address internal bob = address(0x2222);
 
     event RewardShortfall(address indexed user, address indexed token, uint256 amount);
 
@@ -39,6 +40,7 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
         );
 
         underlying.mint(alice, 1_000_000 ether);
+        underlying.mint(bob, 1_000_000 ether);
         weth.mint(address(this), 1_000_000 ether);
     }
 
@@ -88,6 +90,156 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
         for (uint256 i = 0; i < accounts.length; i++) {
             assertAccountingPerfectFor(accounts[i], token, when);
         }
+    }
+
+    function test_protocolFee_multiUserAccountingIntact() public {
+        address feeRecipient = address(0xFEEFEED);
+        uint16 feeBps = 150; // 1.5%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        uint256 aliceStake = 10_000 ether;
+        uint256 bobStake = 4_000 ether;
+
+        vm.startPrank(alice);
+        underlying.approve(address(staking), aliceStake);
+        staking.stake(aliceStake);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        underlying.approve(address(staking), bobStake);
+        staking.stake(bobStake);
+        vm.stopPrank();
+
+        uint256 aliceNetStake = aliceStake - ((aliceStake * feeBps) / staking.BASIS_POINTS());
+        uint256 bobNetStake = bobStake - ((bobStake * feeBps) / staking.BASIS_POINTS());
+        uint256 totalNetStake = aliceNetStake + bobNetStake;
+        uint256 totalStakeFees = (aliceStake - aliceNetStake) + (bobStake - bobNetStake);
+
+        assertEq(sToken.balanceOf(alice), aliceNetStake, 'Alice receives net stake');
+        assertEq(sToken.balanceOf(bob), bobNetStake, 'Bob receives net stake');
+        assertEq(staking.totalStaked(), totalNetStake, 'Total staked matches net deposits');
+        assertEq(
+            staking.escrowBalance(address(underlying)),
+            totalNetStake,
+            'Escrow tracks net deposits'
+        );
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            totalStakeFees,
+            'Stake fees forwarded to treasury'
+        );
+
+        // Credit rewards and settle the stream
+        {
+            uint256 rewardAmount = 1_000 ether;
+            weth.transfer(address(staking), rewardAmount);
+            staking.accrueRewards(address(weth));
+            skip(7 days);
+
+            address[] memory tokens = new address[](1);
+            tokens[0] = address(weth);
+
+            uint256 aliceWethBefore = weth.balanceOf(alice);
+            vm.prank(alice);
+            staking.claimRewards(tokens, alice);
+            uint256 aliceClaim = weth.balanceOf(alice) - aliceWethBefore;
+
+            uint256 bobWethBefore = weth.balanceOf(bob);
+            vm.prank(bob);
+            staking.claimRewards(tokens, bob);
+            uint256 bobClaim = weth.balanceOf(bob) - bobWethBefore;
+
+            uint256 aliceExpectedClaim = (rewardAmount * aliceNetStake) / totalNetStake;
+            uint256 bobExpectedClaim = (rewardAmount * bobNetStake) / totalNetStake;
+            uint256 tolerance = 2_000; // permit negligible rounding drift
+            assertApproxEqAbs(
+                aliceClaim,
+                aliceExpectedClaim,
+                tolerance,
+                'Alice claim proportional to net stake'
+            );
+            assertApproxEqAbs(
+                bobClaim,
+                bobExpectedClaim,
+                tolerance,
+                'Bob claim proportional to net stake'
+            );
+        }
+
+        // Unstake everything and ensure fees + accounting remain consistent
+        uint256 totalUnstakeFees;
+        {
+            uint256 aliceUnderlyingBefore = underlying.balanceOf(alice);
+            vm.prank(alice);
+            staking.unstake(aliceNetStake, alice);
+            uint256 aliceUnderlyingReceived = underlying.balanceOf(alice) - aliceUnderlyingBefore;
+            uint256 aliceExpectedPayout = aliceNetStake -
+                ((aliceNetStake * feeBps) / staking.BASIS_POINTS());
+            assertEq(
+                aliceUnderlyingReceived,
+                aliceExpectedPayout,
+                'Alice receives net proceeds after unstake fee'
+            );
+            uint256 aliceUnstakeFee = aliceNetStake - aliceExpectedPayout;
+
+            uint256 bobUnderlyingBefore = underlying.balanceOf(bob);
+            vm.prank(bob);
+            staking.unstake(bobNetStake, bob);
+            uint256 bobUnderlyingReceived = underlying.balanceOf(bob) - bobUnderlyingBefore;
+            uint256 bobExpectedPayout = bobNetStake -
+                ((bobNetStake * feeBps) / staking.BASIS_POINTS());
+            assertEq(
+                bobUnderlyingReceived,
+                bobExpectedPayout,
+                'Bob receives net proceeds after unstake fee'
+            );
+            uint256 bobUnstakeFee = bobNetStake - bobExpectedPayout;
+
+            totalUnstakeFees = aliceUnstakeFee + bobUnstakeFee;
+        }
+
+        uint256 expectedFeeBalance = totalStakeFees + totalUnstakeFees;
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            expectedFeeBalance,
+            'Stake + unstake fees paid to treasury'
+        );
+
+        assertEq(staking.totalStaked(), 0, 'Pool drained after full exit');
+        assertEq(staking.escrowBalance(address(underlying)), 0, 'Escrow cleared after exit');
+        uint256 remainingRewards = weth.balanceOf(address(staking));
+        assertLt(remainingRewards, 1e12, 'No meaningful rewards stranded in contract');
+    }
+
+    function test_protocolFee_dustDoesNotGridlockStakeCycle() public {
+        uint16 feeBps = 75; // 0.75%
+        _setMockProtocolFee(feeBps, address(0xFEE1));
+
+        uint256 grossStake = 1_000 ether;
+        underlying.mint(alice, grossStake * 10);
+        vm.startPrank(alice);
+        underlying.approve(address(staking), type(uint256).max);
+
+        for (uint256 i = 0; i < 5; i++) {
+            staking.stake(grossStake);
+            uint256 netStake = grossStake - ((grossStake * feeBps) / staking.BASIS_POINTS());
+            assertEq(
+                sToken.balanceOf(alice),
+                netStake,
+                'Net stake should equal minted sToken in each cycle'
+            );
+
+            staking.unstake(netStake, alice);
+            assertEq(sToken.balanceOf(alice), 0, 'sToken burned each cycle');
+            assertEq(staking.totalStaked(), 0, 'totalStaked returns to zero after each fee cycle');
+            assertEq(
+                staking.escrowBalance(address(underlying)),
+                0,
+                'Escrow cleared after each cycle despite fees'
+            );
+        }
+
+        vm.stopPrank();
     }
 
     /// @notice CORE BUG: Unstake -> window closes -> accrue -> stake back + MANUAL TRANSFERS IN PENDING STATE
@@ -847,11 +999,15 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
         // TIME-BASED VESTING: Distribution based on time staked + balance
         // Alice should get MORE than Bob (she was alone for first 2 days)
         assertGt(aliceClaimed, bobClaimed, 'Alice (earliest) should get more than Bob');
-        
+
         // NOTE: With time-based vesting, Charlie gets slightly more than Bob
         // because Charlie stayed until t=10 (3 days after stream end) while Bob left at t=6
         // Both get similar amounts since Bob staked earlier but Charlie stayed longer
-        assertGt(charlieClaimed, bobClaimed * 99 / 100, 'Charlie stayed longer, gets comparable to Bob');
+        assertGt(
+            charlieClaimed,
+            (bobClaimed * 99) / 100,
+            'Charlie stayed longer, gets comparable to Bob'
+        );
 
         // All users should receive something (they all participated)
         assertGt(aliceClaimed, 0, 'Alice receives rewards');
