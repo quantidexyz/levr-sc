@@ -242,6 +242,94 @@ contract LevrStakingV1_Accounting is Test, LevrFactoryDeployHelper {
         vm.stopPrank();
     }
 
+    function test_protocolFee_accountingRemainsConsistentThroughMixedOperations() public {
+        address feeRecipient = address(0xACCFEE);
+        uint16 feeBps = 125; // 1.25%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        vm.startPrank(alice);
+        underlying.approve(address(staking), type(uint256).max);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        underlying.approve(address(staking), type(uint256).max);
+        vm.stopPrank();
+
+        uint256 aliceStake = 12_000 ether;
+        uint256 bobStake = 4_000 ether;
+
+        vm.prank(alice);
+        staking.stake(aliceStake);
+        vm.prank(bob);
+        staking.stake(bobStake);
+
+        uint256 aliceStakeFee = (aliceStake * feeBps) / staking.BASIS_POINTS();
+        uint256 bobStakeFee = (bobStake * feeBps) / staking.BASIS_POINTS();
+        uint256 aliceNet = aliceStake - aliceStakeFee;
+        uint256 bobNet = bobStake - bobStakeFee;
+
+        assertEq(sToken.balanceOf(alice), aliceNet, 'Alice position should mint net stake');
+        assertEq(sToken.balanceOf(bob), bobNet, 'Bob position should mint net stake');
+        assertEq(
+            staking.totalStaked(),
+            aliceNet + bobNet,
+            'Total staked must track sum of net deposits'
+        );
+        assertEq(
+            staking.escrowBalance(address(underlying)),
+            aliceNet + bobNet,
+            'Escrow must remain solvent even with protocol fees'
+        );
+
+        // Fund rewards and accrue to ensure accounting stays sound
+        uint256 rewardAmount = 3_000 ether;
+        weth.transfer(address(staking), rewardAmount);
+        staking.accrueRewards(address(weth));
+        skip(7 days);
+        assertAccountingPerfect('After accrue with protocol fee enabled');
+
+        // Alice partially exits, Bob fully exits
+        uint256 aliceUnstake = aliceNet / 3;
+        vm.prank(alice);
+        staking.unstake(aliceUnstake, alice);
+        vm.prank(bob);
+        staking.unstake(bobNet, bob);
+
+        uint256 aliceUnstakeFee = (aliceUnstake * feeBps) / staking.BASIS_POINTS();
+        uint256 bobUnstakeFee = (bobNet * feeBps) / staking.BASIS_POINTS();
+
+        uint256 expectedFeeBalance = aliceStakeFee +
+            bobStakeFee +
+            aliceUnstakeFee +
+            bobUnstakeFee;
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            expectedFeeBalance,
+            'Protocol treasury should accumulate every stake/unstake fee'
+        );
+
+        uint256 remainingStake = aliceNet - aliceUnstake;
+        assertEq(
+            staking.totalStaked(),
+            remainingStake,
+            'Total staked should equal remaining net balance after exits'
+        );
+        assertEq(
+            staking.escrowBalance(address(underlying)),
+            remainingStake,
+            'Escrow should stay aligned with total staked after fee operations'
+        );
+
+        assertAccountingPerfect('After mixed fee exits');
+
+        // Claiming again should be a no-op but must not corrupt accounting
+        address[] memory toks = new address[](1);
+        toks[0] = address(weth);
+        vm.prank(alice);
+        staking.claimRewards(toks, alice);
+        assertAccountingPerfect('After final reward claim with protocol fee');
+    }
+
     /// @notice CORE BUG: Unstake -> window closes -> accrue -> stake back + MANUAL TRANSFERS IN PENDING STATE
     /// @dev This is the primary bug scenario - consolidates UI bug and variant tests
     function test_CORE_unstakeWindowClosedAccrueStake() public {

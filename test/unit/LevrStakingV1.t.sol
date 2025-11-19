@@ -328,6 +328,61 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         assertEq(vpFinal, 700 * 100, 'VP should be 70,000 token-days (continues accumulating)');
     }
 
+    function test_votingPower_accounts_for_protocol_fee_adjustments() public {
+        address feeRecipient = address(0xFEEFEED);
+        uint16 feeBps = 175; // 1.75%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        uint256 grossStake = 10_000 ether;
+        underlying.approve(address(staking), grossStake);
+        staking.stake(grossStake);
+
+        uint256 stakeFee = (grossStake * feeBps) / staking.BASIS_POINTS();
+        uint256 netStake = grossStake - stakeFee;
+        assertEq(
+            sToken.balanceOf(address(this)),
+            netStake,
+            'Staked token balance should reflect net deposit after fee'
+        );
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            stakeFee,
+            'Protocol treasury receives stake fee upfront'
+        );
+
+        uint256 timeElapsed = 21 days;
+        vm.warp(block.timestamp + timeElapsed);
+
+        uint256 expectedVotingPower = (netStake * timeElapsed) /
+            (staking.PRECISION() * staking.SECONDS_PER_DAY());
+        assertEq(
+            staking.getVotingPower(address(this)),
+            expectedVotingPower,
+            'Voting power must be based on net stake after protocol fee'
+        );
+
+        uint256 unstakePortion = netStake / 4;
+        uint256 priorFeeBalance = underlying.balanceOf(feeRecipient);
+        uint256 newVotingPower = staking.unstake(unstakePortion, address(this));
+        uint256 unstakeFee = (unstakePortion * feeBps) / staking.BASIS_POINTS();
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            priorFeeBalance + unstakeFee,
+            'Protocol collects fee on unstake as well'
+        );
+        assertEq(
+            newVotingPower,
+            staking.getVotingPower(address(this)),
+            'Return value must mirror live voting power after fee-based unstake'
+        );
+        assertEq(
+            staking.totalStaked(),
+            sToken.balanceOf(address(this)),
+            'Total staked tracks the remaining net supply'
+        );
+    }
+
     function test_full_unstake_resets_time_to_zero() public {
         underlying.approve(address(staking), 1000 ether);
         staking.stake(1000 ether);
