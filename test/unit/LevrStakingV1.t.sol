@@ -143,6 +143,52 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         );
     }
 
+    function test_protocolFee_microStakeRoundingAttackRequiresManyTransactions() public {
+        address feeRecipient = address(0xFEE0);
+        uint16 feeBps = 100; // 1%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        address attacker = address(0x1234);
+        uint256 microAmount = 99; // amount below threshold for charging a 1% fee
+        uint256 iterations = 40;
+        uint256 aggregated = microAmount * iterations;
+
+        underlying.mint(attacker, aggregated);
+        vm.startPrank(attacker);
+        underlying.approve(address(staking), type(uint256).max);
+        for (uint256 i = 0; i < iterations; i++) {
+            staking.stake(microAmount);
+        }
+        vm.stopPrank();
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            0,
+            'Micro stakes avoid protocol fee due to integer rounding'
+        );
+
+        uint256 expectedSingleStakeFee = (aggregated * feeBps) / staking.BASIS_POINTS();
+        assertGt(expectedSingleStakeFee, 0, 'Equivalent single stake would incur a fee');
+        assertEq(
+            sToken.balanceOf(attacker),
+            aggregated,
+            'Attacker accumulates full position without paying fees'
+        );
+
+        vm.startPrank(attacker);
+        for (uint256 i = 0; i < iterations; i++) {
+            staking.unstake(microAmount, attacker);
+        }
+        vm.stopPrank();
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            0,
+            'Micro unstakes also bypass protocol fee due to rounding'
+        );
+        assertEq(staking.totalStaked(), 0, 'All micro stakes fully exited');
+    }
+
     function test_publicGetters_totalStakedAndEscrowBalance() public {
         ILevrStaking_v1 stakingView = ILevrStaking_v1(address(staking));
 
