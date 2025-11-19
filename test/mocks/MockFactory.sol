@@ -47,7 +47,7 @@ contract MockFactory {
     }
 
     /// @notice Get project contracts for a token
-    function getProjectContracts(address) external view returns (ILevrFactory_v1.Project memory) {
+    function getProject(address) external view returns (ILevrFactory_v1.Project memory) {
         return
             ILevrFactory_v1.Project({
                 treasury: address(0),

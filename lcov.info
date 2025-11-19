@@ -873,8 +873,8 @@ FN:296,LevrFactory_v1.getInitialWhitelist
 FNDA:17,LevrFactory_v1.getInitialWhitelist
 DA:297,17
 DA:301,87
-FN:301,LevrFactory_v1.getProjectContracts
-FNDA:87,LevrFactory_v1.getProjectContracts
+FN:301,LevrFactory_v1.getProject
+FNDA:87,LevrFactory_v1.getProject
 DA:304,87
 DA:308,2
 FN:308,LevrFactory_v1.getClankerMetadata
@@ -2402,8 +2402,8 @@ FN:26,MockFactory.clearMetadata
 FNDA:1,MockFactory.clearMetadata
 DA:27,1
 DA:31,226
-FN:31,MockFactory.getProjectContracts
-FNDA:226,MockFactory.getProjectContracts
+FN:31,MockFactory.getProject
+FNDA:226,MockFactory.getProject
 DA:32,226
 DA:33,226
 DA:43,0

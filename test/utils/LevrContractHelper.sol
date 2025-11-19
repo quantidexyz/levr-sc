@@ -29,8 +29,8 @@ contract LevrContractHelper is Test {
 
         // Deploy implementation contracts (stakedToken deployed directly, not cloned)
         _treasuryImpl = new LevrTreasury_v1(_mockFactory, _mockForwarder);
-        _stakingImpl = new LevrStaking_v1(_mockForwarder, _mockFactory);
-        _governorImpl = new LevrGovernor_v1(_mockForwarder, _mockFactory);
+        _stakingImpl = new LevrStaking_v1(_mockFactory, _mockForwarder);
+        _governorImpl = new LevrGovernor_v1(_mockFactory, _mockForwarder);
     }
 
     /// @notice Create a staked token instance

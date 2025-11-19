@@ -64,7 +64,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest, LevrFactoryDeployHelper {
         assertTrue(project.governor != address(0), 'Governor not deployed');
 
         // Verify project can be retrieved
-        ILevrFactory_v1.Project memory retrieved = factory.getProjectContracts(clankerToken);
+        ILevrFactory_v1.Project memory retrieved = factory.getProject(clankerToken);
         assertEq(retrieved.treasury, project.treasury, 'Treasury mismatch');
         assertEq(retrieved.staking, project.staking, 'Staking mismatch');
     }

@@ -252,12 +252,19 @@ contract DeployLevrTest is Test, LevrFactoryDeployHelper {
 
     // ============ Edge Cases Tests ============
 
-    function test_DeployLevr_minimumQuorumBpsZero() public {
+    function test_DeployLevr_minimumQuorumBpsZero_reverts() public {
         ILevrFactory_v1.FactoryConfig memory config = createDefaultConfig(address(this));
-        config.minimumQuorumBps = 0; // Allow zero minimum quorum
+        config.minimumQuorumBps = 0; // Below guardrail (min 1)
 
-        (LevrFactory_v1 factory, , ) = deployFactory(config, address(this), address(0x1234));
-        assertEq(factory.minimumQuorumBps(address(0)), 0);
+        vm.expectRevert(ILevrFactory_v1.InvalidConfig.selector);
+        new LevrFactory_v1(
+            config,
+            createLooseBounds(),
+            address(this),
+            address(0x1),
+            address(0x2),
+            new address[](0)
+        );
     }
 
     function test_DeployLevr_maxProposalAmountBpsZero() public {

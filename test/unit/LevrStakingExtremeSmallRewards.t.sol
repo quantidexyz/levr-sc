@@ -106,7 +106,7 @@ contract LevrStakingExtremeSmallRewardsTest is Test, LevrFactoryDeployHelper {
         console2.log('Reward Token:', address(rewardToken));
 
         // Deploy staking contract
-        staking = new LevrStaking_v1(trustedForwarder, address(factory));
+        staking = new LevrStaking_v1(address(factory), trustedForwarder);
 
         // Deploy staked token
         stakedToken = createStakedToken(

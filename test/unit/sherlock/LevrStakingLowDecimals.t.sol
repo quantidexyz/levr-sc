@@ -125,7 +125,7 @@ contract LevrStakingLowDecimalsTest is Test, LevrFactoryDeployHelper {
         console2.log('DAI Reward Token (18 decimals):', address(dai));
 
         // Deploy staking contract
-        staking = new LevrStaking_v1(trustedForwarder, address(factory));
+        staking = new LevrStaking_v1(address(factory), trustedForwarder);
 
         // Deploy staked token
         stakedToken = createStakedToken(

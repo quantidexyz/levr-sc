@@ -300,7 +300,7 @@ contract LevrFactory_v1 is ILevrFactory_v1, Ownable, ReentrancyGuard, ERC2771Con
 
     // ============ Project Queries ============
     /// @inheritdoc ILevrFactory_v1
-    function getProjectContracts(
+    function getProject(
         address clankerToken
     ) external view override returns (ILevrFactory_v1.Project memory project) {
         return _projects[clankerToken];

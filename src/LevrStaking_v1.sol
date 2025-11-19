@@ -35,7 +35,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @inheritdoc ILevrStaking_v1
     uint256 public constant MIN_REWARD_AMOUNT = 1e4;
 
-    constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
+    constructor(address factory_, address trustedForwarder) ERC2771ContextBase(trustedForwarder) {
         if (factory_ == address(0)) revert ZeroAddress();
         factory = factory_;
     }

@@ -423,7 +423,7 @@ function applyBoost(address token, uint256 amount)
 {
     // ✅ PROTECTED: nonReentrant + onlyGovernor
 
-    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(underlying);
+    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProject(underlying);
 
     // Approve + Pull pattern
     IERC20(token).forceApprove(project.staking, amount); // ✅ State update
