@@ -48,6 +48,16 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         underlying.mint(address(this), 1_000_000 ether);
     }
 
+    function _expectedVotingPowerAfterPartialUnstake(
+        uint256 timeElapsed,
+        uint256 remainingBalance,
+        uint256 originalBalance
+    ) internal view returns (uint256) {
+        uint256 newTimeAccumulated = (timeElapsed * remainingBalance) / originalBalance;
+        return (remainingBalance * newTimeAccumulated) /
+            (staking.PRECISION() * staking.SECONDS_PER_DAY());
+    }
+
     function test_stake_mintsStakedToken_andEscrowsUnderlying() public {
         // Use amount similar to TypeScript test for consistency
         uint256 userBalance = 4548642989513676498672470665; // Mirrors TS test user balance
@@ -365,6 +375,12 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         uint256 priorFeeBalance = underlying.balanceOf(feeRecipient);
         uint256 newVotingPower = staking.unstake(unstakePortion, address(this));
         uint256 unstakeFee = (unstakePortion * feeBps) / staking.BASIS_POINTS();
+        uint256 remainingBalance = netStake - unstakePortion;
+        uint256 expectedPostUnstakeVP = _expectedVotingPowerAfterPartialUnstake(
+            timeElapsed,
+            remainingBalance,
+            netStake
+        );
 
         assertEq(
             underlying.balanceOf(feeRecipient),
@@ -375,6 +391,11 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
             newVotingPower,
             staking.getVotingPower(address(this)),
             'Return value must mirror live voting power after fee-based unstake'
+        );
+        assertEq(
+            newVotingPower,
+            expectedPostUnstakeVP,
+            'Unstake must return proportional voting power after fee adjustments'
         );
         assertEq(
             staking.totalStaked(),
