@@ -48,6 +48,16 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         underlying.mint(address(this), 1_000_000 ether);
     }
 
+    function _expectedVotingPowerAfterPartialUnstake(
+        uint256 timeElapsed,
+        uint256 remainingBalance,
+        uint256 originalBalance
+    ) internal view returns (uint256) {
+        uint256 newTimeAccumulated = (timeElapsed * remainingBalance) / originalBalance;
+        return (remainingBalance * newTimeAccumulated) /
+            (staking.PRECISION() * staking.SECONDS_PER_DAY());
+    }
+
     function test_stake_mintsStakedToken_andEscrowsUnderlying() public {
         // Use amount similar to TypeScript test for consistency
         uint256 userBalance = 4548642989513676498672470665; // Mirrors TS test user balance
@@ -131,6 +141,52 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
             0,
             'Escrow should be empty after full exit'
         );
+    }
+
+    function test_protocolFee_microStakeRoundingAttackRequiresManyTransactions() public {
+        address feeRecipient = address(0xFEE0);
+        uint16 feeBps = 100; // 1%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        address attacker = address(0x1234);
+        uint256 microAmount = 99; // amount below threshold for charging a 1% fee
+        uint256 iterations = 40;
+        uint256 aggregated = microAmount * iterations;
+
+        underlying.mint(attacker, aggregated);
+        vm.startPrank(attacker);
+        underlying.approve(address(staking), type(uint256).max);
+        for (uint256 i = 0; i < iterations; i++) {
+            staking.stake(microAmount);
+        }
+        vm.stopPrank();
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            0,
+            'Micro stakes avoid protocol fee due to integer rounding'
+        );
+
+        uint256 expectedSingleStakeFee = (aggregated * feeBps) / staking.BASIS_POINTS();
+        assertGt(expectedSingleStakeFee, 0, 'Equivalent single stake would incur a fee');
+        assertEq(
+            sToken.balanceOf(attacker),
+            aggregated,
+            'Attacker accumulates full position without paying fees'
+        );
+
+        vm.startPrank(attacker);
+        for (uint256 i = 0; i < iterations; i++) {
+            staking.unstake(microAmount, attacker);
+        }
+        vm.stopPrank();
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            0,
+            'Micro unstakes also bypass protocol fee due to rounding'
+        );
+        assertEq(staking.totalStaked(), 0, 'All micro stakes fully exited');
     }
 
     function test_publicGetters_totalStakedAndEscrowBalance() public {
@@ -326,6 +382,72 @@ contract LevrStakingV1_UnitTest is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 30 days);
         uint256 vpFinal = staking.getVotingPower(address(this));
         assertEq(vpFinal, 700 * 100, 'VP should be 70,000 token-days (continues accumulating)');
+    }
+
+    function test_votingPower_accounts_for_protocol_fee_adjustments() public {
+        address feeRecipient = address(0xFEEFEED);
+        uint16 feeBps = 175; // 1.75%
+        _setMockProtocolFee(feeBps, feeRecipient);
+
+        uint256 grossStake = 10_000 ether;
+        underlying.approve(address(staking), grossStake);
+        staking.stake(grossStake);
+
+        uint256 stakeFee = (grossStake * feeBps) / staking.BASIS_POINTS();
+        uint256 netStake = grossStake - stakeFee;
+        assertEq(
+            sToken.balanceOf(address(this)),
+            netStake,
+            'Staked token balance should reflect net deposit after fee'
+        );
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            stakeFee,
+            'Protocol treasury receives stake fee upfront'
+        );
+
+        uint256 timeElapsed = 21 days;
+        vm.warp(block.timestamp + timeElapsed);
+
+        uint256 expectedVotingPower = (netStake * timeElapsed) /
+            (staking.PRECISION() * staking.SECONDS_PER_DAY());
+        assertEq(
+            staking.getVotingPower(address(this)),
+            expectedVotingPower,
+            'Voting power must be based on net stake after protocol fee'
+        );
+
+        uint256 unstakePortion = netStake / 4;
+        uint256 priorFeeBalance = underlying.balanceOf(feeRecipient);
+        uint256 newVotingPower = staking.unstake(unstakePortion, address(this));
+        uint256 unstakeFee = (unstakePortion * feeBps) / staking.BASIS_POINTS();
+        uint256 remainingBalance = netStake - unstakePortion;
+        uint256 expectedPostUnstakeVP = _expectedVotingPowerAfterPartialUnstake(
+            timeElapsed,
+            remainingBalance,
+            netStake
+        );
+
+        assertEq(
+            underlying.balanceOf(feeRecipient),
+            priorFeeBalance + unstakeFee,
+            'Protocol collects fee on unstake as well'
+        );
+        assertEq(
+            newVotingPower,
+            staking.getVotingPower(address(this)),
+            'Return value must mirror live voting power after fee-based unstake'
+        );
+        assertEq(
+            newVotingPower,
+            expectedPostUnstakeVP,
+            'Unstake must return proportional voting power after fee adjustments'
+        );
+        assertEq(
+            staking.totalStaked(),
+            sToken.balanceOf(address(this)),
+            'Total staked tracks the remaining net supply'
+        );
     }
 
     function test_full_unstake_resets_time_to_zero() public {
