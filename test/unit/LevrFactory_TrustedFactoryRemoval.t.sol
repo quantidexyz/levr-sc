@@ -77,7 +77,7 @@ contract LevrFactory_TrustedFactoryRemovalTest is Test, LevrFactoryDeployHelper 
 
     function setUp() public {
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 50,
+            protocolFeeBps: 0,
             streamWindowSeconds: 7 days,
             protocolTreasury: address(this),
             proposalWindowSeconds: 2 days,

@@ -36,7 +36,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Deploy factory
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -128,7 +128,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Change config to maxRewardTokens = 5 (lower than current)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -173,7 +173,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Change stream window to 1 day
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 1 days, // Changed from 3 to 1 day
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -222,7 +222,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Set INVALID quorum (15000 = 150%, impossible to meet)
         ILevrFactory_v1.FactoryConfig memory badConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -285,7 +285,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Set zero proposal window
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 0, // Zero window!
@@ -321,7 +321,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Set maxActiveProposals = 0
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -366,7 +366,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // During voting, change maxProposalAmountBps to 1% (would block this proposal if checked)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -418,7 +418,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Factory owner raises minSTokenBpsToSubmit to 20% (Alice no longer qualifies!)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -481,7 +481,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Change config drastically
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 500,
+            protocolFeeBps: 0,
             streamWindowSeconds: 1 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 1 days,
@@ -511,7 +511,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Try to set very short stream window (there might be a minimum)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 1 hours, // Very short
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -577,7 +577,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Change factory config (should not affect whitelisted tokens)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -622,7 +622,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Set maxProposalAmountBps = 0 (no limit)
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -666,7 +666,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Change to 1-day window
         ILevrFactory_v1.FactoryConfig memory newConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 1 days, // Changed!
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -714,7 +714,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Set impossible threshold
         ILevrFactory_v1.FactoryConfig memory badConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
@@ -750,7 +750,7 @@ contract LevrFactory_ConfigGridlockTest is Test, LevrFactoryDeployHelper {
 
         // Set BPS to uint16.max (65535 = 655.35%)
         ILevrFactory_v1.FactoryConfig memory maxConfig = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,

@@ -24,7 +24,7 @@ contract LevrFeeSplitter_StuckFundsTest is Test {
     address internal receiver2;
 
     // Mock factory
-    function getProjectContracts(
+    function getProject(
         address /* clankerToken */
     ) external view returns (ILevrFactory_v1.Project memory) {
         return

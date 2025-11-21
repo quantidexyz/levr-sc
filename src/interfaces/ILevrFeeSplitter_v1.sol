@@ -130,7 +130,7 @@ interface ILevrFeeSplitter_v1 {
     function isSplitsConfigured() external view returns (bool configured);
 
     /// @notice Get the staking contract address for this project
-    /// @dev Queries factory.getProjectContracts(clankerToken).staking
+    /// @dev Queries factory.getProject(clankerToken).staking
     /// @return staking The staking contract address
     function getStakingAddress() external view returns (address staking);
 

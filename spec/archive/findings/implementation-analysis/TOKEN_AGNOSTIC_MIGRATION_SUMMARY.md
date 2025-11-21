@@ -86,7 +86,7 @@ function applyBoost(address token, uint256 amount) external onlyGovernor nonReen
     if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
     if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
 
-    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(underlying);
+    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProject(underlying);
     IERC20(token).approve(project.staking, amount);
     ILevrStaking_v1(project.staking).accrueFromTreasury(token, amount, true);
     IERC20(token).approve(project.staking, 0);

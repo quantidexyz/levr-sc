@@ -35,7 +35,7 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
     /// @inheritdoc ILevrStaking_v1
     uint256 public constant MIN_REWARD_AMOUNT = 1e4;
 
-    constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
+    constructor(address factory_, address trustedForwarder) ERC2771ContextBase(trustedForwarder) {
         if (factory_ == address(0)) revert ZeroAddress();
         factory = factory_;
     }
@@ -155,7 +155,15 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         // Measure actual received (critical for fee-on-transfer tokens)
         uint256 balanceBefore = IERC20(underlying).balanceOf(address(this));
         IERC20(underlying).safeTransferFrom(staker, address(this), amount);
-        uint256 actualReceived = IERC20(underlying).balanceOf(address(this)) - balanceBefore;
+        uint256 amountReceived = IERC20(underlying).balanceOf(address(this)) - balanceBefore;
+
+        (uint16 protocolFeeBps_, address protocolFeeRecipient) = _protocolFeeConfig();
+        uint256 protocolFeeAmount = _chargeProtocolFee(
+            amountReceived,
+            protocolFeeRecipient,
+            protocolFeeBps_
+        );
+        uint256 actualReceived = amountReceived - protocolFeeAmount;
 
         // Update voting power using weighted average (preserves existing VP on new stakes)
         stakeStartTime[staker] = _onStakeNewTimestamp(actualReceived);
@@ -198,8 +206,16 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         if (esc < amount) revert InsufficientEscrow(); // Safety check
         escrowBalance[underlying] = esc - amount;
 
+        (uint16 protocolFeeBps_, address protocolFeeRecipient) = _protocolFeeConfig();
+        uint256 protocolFeeAmount = _chargeProtocolFee(
+            amount,
+            protocolFeeRecipient,
+            protocolFeeBps_
+        );
+        uint256 payoutAmount = amount - protocolFeeAmount;
+
         // Transfer underlying back to recipient
-        IERC20(underlying).safeTransfer(to, amount);
+        IERC20(underlying).safeTransfer(to, payoutAmount);
 
         // Update voting power (proportional time reduction on partial unstake)
         stakeStartTime[staker] = _onUnstakeNewTimestamp(amount);
@@ -566,6 +582,27 @@ contract LevrStaking_v1 is ILevrStaking_v1, ReentrancyGuard, ERC2771ContextBase 
         ILevrStaking_v1.RewardTokenState storage tokenState = _tokenState[token];
         uint256 accounted = tokenState.availablePool + tokenState.streamTotal;
         return bal > accounted ? bal - accounted : 0;
+    }
+
+    function _protocolFeeConfig() internal view returns (uint16 feeBps, address feeRecipient) {
+        ILevrFactory_v1 factoryContract = ILevrFactory_v1(factory);
+        feeBps = factoryContract.protocolFeeBps();
+        feeRecipient = factoryContract.protocolTreasury();
+    }
+
+    function _chargeProtocolFee(
+        uint256 amount,
+        address feeRecipient,
+        uint16 feeBps
+    ) internal returns (uint256 feeAmount) {
+        if (amount == 0 || feeRecipient == address(0) || feeBps == 0) {
+            return 0;
+        }
+
+        feeAmount = (amount * feeBps) / BASIS_POINTS;
+        if (feeAmount > 0) {
+            IERC20(underlying).safeTransfer(feeRecipient, feeAmount);
+        }
     }
 
     /// @notice Get effective debt for user, auto-resetting stale debt

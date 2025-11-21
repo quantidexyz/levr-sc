@@ -178,7 +178,7 @@ contract LevrFeeSplitter_v1 is ILevrFeeSplitter_v1, ERC2771ContextBase, Reentran
 
     /// @inheritdoc ILevrFeeSplitter_v1
     function getStakingAddress() public view returns (address staking) {
-        ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
+        ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProject(
             clankerToken
         );
         return project.staking;

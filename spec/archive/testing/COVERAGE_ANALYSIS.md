@@ -169,7 +169,7 @@ This document provides a comprehensive analysis of test coverage across all Levr
 | `prepareForDeployment()` | ✅ (15+)   | ✅ (2)    | ✅ (reuse attack, cleanup)               | **100%** |
 | `register()`             | ✅ (15+)   | ✅ (2)    | ✅ (no prep, double register, not admin) | **100%** |
 | `updateConfig()`         | ✅ (15+)   | ✅ (11)   | ✅ (gridlock scenarios, invalid values)  | **100%** |
-| `getProjectContracts()`  | ✅ (15+)   | ✅        | ✅ (unregistered, valid)                 | **100%** |
+| `getProject()`  | ✅ (15+)   | ✅        | ✅ (unregistered, valid)                 | **100%** |
 | View functions           | ✅ (10+)   | ✅        | ✅ (all getters)                         | **100%** |
 
 **Total function calls in tests:** 116 across 14 test files

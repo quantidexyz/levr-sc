@@ -26,7 +26,7 @@ contract LevrStakedToken_NonTransferableTest is Test, LevrFactoryDeployHelper {
 
     function setUp() public {
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,
