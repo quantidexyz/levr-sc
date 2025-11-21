@@ -21,10 +21,26 @@ contract LevrFactoryDeployHelper is Test {
     /// @dev Store the mock Clanker factory address for use in tests
     address internal mockClankerFactory;
 
+    uint16 internal _mockProtocolFeeBps;
+    address internal _mockProtocolTreasury;
+
     /// @dev Cached implementations for creating test instances
     LevrTreasury_v1 internal _treasuryImpl;
     LevrStaking_v1 internal _stakingImpl;
     LevrGovernor_v1 internal _governorImpl;
+
+    function protocolFeeBps() external view returns (uint16) {
+        return _mockProtocolFeeBps;
+    }
+
+    function protocolTreasury() external view returns (address) {
+        return _mockProtocolTreasury;
+    }
+
+    function _setMockProtocolFee(uint16 feeBps, address treasury) internal {
+        _mockProtocolFeeBps = feeBps;
+        _mockProtocolTreasury = treasury;
+    }
 
     /// @notice Deploy a complete factory with forwarder and deployer logic
     /// @dev This handles the tricky nonce calculation to ensure deployer logic is authorized
@@ -64,8 +80,8 @@ contract LevrFactoryDeployHelper is Test {
 
         // Step 3: Deploy implementation contracts with predicted factory
         LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
-        LevrStaking_v1 stakingImpl = new LevrStaking_v1(address(forwarder), predictedFactory);
-        LevrGovernor_v1 governorImpl = new LevrGovernor_v1(address(forwarder), predictedFactory);
+        LevrStaking_v1 stakingImpl = new LevrStaking_v1(predictedFactory, address(forwarder));
+        LevrGovernor_v1 governorImpl = new LevrGovernor_v1(predictedFactory, address(forwarder));
 
         // Step 4: Deploy deployer logic with predicted factory address and implementations
         // Note: StakedToken is deployed as new instance per project, not cloned
@@ -310,7 +326,7 @@ contract LevrFactoryDeployHelper is Test {
     ) internal returns (LevrGovernor_v1) {
         // Deploy implementation if not yet created
         if (address(_governorImpl) == address(0)) {
-            _governorImpl = new LevrGovernor_v1(forwarder, factory);
+            _governorImpl = new LevrGovernor_v1(factory, forwarder);
         }
 
         address clone = Clones.clone(address(_governorImpl));
@@ -325,7 +341,7 @@ contract LevrFactoryDeployHelper is Test {
     function createStaking(address forwarder, address factory) internal returns (LevrStaking_v1) {
         // Deploy implementation if not yet created
         if (address(_stakingImpl) == address(0)) {
-            _stakingImpl = new LevrStaking_v1(forwarder, factory);
+            _stakingImpl = new LevrStaking_v1(factory, forwarder);
         }
 
         address clone = Clones.clone(address(_stakingImpl));
@@ -349,8 +365,8 @@ contract LevrFactoryDeployHelper is Test {
     function createDeployer(address factory) internal returns (LevrDeployer_v1) {
         // For test deployer, use mock implementations
         LevrTreasury_v1 ti = new LevrTreasury_v1(factory, address(0));
-        LevrStaking_v1 si = new LevrStaking_v1(address(0), factory);
-        LevrGovernor_v1 gi = new LevrGovernor_v1(address(0), factory);
+        LevrStaking_v1 si = new LevrStaking_v1(factory, address(0));
+        LevrGovernor_v1 gi = new LevrGovernor_v1(factory, address(0));
 
         return new LevrDeployer_v1(factory, address(ti), address(si), address(gi));
     }

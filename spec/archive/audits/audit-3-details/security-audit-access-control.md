@@ -79,7 +79,7 @@ This comprehensive access control audit analyzed all 8 core contracts across the
 | `prepareForDeployment()` | external | ⚠️ **NONE** | ✅ Yes - Anyone | ⚠️ **MEDIUM** - DoS vector |
 | `register()` | external | Token admin check | ❌ No | ✅ SAFE |
 | `updateConfig()` | external | `onlyOwner` | ❌ No | ⚠️ **HIGH** - Single point of control |
-| `getProjectContracts()` | external | view (public) | N/A | N/A |
+| `getProject()` | external | view (public) | N/A | N/A |
 
 **Findings:**
 

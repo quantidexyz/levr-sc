@@ -40,13 +40,28 @@ contract MockERC20 is ERC20 {
  */
 contract MockFactoryWithConfig {
     uint32 public defaultStreamWindow = 7 days;
+    uint16 public defaultProtocolFeeBps;
+    address public defaultProtocolTreasury;
 
     function streamWindowSeconds(address) external view returns (uint32) {
         return defaultStreamWindow;
     }
 
+    function protocolFeeBps() external view returns (uint16) {
+        return defaultProtocolFeeBps;
+    }
+
+    function protocolTreasury() external view returns (address) {
+        return defaultProtocolTreasury;
+    }
+
     function setStreamWindow(uint32 window) external {
         defaultStreamWindow = window;
+    }
+
+    function setProtocolFee(uint16 feeBps, address treasury) external {
+        defaultProtocolFeeBps = feeBps;
+        defaultProtocolTreasury = treasury;
     }
 }
 
@@ -91,7 +106,7 @@ contract LevrStakingExtremeSmallRewardsTest is Test, LevrFactoryDeployHelper {
         console2.log('Reward Token:', address(rewardToken));
 
         // Deploy staking contract
-        staking = new LevrStaking_v1(trustedForwarder, address(factory));
+        staking = new LevrStaking_v1(address(factory), trustedForwarder);
 
         // Deploy staked token
         stakedToken = createStakedToken(

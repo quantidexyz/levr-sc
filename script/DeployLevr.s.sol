@@ -322,8 +322,8 @@ contract DeployLevr is Script {
         // 3. Deploy implementation contracts with real factory and forwarder addresses
         console.log('Deploying implementation contracts...');
         LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
-        LevrStaking_v1 stakingImpl = new LevrStaking_v1(address(forwarder), predictedFactory);
-        LevrGovernor_v1 governorImpl = new LevrGovernor_v1(address(forwarder), predictedFactory);
+        LevrStaking_v1 stakingImpl = new LevrStaking_v1(predictedFactory, address(forwarder));
+        LevrGovernor_v1 governorImpl = new LevrGovernor_v1(predictedFactory, address(forwarder));
         console.log('- Treasury Implementation:', address(treasuryImpl));
         console.log('- Staking Implementation:', address(stakingImpl));
         console.log('- Governor Implementation:', address(governorImpl));

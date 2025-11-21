@@ -717,7 +717,7 @@ The `applyBoost()` function approves the staking contract for `amount` tokens, b
 function applyBoost(uint256 amount) external onlyGovernor nonReentrant {
     if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
 
-    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
+    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProject(
         underlying
     );
 
@@ -739,7 +739,7 @@ Added `IERC20(underlying).approve(project.staking, 0);` after the `accrueFromTre
 function applyBoost(uint256 amount) external onlyGovernor nonReentrant {
     if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
 
-    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
+    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProject(
         underlying
     );
 

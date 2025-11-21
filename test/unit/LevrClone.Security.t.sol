@@ -41,8 +41,8 @@ contract LevrCloneSecurityTest is Test {
 
         // Deploy implementation contracts with predicted factory
         treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
-        stakingImpl = new LevrStaking_v1(address(forwarder), predictedFactory);
-        governorImpl = new LevrGovernor_v1(address(forwarder), predictedFactory);
+        stakingImpl = new LevrStaking_v1(predictedFactory, address(forwarder));
+        governorImpl = new LevrGovernor_v1(predictedFactory, address(forwarder));
 
         // Deploy deployer with predicted factory (stakedToken deployed as new instance per project)
         deployer = new LevrDeployer_v1(

@@ -265,7 +265,7 @@ function getDistributionState(address rewardToken) external view returns (Distri
 function isSplitsConfigured() external view returns (bool configured);
 
 /// @notice Get the staking contract address for this project
-/// @dev Queries factory.getProjectContracts(clankerToken).staking
+/// @dev Queries factory.getProject(clankerToken).staking
 /// @return staking The staking contract address
 function getStakingAddress() public view returns (address staking);
 
@@ -302,7 +302,7 @@ function _validateSplits(
     require(splits.length > 0, "Must have at least one receiver");
 
     // Get staking address for this project from factory
-    address staking = ILevrFactory_v1(factory).getProjectContracts(clankerToken).staking;
+    address staking = ILevrFactory_v1(factory).getProject(clankerToken).staking;
     require(staking != address(0), "Project not registered");
 
     uint256 totalBps = 0;
@@ -387,7 +387,7 @@ rewardTokens[1] = clankerToken;
 splitter.distributeBatch(clankerToken, rewardTokens);
 
 // Then trigger manual accrual in staking (2 calls required)
-ILevrFactory_v1.Project memory project = factory.getProjectContracts(clankerToken);
+ILevrFactory_v1.Project memory project = factory.getProject(clankerToken);
 ILevrStaking_v1(project.staking).accrueRewards(WETH);
 ILevrStaking_v1(project.staking).accrueRewards(clankerToken);
 ```
@@ -642,7 +642,7 @@ ClankerFeeLocker.setFeeOwner(clankerToken, address(splitter));
 // Project already registered and running with staking as fee owner
 
 // 1. Query existing project contracts
-ILevrFactory_v1.Project memory project = factory.getProjectContracts(clankerToken);
+ILevrFactory_v1.Project memory project = factory.getProject(clankerToken);
 
 // 2. Deploy fee splitter (same as above)
 LevrFeeSplitter_v1 splitter = new LevrFeeSplitter_v1(
@@ -666,7 +666,7 @@ LevrFeeSplitter_v1 splitter = new LevrFeeSplitter_v1(
 
 ```solidity
 // Factory already has everything we need:
-ILevrFactory_v1.Project memory project = factory.getProjectContracts(clankerToken);
+ILevrFactory_v1.Project memory project = factory.getProject(clankerToken);
 // ✅ project.staking - needed for fee splitter constructor
 // ✅ factory.trustedForwarder() - needed for meta-tx support
 
@@ -1356,7 +1356,7 @@ splitter.distributeBatch(tokens); // Single transaction for both tokens
 
 ```solidity
 // 1. Project already registered with staking as fee owner
-ILevrFactory_v1.Project memory project = factory.getProjectContracts(existingToken);
+ILevrFactory_v1.Project memory project = factory.getProject(existingToken);
 
 // 2. Verify staking currently receives 100% of fees (as reward recipient)
 // Current setup: staking is the reward recipient in LP locker

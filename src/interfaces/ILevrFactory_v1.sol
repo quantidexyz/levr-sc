@@ -243,7 +243,7 @@ interface ILevrFactory_v1 {
     /// @notice Get the deployed contracts for a given project.
     /// @param clankerToken Token address used as project key
     /// @return project Project contract addresses
-    function getProjectContracts(
+    function getProject(
         address clankerToken
     ) external view returns (Project memory project);
 

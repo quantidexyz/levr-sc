@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test, console2} from 'forge-std/Test.sol';
-import {LevrFactoryDeployHelper} from "../utils/LevrFactoryDeployHelper.sol";
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
@@ -108,7 +108,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
     }
 
     // Mock factory methods for fee splitter
-    function getProjectContracts(
+    function getProject(
         address /* clankerToken */
     ) external view returns (ILevrFactory_v1.Project memory) {
         return
@@ -203,12 +203,14 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), type(uint256).max);
         staking.stake(1000 ether);
         vm.stopPrank();
+        uint256 aliceStakeAmount = sToken.balanceOf(alice);
 
         underlying.mint(bob, 1000 ether);
         vm.startPrank(bob);
         underlying.approve(address(staking), type(uint256).max);
         staking.stake(1000 ether);
         vm.stopPrank();
+        uint256 bobStakeAmount = sToken.balanceOf(bob);
 
         // 2. Accrue rewards
         underlying.mint(address(staking), 1000 ether);
@@ -220,15 +222,20 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         vm.warp(block.timestamp + 1 days);
 
         // 4. POOL-BASED: Both unstake (AUTO-CLAIM their vested rewards)
+        uint16 feeBps = factory.protocolFeeBps();
         uint256 aliceBalBefore = underlying.balanceOf(alice);
+        uint256 alicePrincipalReturned = aliceStakeAmount - ((aliceStakeAmount * feeBps) / 10_000);
         vm.prank(alice);
-        staking.unstake(1000 ether, alice);
-        uint256 aliceAutoClaimed = underlying.balanceOf(alice) - aliceBalBefore - 1000 ether;
+        staking.unstake(aliceStakeAmount, alice);
+        uint256 aliceAutoClaimed = underlying.balanceOf(alice) -
+            aliceBalBefore -
+            alicePrincipalReturned;
 
         uint256 bobBalBefore = underlying.balanceOf(bob);
+        uint256 bobPrincipalReturned = bobStakeAmount - ((bobStakeAmount * feeBps) / 10_000);
         vm.prank(bob);
-        staking.unstake(1000 ether, bob);
-        uint256 bobAutoClaimed = underlying.balanceOf(bob) - bobBalBefore - 1000 ether;
+        staking.unstake(bobStakeAmount, bob);
+        uint256 bobAutoClaimed = underlying.balanceOf(bob) - bobBalBefore - bobPrincipalReturned;
 
         console2.log('Alice auto-claimed:', aliceAutoClaimed);
         console2.log('Bob auto-claimed:', bobAutoClaimed);
@@ -573,13 +580,14 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         underlying.approve(address(staking), type(uint256).max);
         staking.stake(1000 ether);
         vm.stopPrank();
+        uint256 rewardAmount = sToken.totalSupply();
 
         // 2. Add multiple reward tokens (all must be whitelisted)
         MockERC20[] memory tokens = new MockERC20[](10);
         for (uint256 i = 0; i < 9; i++) {
             tokens[i] = new MockERC20(string(abi.encodePacked('Token', vm.toString(i))), 'TK');
             staking.whitelistToken(address(tokens[i]));
-            tokens[i].mint(address(staking), 10 ether);
+            tokens[i].mint(address(staking), rewardAmount);
             staking.accrueRewards(address(tokens[i]));
         }
 
@@ -588,12 +596,12 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         // 3. Add more tokens (no limit with whitelist-only system)
         MockERC20 extra1 = new MockERC20('Extra1', 'EX1');
         staking.whitelistToken(address(extra1));
-        extra1.mint(address(staking), 10 ether);
+        extra1.mint(address(staking), rewardAmount);
         staking.accrueRewards(address(extra1));
 
         MockERC20 extra2 = new MockERC20('Extra2', 'EX2');
         staking.whitelistToken(address(extra2));
-        extra2.mint(address(staking), 10 ether);
+        extra2.mint(address(staking), rewardAmount);
         staking.accrueRewards(address(extra2));
 
         console2.log('Additional tokens added successfully');
@@ -618,7 +626,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         // 7. Verify cleanup worked - can still accrue rewards for remaining tokens
         // Note: With whitelist-only system, there's no token limit, but cleanup
         // is still useful for removing finished tokens
-        extra2.mint(address(staking), 10 ether);
+        extra2.mint(address(staking), rewardAmount);
         staking.accrueRewards(address(extra2));
 
         console2.log('SUCCESS: Cleanup completed successfully, tokens continue to work');
@@ -655,8 +663,9 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         console2.log('Issue 1: Governance cycle stuck');
 
         // 3. Issue 2: Alice unstakes (zero stakers)
+        uint256 aliceStakeAmount = sToken.balanceOf(alice);
         vm.prank(alice);
-        staking.unstake(1000 ether, alice);
+        staking.unstake(aliceStakeAmount, alice);
 
         assertEq(staking.totalStaked(), 0, 'Zero stakers');
         console2.log('Issue 2: All stakers exited');

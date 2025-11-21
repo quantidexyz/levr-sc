@@ -61,7 +61,7 @@ contract LevrGovernor_v1 is ILevrGovernor_v1, ReentrancyGuard, ERC2771ContextBas
 
     // ============ Constructor ============
 
-    constructor(address trustedForwarder, address factory_) ERC2771ContextBase(trustedForwarder) {
+    constructor(address factory_, address trustedForwarder) ERC2771ContextBase(trustedForwarder) {
         if (factory_ == address(0)) revert InvalidRecipient();
         factory = factory_;
     }

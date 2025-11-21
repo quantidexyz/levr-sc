@@ -113,7 +113,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         assertEq(project.treasury, treasury, 'Treasury address matches');
         assertEq(project.staking, staking, 'Staking address matches');
 
-        ILevrFactory_v1.Project memory proj = factory.getProjectContracts(address(clankerToken));
+        ILevrFactory_v1.Project memory proj = factory.getProject(address(clankerToken));
 
         assertEq(proj.treasury, treasury, 'Project treasury registered');
         assertEq(proj.governor, project.governor, 'Project governor registered');
@@ -609,7 +609,7 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         factory.updateProjectConfig(address(token), projectCfg);
     }
 
-    function test_phase2_config_007_getProjectContractsWithVerified() public {
+    function test_phase2_config_007_getProjectWithVerified() public {
         // Register and verify multiple projects
         factory.prepareForDeployment();
         MockERC20 token1 = new MockERC20('Token1', 'TK1');
@@ -624,8 +624,8 @@ contract LevrFactoryV1_PrepareForDeploymentTest is Test, LevrFactoryDeployHelper
         factory.verifyProject(address(token1));
 
         // Get contracts
-        ILevrFactory_v1.Project memory retrieved1 = factory.getProjectContracts(address(token1));
-        ILevrFactory_v1.Project memory retrieved2 = factory.getProjectContracts(address(token2));
+        ILevrFactory_v1.Project memory retrieved1 = factory.getProject(address(token1));
+        ILevrFactory_v1.Project memory retrieved2 = factory.getProject(address(token2));
 
         assertEq(retrieved1.treasury, project1.treasury);
         assertEq(retrieved2.treasury, project2.treasury);

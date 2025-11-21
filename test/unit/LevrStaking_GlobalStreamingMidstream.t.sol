@@ -31,7 +31,7 @@ contract LevrStaking_GlobalStreamingMidstreamTest is Test, LevrFactoryDeployHelp
 
     function setUp() public {
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
-            protocolFeeBps: 100,
+            protocolFeeBps: 0,
             streamWindowSeconds: uint32(STREAM_WINDOW),
             protocolTreasury: address(0xFEE),
             proposalWindowSeconds: 2 days,

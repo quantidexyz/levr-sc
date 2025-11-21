@@ -45,7 +45,7 @@ contract LevrStakingFrontRunTest is Test {
 
         // Step 1: Legitimate factory deploys staking with factory address in constructor
         vm.prank(legitimateFactory);
-        staking = new LevrStaking_v1(trustedForwarder, legitimateFactory);
+        staking = new LevrStaking_v1(legitimateFactory, trustedForwarder);
         console2.log('Staking deployed at:', address(staking));
         console2.log('Factory immutably set to:', staking.factory());
 
@@ -84,7 +84,7 @@ contract LevrStakingFrontRunTest is Test {
 
         // Deploy staking with legitimate factory
         vm.prank(legitimateFactory);
-        staking = new LevrStaking_v1(trustedForwarder, legitimateFactory);
+        staking = new LevrStaking_v1(legitimateFactory, trustedForwarder);
 
         address[] memory emptyTokens = new address[](0);
 
@@ -114,7 +114,7 @@ contract LevrStakingFrontRunTest is Test {
         vm.roll(100);
 
         vm.prank(legitimateFactory);
-        staking = new LevrStaking_v1(trustedForwarder, legitimateFactory);
+        staking = new LevrStaking_v1(legitimateFactory, trustedForwarder);
         console2.log('Staking deployed:', address(staking));
         console2.log('Factory immutably set:', staking.factory());
 
@@ -163,7 +163,7 @@ contract LevrStakingFrontRunTest is Test {
         console2.log('\n=== Attack Vector 4: Parameter Control (After Fix) ===');
 
         vm.prank(legitimateFactory);
-        staking = new LevrStaking_v1(trustedForwarder, legitimateFactory);
+        staking = new LevrStaking_v1(legitimateFactory, trustedForwarder);
 
         // Attacker prepares malicious parameters
         address maliciousUnderlying = makeAddr('maliciousToken');
@@ -213,7 +213,7 @@ contract LevrStakingFrontRunTest is Test {
         console2.log('\n=== Baseline: Legitimate Initialization (After Fix) ===');
 
         vm.prank(legitimateFactory);
-        staking = new LevrStaking_v1(trustedForwarder, legitimateFactory);
+        staking = new LevrStaking_v1(legitimateFactory, trustedForwarder);
 
         console2.log('Staking deployed with factory:', staking.factory());
 

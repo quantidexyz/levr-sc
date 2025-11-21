@@ -503,7 +503,7 @@ function applyBoost(address token, uint256 amount) external nonReentrant onlyGov
     if (token == address(0)) revert ILevrTreasury_v1.ZeroAddress();
     if (amount == 0) revert ILevrTreasury_v1.InvalidAmount();
 
-    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProjectContracts(
+    ILevrFactory_v1.Project memory project = ILevrFactory_v1(factory).getProject(
         underlying
     );
     // Approve and pull via accrueFromTreasury for atomicity
