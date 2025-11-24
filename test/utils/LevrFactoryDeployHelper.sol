@@ -11,8 +11,8 @@ import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
-import {MockClankerFactory} from '../mocks/MockClankerFactory.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
+import {ClankerFactory_Mock} from '../mocks/ClankerFactory_Mock.sol';
 
 /// @title Levr Factory Deployment Helper
 /// @notice Helper contract for deploying LevrFactory_v1 with all dependencies in tests
@@ -95,9 +95,9 @@ contract LevrFactoryDeployHelper is Test {
         // Step 5: Deploy mock WETH at hardcoded Base WETH address (if not already deployed)
         address weth = 0x4200000000000000000000000000000000000006; // Base WETH
         if (weth.code.length == 0) {
-            // Deploy MockERC20 at this address using deployCodeTo
+            // Deploy ERC20_Mock at this address using deployCodeTo
             deployCodeTo(
-                'test/mocks/MockERC20.sol:MockERC20',
+                'test/mocks/ERC20_Mock.sol:ERC20_Mock',
                 abi.encode('Wrapped Ether', 'WETH'),
                 weth
             );
@@ -164,7 +164,7 @@ contract LevrFactoryDeployHelper is Test {
         // If running in unit test mode (Clanker factory not deployed), deploy a mock factory
         // In fork tests, the real Clanker factory will have code deployed
         if (clankerFactory.code.length == 0) {
-            MockClankerFactory mockFactory = new MockClankerFactory();
+            ClankerFactory_Mock mockFactory = new ClankerFactory_Mock();
             clankerFactory = address(mockFactory);
             mockClankerFactory = clankerFactory;
         }
@@ -173,11 +173,11 @@ contract LevrFactoryDeployHelper is Test {
     }
 
     /// @notice Register a token with the mock Clanker factory (for unit tests)
-    /// @dev This allows MockERC20 tokens to pass Clanker factory validation
+    /// @dev This allows ERC20_Mock tokens to pass Clanker factory validation
     /// @param token Token address to register
     function registerTokenWithMockClanker(address token) internal {
         if (mockClankerFactory != address(0)) {
-            MockClankerFactory(mockClankerFactory).registerToken(token);
+            ClankerFactory_Mock(mockClankerFactory).registerToken(token);
         }
     }
 

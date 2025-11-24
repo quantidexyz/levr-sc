@@ -13,7 +13,7 @@ import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 
 /// @title LevrDeployer_v1 Test
 /// @notice Comprehensive security testing for clone-based deployment infrastructure
@@ -109,7 +109,7 @@ contract LevrDeployer_v1_Test is Test {
         vm.startPrank(attacker);
 
         // Deploy mock for testing
-        address mockUnderlying = address(new MockERC20('Test', 'TST'));
+        address mockUnderlying = address(new ERC20_Mock('Test', 'TST'));
 
         vm.expectRevert();
         LevrTreasury_v1(treasuryClone).initialize(attacker, mockUnderlying);
@@ -235,7 +235,7 @@ contract LevrDeployer_v1_Test is Test {
         address stakingClone = Clones.clone(address(stakingImpl));
 
         // Deploy mock ERC20 for testing
-        address mockUnderlying = address(new MockERC20('Test', 'TST'));
+        address mockUnderlying = address(new ERC20_Mock('Test', 'TST'));
         address mockStakedToken = address(0x1111);
         address mockTreasury = address(0x2222);
 
@@ -265,7 +265,7 @@ contract LevrDeployer_v1_Test is Test {
         address stakingClone = Clones.clone(address(stakingImpl));
 
         // Deploy mock ERC20 for testing
-        address mockUnderlying = address(new MockERC20('Test', 'TST'));
+        address mockUnderlying = address(new ERC20_Mock('Test', 'TST'));
         address mockStakedToken = address(0x1111);
         address mockTreasury = address(0x2222);
 
@@ -395,7 +395,7 @@ contract LevrDeployer_v1_Test is Test {
         // This prevents implementation poisoning attacks
 
         // Deploy mock for testing
-        address mockUnderlying = address(new MockERC20('Test', 'TST'));
+        address mockUnderlying = address(new ERC20_Mock('Test', 'TST'));
 
         // Initialize implementation contracts (by factory - this is allowed and safe)
         vm.prank(address(factory));

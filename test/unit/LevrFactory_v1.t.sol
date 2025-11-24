@@ -7,16 +7,16 @@ import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
-import {MockClankerFactory} from '../mocks/MockClankerFactory.sol';
+import {ClankerFactory_Mock} from '../mocks/ClankerFactory_Mock.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 contract LevrFactory_v1_Test is Test, LevrFactoryDeployHelper {
     LevrFactory_v1 internal _factory;
     LevrForwarder_v1 internal _forwarder;
     LevrDeployer_v1 internal _deployer;
-    MockERC20 internal _clanker;
+    ERC20_Mock internal _clanker;
 
     address internal _protocolTreasury = address(0xDEAD);
     address internal _nonOwner = makeAddr('nonOwner');
@@ -25,7 +25,7 @@ contract LevrFactory_v1_Test is Test, LevrFactoryDeployHelper {
     function setUp() public {
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(_protocolTreasury);
         (_factory, _forwarder, _deployer) = deployFactoryWithDefaultClanker(cfg, address(this));
-        _clanker = new MockERC20('Clanker', 'CLNK');
+        _clanker = new ERC20_Mock('Clanker', 'CLNK');
         registerTokenWithMockClanker(address(_clanker));
     }
 
@@ -60,7 +60,7 @@ contract LevrFactory_v1_Test is Test, LevrFactoryDeployHelper {
 
     function _setPermissiveMode(bool enabled) internal {
         if (mockClankerFactory != address(0)) {
-            MockClankerFactory(mockClankerFactory).setPermissiveMode(enabled);
+            ClankerFactory_Mock(mockClankerFactory).setPermissiveMode(enabled);
         }
     }
 
@@ -132,7 +132,7 @@ contract LevrFactory_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_Register_RevertIf_TokenNotTrusted() public {
-        MockERC20 rogueToken = new MockERC20('Rogue', 'ROG');
+        ERC20_Mock rogueToken = new ERC20_Mock('Rogue', 'ROG');
         _setPermissiveMode(false);
 
         _prepare();
@@ -199,7 +199,7 @@ contract LevrFactory_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_UpdateInitialWhitelist_SetsWhitelistAndProjectsInherit() public {
-        MockERC20 stable = new MockERC20('Stable', 'STBL');
+        ERC20_Mock stable = new ERC20_Mock('Stable', 'STBL');
         address[] memory list = new address[](1);
         list[0] = address(stable);
 

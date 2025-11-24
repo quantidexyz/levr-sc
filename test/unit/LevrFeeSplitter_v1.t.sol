@@ -5,17 +5,17 @@ import {Test} from 'forge-std/Test.sol';
 import {LevrFeeSplitter_v1} from '../../src/LevrFeeSplitter_v1.sol';
 import {ILevrFeeSplitter_v1} from '../../src/interfaces/ILevrFeeSplitter_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
-import {MockStaking} from '../mocks/MockStaking.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
+import {LevrStaking_v1_Mock} from '../mocks/LevrStaking_v1_Mock.sol';
 
 contract LevrFeeSplitter_v1_Test is Test {
     LevrFeeSplitter_v1 internal _splitter;
     MockClankerToken internal _clanker;
     MockProjectRegistry internal _projectRegistry;
-    MockStaking internal _staking;
+    LevrStaking_v1_Mock internal _staking;
 
-    MockERC20 internal _rewardToken;
-    MockERC20 internal _secondRewardToken;
+    ERC20_Mock internal _rewardToken;
+    ERC20_Mock internal _secondRewardToken;
 
     address internal _admin = makeAddr('admin');
     address internal _receiverA = makeAddr('receiverA');
@@ -24,13 +24,13 @@ contract LevrFeeSplitter_v1_Test is Test {
     function setUp() public {
         _clanker = new MockClankerToken(_admin);
         _projectRegistry = new MockProjectRegistry();
-        _staking = new MockStaking();
+        _staking = new LevrStaking_v1_Mock();
 
         _projectRegistry.setProject(address(0), address(0), address(_staking), address(0), false);
 
         _splitter = new LevrFeeSplitter_v1(address(_clanker), address(_projectRegistry), address(0));
-        _rewardToken = new MockERC20('Reward', 'RWD');
-        _secondRewardToken = new MockERC20('Alt Reward', 'ALT');
+        _rewardToken = new ERC20_Mock('Reward', 'RWD');
+        _secondRewardToken = new ERC20_Mock('Alt Reward', 'ALT');
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -228,10 +228,10 @@ contract LevrFeeSplitter_v1_Test is Test {
     }
 }
 
-contract MockClankerToken is MockERC20 {
+contract MockClankerToken is ERC20_Mock {
     address private immutable _admin;
 
-    constructor(address admin_) MockERC20('Clanker', 'CLNK') {
+    constructor(address admin_) ERC20_Mock('Clanker', 'CLNK') {
         _admin = admin_;
     }
 

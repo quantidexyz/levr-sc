@@ -1,85 +1,24 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
-import {Test} from 'forge-std/Test.sol';
 import {CommonBase} from 'forge-std/Base.sol';
 import {StdUtils} from 'forge-std/StdUtils.sol';
 
-import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
-import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
-import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
-import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
-import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
-import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
-import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {LevrGovernor_v1} from '../../../src/LevrGovernor_v1.sol';
+import {LevrTreasury_v1} from '../../../src/LevrTreasury_v1.sol';
+import {LevrStaking_v1} from '../../../src/LevrStaking_v1.sol';
+import {ILevrFactory_v1} from '../../../src/interfaces/ILevrFactory_v1.sol';
+import {ILevrStaking_v1} from '../../../src/interfaces/ILevrStaking_v1.sol';
+import {ERC20_Mock} from '../../mocks/ERC20_Mock.sol';
 
-contract LevrGovernorBoostInvariants is LevrFactoryDeployHelper {
-    LevrFactory_v1 internal factory;
-    LevrGovernor_v1 internal governor;
-    LevrTreasury_v1 internal treasury;
-    LevrStaking_v1 internal staking;
-    MockERC20 internal underlying;
-
-    GovernorBoostHandler internal handler;
-
-    function setUp() public {
-        underlying = new MockERC20('Token', 'TKN');
-
-        ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(address(0xDEAD));
-        (factory, , ) = deployFactoryWithDefaultClanker(cfg, address(this));
-
-        factory.prepareForDeployment();
-        ILevrFactory_v1.Project memory project = factory.register(address(underlying));
-
-        governor = LevrGovernor_v1(project.governor);
-        treasury = LevrTreasury_v1(payable(project.treasury));
-        staking = LevrStaking_v1(project.staking);
-
-        // Seed treasury so boosts always have liquidity
-        underlying.mint(address(treasury), 1_000_000 ether);
-
-        handler = new GovernorBoostHandler(governor, treasury, staking, underlying, factory);
-
-        targetContract(address(handler));
-    }
-
-    function invariant_treasuryNeverDustsAllowance() public view {
-        assertEq(
-            underlying.allowance(address(treasury), address(staking)),
-            0,
-            'Treasury must not leave allowance to staking'
-        );
-    }
-
-    function invariant_boostTransfersConserveUnderlying() public view {
-        uint256 treasuryBal = underlying.balanceOf(address(treasury));
-        uint256 stakingBal = underlying.balanceOf(address(staking));
-
-        uint256 expectedTreasury = handler.initialTreasuryBalance() +
-            handler.totalTreasuryRefills() -
-            handler.totalBoostExecuted();
-        uint256 expectedStaking = handler.initialStakingBalance() + handler.totalBoostExecuted();
-
-        assertEq(treasuryBal, expectedTreasury, 'Treasury balance mismatch');
-        assertEq(stakingBal, expectedStaking, 'Staking balance mismatch');
-    }
-
-    function invariant_failedAccrualRewardsRemainOutstanding() public view {
-        uint256 outstanding = staking.outstandingRewards(address(underlying));
-        assertGe(
-            outstanding,
-            handler.pendingAccrualFromFailures(),
-            'Outstanding rewards must cover failed accrual amounts'
-        );
-    }
-}
-
-contract GovernorBoostHandler is CommonBase, StdUtils {
+/// @title LevrGovernor_v1 handler
+/// @notice Stateful harness that exercises governor boost proposals for invariants
+/// @dev Exposes ghost variables for invariant assertions via view getters
+contract LevrGovernor_v1_Handler is CommonBase, StdUtils {
     LevrGovernor_v1 public immutable governor;
     LevrTreasury_v1 public immutable treasury;
     LevrStaking_v1 public immutable staking;
-    MockERC20 public immutable underlying;
+    ERC20_Mock public immutable underlying;
     ILevrFactory_v1 public immutable factory;
 
     address internal immutable proposer = address(0xA11CE);
@@ -90,6 +29,8 @@ contract GovernorBoostHandler is CommonBase, StdUtils {
     uint256 private _pendingAccrualFromFailures;
     uint256 private _initialTreasuryBalance;
     uint256 private _initialStakingBalance;
+    uint256 private _lastTreasuryBalanceBeforeExecute;
+    uint256 private _lastExecutedAmount;
 
     uint32 private immutable proposalWindow;
     uint32 private immutable votingWindow;
@@ -99,7 +40,7 @@ contract GovernorBoostHandler is CommonBase, StdUtils {
         LevrGovernor_v1 governor_,
         LevrTreasury_v1 treasury_,
         LevrStaking_v1 staking_,
-        MockERC20 underlying_,
+        ERC20_Mock underlying_,
         ILevrFactory_v1 factory_
     ) {
         governor = governor_;
@@ -112,21 +53,22 @@ contract GovernorBoostHandler is CommonBase, StdUtils {
         votingWindow = factory_.votingWindowSeconds(address(underlying_));
         maxProposalAmountBps = factory_.maxProposalAmountBps(address(underlying_));
 
-        // Give proposer sufficient VP
+        // Seed proposer with voting power
         underlying_.mint(proposer, 10_000 ether);
         vm.startPrank(proposer);
         underlying_.approve(address(staking_), type(uint256).max);
         staking_.stake(2_000 ether);
         vm.stopPrank();
 
-        // Ensure VP has time to accumulate
+        // Allow VP accumulation
         vm.warp(block.timestamp + 10 days);
 
         _initialTreasuryBalance = underlying_.balanceOf(address(treasury_));
         _initialStakingBalance = underlying_.balanceOf(address(staking_));
     }
 
-    // ========= Handler Actions =========
+    ///////////////////////////////////////////////////////////////////////////
+    // Handler Actions
 
     function executeBoost(uint256 rawAmount) external {
         _executeBoost(rawAmount, false);
@@ -153,18 +95,19 @@ contract GovernorBoostHandler is CommonBase, StdUtils {
         vm.warp(block.timestamp + delta);
     }
 
-    // ========= Invariant Data =========
+    ///////////////////////////////////////////////////////////////////////////
+    // Ghost Variable Getters
 
     function totalBoostExecuted() external view returns (uint256) {
         return _totalBoostExecuted;
     }
 
-    function totalTreasuryRefills() external view returns (uint256) {
-        return _totalTreasuryRefills;
-    }
-
     function totalBoostExecutedWithAccrualFailure() external view returns (uint256) {
         return _totalBoostExecutedWithAccrualFailure;
+    }
+
+    function totalTreasuryRefills() external view returns (uint256) {
+        return _totalTreasuryRefills;
     }
 
     function pendingAccrualFromFailures() external view returns (uint256) {
@@ -179,7 +122,16 @@ contract GovernorBoostHandler is CommonBase, StdUtils {
         return _initialStakingBalance;
     }
 
-    // ========= Internal Helpers =========
+    function lastTreasuryBalanceBeforeExecute() external view returns (uint256) {
+        return _lastTreasuryBalanceBeforeExecute;
+    }
+
+    function lastExecutedAmount() external view returns (uint256) {
+        return _lastExecutedAmount;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Internal helpers
 
     function _executeBoost(uint256 rawAmount, bool forceAccrualFailure) internal {
         uint256 treasuryBal = underlying.balanceOf(address(treasury));
@@ -209,6 +161,8 @@ contract GovernorBoostHandler is CommonBase, StdUtils {
             );
         }
 
+        _lastTreasuryBalanceBeforeExecute = treasuryBal;
+        _lastExecutedAmount = amount;
         governor.execute(pid);
 
         vm.clearMockedCalls();

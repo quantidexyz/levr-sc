@@ -2,14 +2,14 @@
 pragma solidity 0.8.30;
 
 import {IClanker} from '../../src/interfaces/external/IClanker.sol';
-import {MockERC20} from './MockERC20.sol';
+import {ERC20_Mock} from './ERC20_Mock.sol';
 
 /// @notice Mock Clanker Token that implements both IClankerToken and ERC20
 /// @dev Standalone implementation to properly set admin
-contract MockClankerTokenForTest is MockERC20 {
+contract ClankerTokenForTest_Mock is ERC20_Mock {
     address private immutable _tokenAdmin;
 
-    constructor(string memory name, string memory symbol, address admin_) MockERC20(name, symbol) {
+    constructor(string memory name, string memory symbol, address admin_) ERC20_Mock(name, symbol) {
         _tokenAdmin = admin_;
         // Mint initial supply to admin
         _mint(admin_, 1_000_000 ether);
@@ -23,7 +23,7 @@ contract MockClankerTokenForTest is MockERC20 {
 
 /// @notice Mock Clanker Factory for testing
 /// @dev Simulates Clanker factory for unit tests
-contract MockClankerFactory {
+contract ClankerFactory_Mock {
     string public version;
     mapping(address => IClanker.DeploymentInfo) private _deploymentInfo;
     mapping(address => bool) private _isRegistered;
@@ -44,8 +44,8 @@ contract MockClankerFactory {
         address admin,
         string memory name,
         string memory symbol
-    ) external returns (MockClankerTokenForTest) {
-        MockClankerTokenForTest token = new MockClankerTokenForTest(name, symbol, admin);
+    ) external returns (ClankerTokenForTest_Mock) {
+        ClankerTokenForTest_Mock token = new ClankerTokenForTest_Mock(name, symbol, admin);
 
         _deploymentInfo[address(token)] = IClanker.DeploymentInfo({
             token: address(token),
@@ -58,7 +58,7 @@ contract MockClankerFactory {
         return token;
     }
 
-    /// @notice Register an existing token (for testing with MockERC20)
+    /// @notice Register an existing token (for testing with ERC20_Mock)
     /// @dev Allows tests to register tokens that weren't deployed by this factory
     function registerToken(address token) external {
         _deploymentInfo[token] = IClanker.DeploymentInfo({

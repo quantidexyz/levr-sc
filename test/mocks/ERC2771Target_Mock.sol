@@ -3,7 +3,7 @@ pragma solidity 0.8.30;
 
 import {ERC2771Context} from '@openzeppelin/contracts/metatx/ERC2771Context.sol';
 
-contract MockERC2771Target is ERC2771Context {
+contract ERC2771Target_Mock is ERC2771Context {
     event Executed(address sender, uint256 value, bytes data);
 
     bool public shouldRevert;

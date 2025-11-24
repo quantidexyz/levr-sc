@@ -11,12 +11,12 @@ import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 contract LevrGovernor_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     struct Env {
-        MockERC20 underlying;
+        ERC20_Mock underlying;
         LevrFactory_v1 factory;
         LevrForwarder_v1 forwarder;
         LevrDeployer_v1 deployer;
@@ -36,7 +36,7 @@ contract LevrGovernor_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     function _deployEnv(
         ILevrFactory_v1.FactoryConfig memory cfg
     ) internal returns (Env memory env) {
-        env.underlying = new MockERC20('Scenario Token', 'SCN');
+        env.underlying = new ERC20_Mock('Scenario Token', 'SCN');
 
         env.proposalWindow = cfg.proposalWindowSeconds;
         env.votingWindow = cfg.votingWindowSeconds;
@@ -177,8 +177,8 @@ contract LevrGovernor_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     }
 }
 
-contract RevertingToken is MockERC20 {
-    constructor() MockERC20('Reverting', 'REV') {}
+contract RevertingToken is ERC20_Mock {
+    constructor() ERC20_Mock('Reverting', 'REV') {}
 
     function transfer(address, uint256) public pure override returns (bool) {
         revert('Transfer failed');

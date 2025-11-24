@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {MockERC20} from './MockERC20.sol';
+import {ERC20_Mock} from './ERC20_Mock.sol';
 
 /**
- * @title Mock Clanker Token
+ * @title Clanker Token Mock
  * @notice Mock token for testing that includes admin() function
- * @dev Extends MockERC20 to provide IClankerToken interface compatibility
+ * @dev Extends ERC20_Mock to provide IClankerToken interface compatibility
  */
-contract MockClankerToken is MockERC20 {
+contract ClankerToken_Mock is ERC20_Mock {
     address private _admin;
 
-    constructor(string memory name, string memory symbol, address admin_) MockERC20(name, symbol) {
+    constructor(string memory name, string memory symbol, address admin_) ERC20_Mock(name, symbol) {
         _admin = admin_;
         // Mint initial supply to deployer (matching original MockClankerToken behavior)
         _mint(msg.sender, 1_000_000 ether);
@@ -29,7 +29,7 @@ contract MockClankerToken is MockERC20 {
 
     /// @notice Get the token (for backward compatibility)
     /// @dev Returns self since this contract IS the token now
-    function token() external view returns (MockERC20) {
-        return MockERC20(address(this));
+    function token() external view returns (ERC20_Mock) {
+        return ERC20_Mock(address(this));
     }
 }

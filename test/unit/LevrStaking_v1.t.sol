@@ -6,8 +6,8 @@ import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
-import {FeeOnTransferToken} from '../mocks/FeeOnTransferToken.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
+import {FeeOnTransferToken_Mock} from '../mocks/FeeOnTransferToken_Mock.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 import {LevrStaking_v1_Exposed} from '../mocks/LevrStaking_v1_Exposed.sol';
 
@@ -15,9 +15,9 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     struct FeeOnTransferEnv {
         LevrStaking_v1 staking;
         LevrStakedToken_v1 sToken;
-        FeeOnTransferToken token;
+        FeeOnTransferToken_Mock token;
     }
-    MockERC20 internal _underlying;
+    ERC20_Mock internal _underlying;
     LevrStakedToken_v1 internal _sToken;
     LevrStaking_v1 internal _staking;
     LevrStaking_v1_Exposed internal _stakingExposed;
@@ -26,7 +26,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     address internal _admin = address(0xAD);
 
     function setUp() public {
-        _underlying = new MockERC20('Token', 'TKN');
+        _underlying = new ERC20_Mock('Token', 'TKN');
 
         // Deploy normal staking for external tests
         _staking = createStaking(address(0), address(this)); // Mock forwarder as 0
@@ -256,7 +256,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
         vm.stopPrank();
     }
 
-    function test_Stake_FeeOnTransferToken_MintsActualReceived() public {
+    function test_Stake_FeeOnTransferToken_Mock_MintsActualReceived() public {
         FeeOnTransferEnv memory env = _setupFeeOnTransferEnv();
         uint256 amount = 100 ether;
 
@@ -274,7 +274,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
         );
     }
 
-    function test_Unstake_FeeOnTransferToken_DoesNotLeaveShortfall() public {
+    function test_Unstake_FeeOnTransferToken_Mock_DoesNotLeaveShortfall() public {
         FeeOnTransferEnv memory env = _setupFeeOnTransferEnv();
 
         vm.prank(_user);
@@ -301,7 +301,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
 
     function test_ClaimRewards_Success_DistributesRewards() public {
         // Setup reward token
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         // Stake
@@ -331,7 +331,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     /* Test: accrueRewards */
 
     function test_AccrueRewards_RevertIf_TokenNotWhitelisted() public {
-        MockERC20 random = new MockERC20('Random', 'RND');
+        ERC20_Mock random = new ERC20_Mock('Random', 'RND');
         random.mint(address(_staking), 1000 ether);
 
         vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
@@ -339,7 +339,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_AccrueRewards_RevertIf_RewardTooSmall() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         rewardToken.mint(address(_staking), 1); // Too small
@@ -349,7 +349,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_AccrueRewards_AllowsOnceBalanceMeetsMinimum() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         uint256 minAmount = _staking.MIN_REWARD_AMOUNT();
@@ -365,13 +365,13 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
         assertEq(streamTotal, minAmount, 'Stream should equal accumulated threshold');
     }
 
-    function test_FeeOnTransferToken_RewardsRemainClaimable() public {
+    function test_FeeOnTransferToken_Mock_RewardsRemainClaimable() public {
         FeeOnTransferEnv memory env = _setupFeeOnTransferEnv();
 
         vm.prank(_user);
         env.staking.stake(100 ether);
 
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(env.staking, address(rewardToken), address(this));
 
         rewardToken.mint(address(env.staking), 10 ether);
@@ -403,7 +403,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_WhitelistToken_RevertIf_NotTokenAdmin() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
 
         vm.prank(_user);
         vm.expectRevert(ILevrStaking_v1.OnlyTokenAdmin.selector);
@@ -411,7 +411,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_WhitelistToken_RevertIf_AlreadyWhitelisted() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         vm.expectRevert(ILevrStaking_v1.AlreadyWhitelisted.selector);
@@ -419,7 +419,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_WhitelistToken_ReWhitelistAfterRewardsClaimed_Succeeds() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         vm.startPrank(_user);
@@ -449,7 +449,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     /* Test: unwhitelistToken */
 
     function test_UnwhitelistToken_Success() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         assertTrue(_staking.isTokenWhitelisted(address(rewardToken)));
@@ -460,7 +460,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_UnwhitelistToken_RevertIf_NotTokenAdmin() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         vm.prank(_user);
@@ -474,7 +474,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_UnwhitelistToken_RevertIf_PendingRewards() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         rewardToken.mint(address(_staking), 100 ether);
@@ -485,7 +485,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_UnwhitelistToken_RevertIf_NotRegistered() public {
-        MockERC20 newToken = new MockERC20('New', 'NEW');
+        ERC20_Mock newToken = new ERC20_Mock('New', 'NEW');
 
         vm.expectRevert(ILevrStaking_v1.TokenNotRegistered.selector);
         _staking.unwhitelistToken(address(newToken));
@@ -499,13 +499,13 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_CleanupFinishedRewardToken_RevertIf_NotRegistered() public {
-        MockERC20 newToken = new MockERC20('New', 'NEW');
+        ERC20_Mock newToken = new ERC20_Mock('New', 'NEW');
         vm.expectRevert(ILevrStaking_v1.TokenNotRegistered.selector);
         _staking.cleanupFinishedRewardToken(address(newToken));
     }
 
     function test_CleanupFinishedRewardToken_RevertIf_StillWhitelisted() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         vm.expectRevert(ILevrStaking_v1.CannotRemoveWhitelisted.selector);
@@ -513,7 +513,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_CleanupFinishedRewardToken_Success() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_staking, address(rewardToken), address(this));
 
         _staking.unwhitelistToken(address(rewardToken));
@@ -544,7 +544,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     /* Test: _availableUnaccountedRewards */
 
     function test_Internal_AvailableUnaccountedRewards_CalculatesCorrectly() public {
-        MockERC20 rewardToken = new MockERC20('Reward', 'RWD');
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
         whitelistRewardToken(_stakingExposed, address(rewardToken), address(this));
 
         rewardToken.mint(address(_stakingExposed), 1000 ether);
@@ -559,7 +559,7 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     // Helper Functions
 
     function _setupFeeOnTransferEnv() internal returns (FeeOnTransferEnv memory env) {
-        env.token = new FeeOnTransferToken('Fee Token', 'FEE', 100);
+        env.token = new FeeOnTransferToken_Mock('Fee Token', 'FEE', 100);
         env.staking = createStaking(address(0), address(this));
         env.sToken = createStakedToken(
             'Fee Staked Token',

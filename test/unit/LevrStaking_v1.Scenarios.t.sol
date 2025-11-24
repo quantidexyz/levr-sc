@@ -5,11 +5,11 @@ import {Test} from 'forge-std/Test.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 contract LevrStaking_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
-    MockERC20 internal underlying;
+    ERC20_Mock internal underlying;
     LevrStakedToken_v1 internal sToken;
     LevrStaking_v1 internal staking;
     address internal treasury = address(0xBEEF);
@@ -17,7 +17,7 @@ contract LevrStaking_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     address internal bob = makeAddr('bob');
 
     function setUp() public {
-        underlying = new MockERC20('Token', 'TKN');
+        underlying = new ERC20_Mock('Token', 'TKN');
         _setMockProtocolFee(0, address(0));
 
         staking = createStaking(address(0), address(this));
@@ -157,7 +157,7 @@ contract LevrStaking_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_Scenario_LastStakerExit_PreservesFrozenRewards() public {
-        MockERC20 rewardToken = _createRewardToken('Reward', 'RWD');
+        ERC20_Mock rewardToken = _createRewardToken('Reward', 'RWD');
 
         _stake(alice, 1_000 ether);
 
@@ -191,7 +191,7 @@ contract LevrStaking_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_Scenario_FirstStakerAfterGap_OnlyClaimsNewRewards() public {
-        MockERC20 rewardToken = _createRewardToken('Reward', 'RWD');
+        ERC20_Mock rewardToken = _createRewardToken('Reward', 'RWD');
         _stake(alice, 1_000 ether);
 
         rewardToken.mint(address(staking), 1_000 ether);
@@ -214,7 +214,7 @@ contract LevrStaking_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_Scenario_MultipleClaims_ReturnZeroAfterFirst() public {
-        MockERC20 rewardToken = _createRewardToken('Reward', 'RWD');
+        ERC20_Mock rewardToken = _createRewardToken('Reward', 'RWD');
 
         _stake(alice, 1_000 ether);
         rewardToken.mint(address(staking), 1_000 ether);
@@ -251,8 +251,8 @@ contract LevrStaking_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
     function _createRewardToken(
         string memory name,
         string memory symbol
-    ) internal returns (MockERC20 token) {
-        token = new MockERC20(name, symbol);
+    ) internal returns (ERC20_Mock token) {
+        token = new ERC20_Mock(name, symbol);
         whitelistRewardToken(staking, address(token), address(this));
     }
 
@@ -260,9 +260,9 @@ contract LevrStaking_v1_Scenarios_Test is Test, LevrFactoryDeployHelper {
         address[] memory tokens = new address[](1);
         tokens[0] = token;
 
-        uint256 balanceBefore = MockERC20(token).balanceOf(user);
+        uint256 balanceBefore = ERC20_Mock(token).balanceOf(user);
         vm.prank(user);
         staking.claimRewards(tokens, user);
-        claimed = MockERC20(token).balanceOf(user) - balanceBefore;
+        claimed = ERC20_Mock(token).balanceOf(user) - balanceBefore;
     }
 }

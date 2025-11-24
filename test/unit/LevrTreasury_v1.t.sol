@@ -9,12 +9,12 @@ import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrTreasury_v1} from '../../src/interfaces/ILevrTreasury_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 contract LevrTreasury_v1_Test is Test, LevrFactoryDeployHelper {
     LevrTreasury_v1 internal _treasury;
-    MockERC20 internal _token;
+    ERC20_Mock internal _token;
     LevrFactory_v1 internal _factory;
     LevrForwarder_v1 internal _forwarder;
     LevrDeployer_v1 internal _deployer;
@@ -25,7 +25,7 @@ contract LevrTreasury_v1_Test is Test, LevrFactoryDeployHelper {
     address internal _user = address(0xAAAA);
 
     function setUp() public {
-        _token = new MockERC20('Token', 'TKN');
+        _token = new ERC20_Mock('Token', 'TKN');
 
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(_protocolTreasury);
         (_factory, _forwarder, _deployer) = deployFactoryWithDefaultClanker(cfg, address(this));

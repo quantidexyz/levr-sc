@@ -4,8 +4,8 @@ pragma solidity 0.8.30;
 import {Test} from 'forge-std/Test.sol';
 import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {ILevrForwarder_v1} from '../../src/interfaces/ILevrForwarder_v1.sol';
-import {MockERC2771Target} from '../mocks/MockERC2771Target.sol';
-import {PlainReceiver} from '../mocks/PlainReceiver.sol';
+import {ERC2771Target_Mock} from '../mocks/ERC2771Target_Mock.sol';
+import {PlainReceiver_Mock} from '../mocks/PlainReceiver_Mock.sol';
 import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
 
@@ -16,16 +16,16 @@ contract LevrForwarder_v1_Test is Test {
         );
 
     LevrForwarder_v1 internal _forwarder;
-    MockERC2771Target internal _trustedTarget;
-    PlainReceiver internal _plainTarget;
+    ERC2771Target_Mock internal _trustedTarget;
+    PlainReceiver_Mock internal _plainTarget;
     address internal _alice = makeAddr('alice');
 
     receive() external payable {}
 
     function setUp() public {
         _forwarder = new LevrForwarder_v1('LevrForwarder_v1');
-        _trustedTarget = new MockERC2771Target(address(_forwarder));
-        _plainTarget = new PlainReceiver();
+        _trustedTarget = new ERC2771Target_Mock(address(_forwarder));
+        _plainTarget = new PlainReceiver_Mock();
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -39,7 +39,7 @@ contract LevrForwarder_v1_Test is Test {
             target: address(_trustedTarget),
             allowFailure: false,
             value: 0.5 ether,
-            callData: abi.encodeWithSelector(MockERC2771Target.execute.selector, bytes('first'))
+            callData: abi.encodeWithSelector(ERC2771Target_Mock.execute.selector, bytes('first'))
         });
         calls[1] = ILevrForwarder_v1.SingleCall({
             target: address(_forwarder),
@@ -48,15 +48,15 @@ contract LevrForwarder_v1_Test is Test {
             callData: abi.encodeWithSelector(
                 LevrForwarder_v1.executeTransaction.selector,
                 address(_plainTarget),
-                abi.encodeWithSelector(PlainReceiver.callMe.selector, bytes('second'))
+                abi.encodeWithSelector(PlainReceiver_Mock.callMe.selector, bytes('second'))
             )
         });
 
         vm.expectEmit(true, false, false, true, address(_trustedTarget));
-        emit MockERC2771Target.Executed(address(this), 0.5 ether, bytes('first'));
+        emit ERC2771Target_Mock.Executed(address(this), 0.5 ether, bytes('first'));
 
         vm.expectEmit(true, false, false, true, address(_plainTarget));
-        emit PlainReceiver.PlainExecuted(address(_forwarder), 0.5 ether, bytes('second'));
+        emit PlainReceiver_Mock.PlainExecuted(address(_forwarder), 0.5 ether, bytes('second'));
 
         ILevrForwarder_v1.Result[] memory results = _forwarder.executeMulticall{value: 1 ether}(
             calls
@@ -71,7 +71,7 @@ contract LevrForwarder_v1_Test is Test {
             target: address(_trustedTarget),
             allowFailure: false,
             value: 1 ether,
-            callData: abi.encodeWithSelector(MockERC2771Target.execute.selector, bytes('data'))
+            callData: abi.encodeWithSelector(ERC2771Target_Mock.execute.selector, bytes('data'))
         });
 
         vm.expectRevert(
@@ -86,7 +86,7 @@ contract LevrForwarder_v1_Test is Test {
             target: address(_plainTarget),
             allowFailure: false,
             value: 0,
-            callData: abi.encodeWithSelector(PlainReceiver.callMe.selector, bytes('payload'))
+            callData: abi.encodeWithSelector(PlainReceiver_Mock.callMe.selector, bytes('payload'))
         });
 
         vm.expectRevert(
@@ -107,7 +107,7 @@ contract LevrForwarder_v1_Test is Test {
             target: address(_trustedTarget),
             allowFailure: true,
             value: 0,
-            callData: abi.encodeWithSelector(MockERC2771Target.execute.selector, bytes('boom'))
+            callData: abi.encodeWithSelector(ERC2771Target_Mock.execute.selector, bytes('boom'))
         });
 
         ILevrForwarder_v1.Result[] memory results = _forwarder.executeMulticall(calls);

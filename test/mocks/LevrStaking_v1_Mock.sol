@@ -4,11 +4,11 @@ pragma solidity ^0.8.30;
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 
 /**
- * @title Mock Staking Contract
+ * @title LevrStaking v1 Mock
  * @notice Mock staking contract for testing that can simulate failures
  * @dev Full ILevrStaking_v1 interface implementation with configurable revert behavior
  */
-contract MockStaking is ILevrStaking_v1 {
+contract LevrStaking_v1_Mock is ILevrStaking_v1 {
     bool public shouldRevertOnAccrue;
     mapping(address => bool) public whitelistedTokens;
 

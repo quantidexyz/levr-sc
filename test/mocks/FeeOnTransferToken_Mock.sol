@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 
 /// @notice Simple ERC20 that burns a fee on every transfer/transferFrom.
-contract FeeOnTransferToken is ERC20 {
+contract FeeOnTransferToken_Mock is ERC20 {
     uint256 public immutable feeBps; // Fee in basis points (100 = 1%)
     address private immutable _admin;
 

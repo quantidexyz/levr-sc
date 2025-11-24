@@ -4,11 +4,11 @@ pragma solidity ^0.8.30;
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 
 /**
- * @title Mock Factory
+ * @title LevrFactory v1 Mock
  * @notice Mock factory contract for testing fee splitter and project interactions
  * @dev Provides mock implementations of factory functions for testing
  */
-contract MockFactory {
+contract LevrFactory_v1_Mock {
     address public clankerToken;
     address public staking;
     mapping(address => uint32) private _streamWindows;

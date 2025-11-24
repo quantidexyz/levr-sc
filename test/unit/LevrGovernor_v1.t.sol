@@ -11,13 +11,13 @@ import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
     uint256 internal constant TREASURY_BUFFER = 100_000 ether;
 
-    MockERC20 internal _underlying;
+    ERC20_Mock internal _underlying;
     LevrFactory_v1 internal _factory;
     LevrForwarder_v1 internal _forwarder;
     LevrDeployer_v1 internal _deployer;
@@ -35,7 +35,7 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
     uint32 internal _votingWindow;
 
     function setUp() public {
-        _underlying = new MockERC20('Token', 'TKN');
+        _underlying = new ERC20_Mock('Token', 'TKN');
 
         ILevrFactory_v1.FactoryConfig memory cfg = createDefaultConfig(_protocolTreasury);
         _proposalWindow = cfg.proposalWindowSeconds;
