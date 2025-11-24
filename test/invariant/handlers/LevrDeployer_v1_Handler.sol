@@ -23,6 +23,7 @@ contract LevrDeployer_v1_Handler is CommonBase, StdUtils {
     LevrTreasury_v1 public immutable treasuryImpl;
     LevrStaking_v1 public immutable stakingImpl;
     LevrGovernor_v1 public immutable governorImpl;
+    LevrStakedToken_v1 public immutable stakedTokenImpl;
     LevrDeployer_v1 public immutable deployerLogic;
 
     Prepared[] internal _pendingPrepared;
@@ -35,12 +36,14 @@ contract LevrDeployer_v1_Handler is CommonBase, StdUtils {
         treasuryImpl = new LevrTreasury_v1(address(this), address(forwarder));
         stakingImpl = new LevrStaking_v1(address(this), address(forwarder));
         governorImpl = new LevrGovernor_v1(address(this), address(forwarder));
+        stakedTokenImpl = new LevrStakedToken_v1(address(this));
 
         deployerLogic = new LevrDeployer_v1(
             address(this),
             address(treasuryImpl),
             address(stakingImpl),
-            address(governorImpl)
+            address(governorImpl),
+            address(stakedTokenImpl)
         );
     }
 

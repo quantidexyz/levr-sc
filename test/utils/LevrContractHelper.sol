@@ -27,7 +27,7 @@ contract LevrContractHelper is Test {
         _mockFactory = address(this); // Use test contract as mock factory
         _mockForwarder = address(0x999); // Mock forwarder
 
-        // Deploy implementation contracts (stakedToken deployed directly, not cloned)
+        // Deploy implementation contracts (tests deploy fresh stTokens per helper call)
         _treasuryImpl = new LevrTreasury_v1(_mockFactory, _mockForwarder);
         _stakingImpl = new LevrStaking_v1(_mockFactory, _mockForwarder);
         _governorImpl = new LevrGovernor_v1(_mockFactory, _mockForwarder);
@@ -42,8 +42,9 @@ contract LevrContractHelper is Test {
         address underlying,
         address staking
     ) internal returns (LevrStakedToken_v1) {
-        // Deploy new instance directly
-        return new LevrStakedToken_v1(name, symbol, decimals, underlying, staking);
+        LevrStakedToken_v1 token = new LevrStakedToken_v1(_mockFactory);
+        token.initialize(name, symbol, decimals, underlying, staking);
+        return token;
     }
 
     /// @notice Create an initialized governor instance

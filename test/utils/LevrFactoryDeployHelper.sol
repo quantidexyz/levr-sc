@@ -74,22 +74,23 @@ contract LevrFactoryDeployHelper is Test {
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
         // Step 2: Calculate factory address (will be deployed after implementations and deployer)
-        // Current nonce is after forwarder, +3 implementations, +1 deployer logic, +1 for factory
+        // Current nonce is after forwarder, +4 implementations, +1 deployer logic, +1 for factory
         uint64 currentNonce = vm.getNonce(address(this));
-        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 4);
+        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 5);
 
         // Step 3: Deploy implementation contracts with predicted factory
         LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
         LevrStaking_v1 stakingImpl = new LevrStaking_v1(predictedFactory, address(forwarder));
         LevrGovernor_v1 governorImpl = new LevrGovernor_v1(predictedFactory, address(forwarder));
+        LevrStakedToken_v1 stakedTokenImpl = new LevrStakedToken_v1(predictedFactory);
 
         // Step 4: Deploy deployer logic with predicted factory address and implementations
-        // Note: StakedToken is deployed as new instance per project, not cloned
         levrDeployer = new LevrDeployer_v1(
             predictedFactory,
             address(treasuryImpl),
             address(stakingImpl),
-            address(governorImpl)
+            address(governorImpl),
+            address(stakedTokenImpl)
         );
 
         // Step 5: Deploy mock WETH at hardcoded Base WETH address (if not already deployed)
@@ -310,8 +311,9 @@ contract LevrFactoryDeployHelper is Test {
         address underlying,
         address staking
     ) internal returns (LevrStakedToken_v1) {
-        // Deploy new instance directly (no clone pattern)
-        return new LevrStakedToken_v1(name, symbol, decimals, underlying, staking);
+        LevrStakedToken_v1 token = new LevrStakedToken_v1(address(this));
+        token.initialize(name, symbol, decimals, underlying, staking);
+        return token;
     }
 
     /// @notice Create an initialized governor for unit tests
@@ -367,7 +369,8 @@ contract LevrFactoryDeployHelper is Test {
         LevrTreasury_v1 ti = new LevrTreasury_v1(factory, address(0));
         LevrStaking_v1 si = new LevrStaking_v1(factory, address(0));
         LevrGovernor_v1 gi = new LevrGovernor_v1(factory, address(0));
+        LevrStakedToken_v1 sti = new LevrStakedToken_v1(factory);
 
-        return new LevrDeployer_v1(factory, address(ti), address(si), address(gi));
+        return new LevrDeployer_v1(factory, address(ti), address(si), address(gi), address(sti));
     }
 }

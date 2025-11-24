@@ -27,20 +27,20 @@ The Deployer is not meant to be used directly. It is designed to have its code "
 
 ### 2. Cloning Strategy
 
-Levr uses EIP-1167 Clones for most components to save gas.
+Levr uses EIP-1167 Clones for **all** per-project components to save gas and keep deterministic bytecode.
 
-- **Treasury**: Cloned. (Logic is identical for everyone).
-- **Staking**: Cloned. (Logic is identical for everyone).
-- **Governor**: Cloned. (Logic is identical for everyone).
-- **Staked Token**: **NOT Cloned**.
-  - _Why?_ The Staked Token is an ERC20. It needs a unique Name ("Levr Staked Clanker") and Symbol ("sCLANKER") stored in its bytecode/storage. While clones _can_ be initialized, deploying a fresh instance is cleaner for ERC20 metadata and ensures distinct contract identity on block explorers.
+- **Treasury**: Cloned from a single implementation bound to the factory.
+- **Staking**: Cloned and initialized with reward whitelist + treasury wiring.
+- **Governor**: Cloned and initialized with references to treasury/staking/stToken.
+- **Staked Token**: _Now cloned as well_. Each clone calls `initialize(...)` to set dynamic metadata (name/symbol/decimals) plus the staking authority. This keeps block explorer verification simple (one implementation) while still giving each project branded ERC20 metadata.
+- Every clone enforces an `OnlyFactory` guard on `initialize` so attackers cannot frontrun setup.
 
 ## API Reference
 
 ### Functions
 
-- `prepareContracts()`: Deploys Treasury and Staking clones. Step 1 of deployment.
-- `deployProject(...)`: Deploys Governor and StakedToken, and initializes everything. Step 2.
+- `prepareContracts()`: Deploys Treasury and Staking clones (deterministic addresses ahead of time). Step 1 of deployment.
+- `deployProject(...)`: Deploys (clones) Governor + StakedToken, initializes everything, and wires reward whitelist. Step 2.
 
 ### Events
 

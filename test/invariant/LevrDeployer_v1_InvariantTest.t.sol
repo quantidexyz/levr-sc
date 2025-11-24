@@ -29,6 +29,10 @@ contract LevrDeployer_v1_InvariantTest is StdInvariant, Test {
         assertTrue(_deployer.treasuryImplementation() != address(0), 'Treasury impl zero');
         assertTrue(_deployer.stakingImplementation() != address(0), 'Staking impl zero');
         assertTrue(_deployer.governorImplementation() != address(0), 'Governor impl zero');
+        assertTrue(
+            _deployer.stakedTokenImplementation() != address(0),
+            'Staked token impl zero'
+        );
     }
 
     /// @notice Prepared clones must always inherit the handler factory address

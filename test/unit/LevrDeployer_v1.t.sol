@@ -13,6 +13,7 @@ import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
+import {ILevrStakedToken_v1} from '../../src/interfaces/ILevrStakedToken_v1.sol';
 import {ILevrDeployer_v1} from '../../src/interfaces/ILevrDeployer_v1.sol';
 import {ClankerFactory_Mock, ClankerTokenForTest_Mock} from '../mocks/ClankerFactory_Mock.sol';
 import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
@@ -29,6 +30,7 @@ contract LevrDeployer_v1_Test is Test {
     LevrTreasury_v1 treasuryImpl;
     LevrStaking_v1 stakingImpl;
     LevrGovernor_v1 governorImpl;
+    LevrStakedToken_v1 stakedTokenImpl;
 
     address owner = address(this);
     address attacker = address(0xBAD);
@@ -38,22 +40,27 @@ contract LevrDeployer_v1_Test is Test {
 
     function test_Constructor_RevertIf_FactoryZero() public {
         vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
-        new LevrDeployer_v1(address(0), address(1), address(1), address(1));
+        new LevrDeployer_v1(address(0), address(1), address(1), address(1), address(1));
     }
 
     function test_Constructor_RevertIf_TreasuryImplZero() public {
         vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
-        new LevrDeployer_v1(address(1), address(0), address(1), address(1));
+        new LevrDeployer_v1(address(1), address(0), address(1), address(1), address(1));
     }
 
     function test_Constructor_RevertIf_StakingImplZero() public {
         vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
-        new LevrDeployer_v1(address(1), address(1), address(0), address(1));
+        new LevrDeployer_v1(address(1), address(1), address(0), address(1), address(1));
     }
 
     function test_Constructor_RevertIf_GovernorImplZero() public {
         vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
-        new LevrDeployer_v1(address(1), address(1), address(1), address(0));
+        new LevrDeployer_v1(address(1), address(1), address(1), address(0), address(1));
+    }
+
+    function test_Constructor_RevertIf_StakedTokenImplZero() public {
+        vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
+        new LevrDeployer_v1(address(1), address(1), address(1), address(1), address(0));
     }
 
     function test_Constructor_SetsImmutablesCorrectly() public view {
@@ -69,6 +76,11 @@ contract LevrDeployer_v1_Test is Test {
             address(governorImpl),
             'Governor impl mismatch'
         );
+        assertEq(
+            deployer.stakedTokenImplementation(),
+            address(stakedTokenImpl),
+            'Staked token impl mismatch'
+        );
     }
 
     function setUp() public {
@@ -77,19 +89,21 @@ contract LevrDeployer_v1_Test is Test {
 
         // Predict factory address (will be deployed after implementations and deployer)
         uint64 nonce = vm.getNonce(address(this));
-        address predictedFactory = vm.computeCreateAddress(address(this), nonce + 4);
+        address predictedFactory = vm.computeCreateAddress(address(this), nonce + 5);
 
         // Deploy implementation contracts with predicted factory
         treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
         stakingImpl = new LevrStaking_v1(predictedFactory, address(forwarder));
         governorImpl = new LevrGovernor_v1(predictedFactory, address(forwarder));
+        stakedTokenImpl = new LevrStakedToken_v1(predictedFactory);
 
-        // Deploy deployer with predicted factory (stakedToken deployed as new instance per project)
+        // Deploy deployer with predicted factory (all components cloned)
         deployer = new LevrDeployer_v1(
             predictedFactory,
             address(treasuryImpl),
             address(stakingImpl),
-            address(governorImpl)
+            address(governorImpl),
+            address(stakedTokenImpl)
         );
 
         // Deploy factory
@@ -206,10 +220,11 @@ contract LevrDeployer_v1_Test is Test {
     }
 
     function test_ImplementationContracts_CannotBeInitializedDirectly() public {
-        // Create manual clones (stakedToken is not cloned - deployed as new instance)
+        // Create manual clones
         address treasuryClone = Clones.clone(address(treasuryImpl));
         address stakingClone = Clones.clone(address(stakingImpl));
         address governorClone = Clones.clone(address(governorImpl));
+        address stakedTokenClone = Clones.clone(address(stakedTokenImpl));
 
         // Attempt to initialize as attacker (should fail - not factory)
         vm.startPrank(attacker);
@@ -236,8 +251,14 @@ contract LevrDeployer_v1_Test is Test {
             address(0x4444)
         );
 
-        // Note: StakedToken is deployed as new instance, not cloned
-        // No initialization frontrunning risk since it's deployed with constructor args
+        vm.expectRevert(ILevrStakedToken_v1.OnlyFactory.selector);
+        LevrStakedToken_v1(stakedTokenClone).initialize(
+            'Levr',
+            'sLEV',
+            18,
+            mockUnderlying,
+            attacker
+        );
 
         vm.stopPrank();
     }
@@ -304,11 +325,27 @@ contract LevrDeployer_v1_Test is Test {
 
     // ============ StakedToken Security Tests ============
 
-    function test_StakedToken_NoInitializationFrontrunning() public pure {
-        // StakedToken is deployed as new instance with constructor args
-        // No initialization frontrunning risk since all parameters are set at construction time
-        // This test documents the security model change from clone-based to direct deployment
-        assertTrue(true, 'StakedToken uses constructor - no frontrunning risk');
+    function test_StakedToken_CannotDoubleInitialize() public {
+        address stakedTokenClone = Clones.clone(address(stakedTokenImpl));
+
+        vm.prank(address(factory));
+        LevrStakedToken_v1(stakedTokenClone).initialize(
+            'Levr Staked Foo',
+            'sFOO',
+            18,
+            address(0xAAA1),
+            address(0xBBB2)
+        );
+
+        vm.prank(address(factory));
+        vm.expectRevert(ILevrStakedToken_v1.AlreadyInitialized.selector);
+        LevrStakedToken_v1(stakedTokenClone).initialize(
+            'Levr Staked Foo',
+            'sFOO',
+            18,
+            address(0xAAA1),
+            address(0xBBB2)
+        );
     }
 
     // ============ Treasury Frontrunning Tests ============
@@ -513,7 +550,8 @@ contract LevrDeployer_v1_Test is Test {
         vm.prank(address(factory));
         governorImpl.initialize(address(0x1111), address(0x2222), address(0x3333), mockUnderlying);
 
-        // Note: StakedToken is deployed as new instance, not cloned
+        vm.prank(address(factory));
+        stakedTokenImpl.initialize('Impl Token', 'sIMPL', 18, mockUnderlying, address(0x9999));
 
         // Now create treasury clone - it should have clean state (uninitialized)
         address treasuryClone = Clones.clone(address(treasuryImpl));
@@ -522,9 +560,30 @@ contract LevrDeployer_v1_Test is Test {
         vm.prank(address(factory));
         LevrTreasury_v1(treasuryClone).initialize(address(0x5555), mockUnderlying);
 
+        // Clone can still be initialized independently
+        address stakedTokenClone = Clones.clone(address(stakedTokenImpl));
+        vm.prank(address(factory));
+        LevrStakedToken_v1(stakedTokenClone).initialize(
+            'Clone Token',
+            'sCLONE',
+            18,
+            mockUnderlying,
+            address(0xABCD)
+        );
+
         // Verify independent state
         assertEq(treasuryImpl.governor(), user, 'Implementation has own state');
         assertEq(LevrTreasury_v1(treasuryClone).governor(), address(0x5555), 'Clone has own state');
+        assertEq(
+            stakedTokenImpl.staking(),
+            address(0x9999),
+            'Implementation retains original state'
+        );
+        assertEq(
+            LevrStakedToken_v1(stakedTokenClone).staking(),
+            address(0xABCD),
+            'Clone has independent state'
+        );
     }
 
     function test_CloneIndependence_SeparateState() public {
@@ -571,12 +630,13 @@ contract LevrDeployer_v1_Test is Test {
     }
 
     function test_StakedToken_RejectsZeroAddresses() public {
-        // Test that StakedToken constructor rejects zero addresses
-        vm.expectRevert();
-        new LevrStakedToken_v1('Test', 'TST', 18, address(0), address(1));
+        LevrStakedToken_v1 token = new LevrStakedToken_v1(address(this));
+        vm.expectRevert(ILevrStakedToken_v1.ZeroAddress.selector);
+        token.initialize('Test', 'TST', 18, address(0), address(1));
 
-        vm.expectRevert();
-        new LevrStakedToken_v1('Test', 'TST', 18, address(1), address(0));
+        LevrStakedToken_v1 token2 = new LevrStakedToken_v1(address(this));
+        vm.expectRevert(ILevrStakedToken_v1.ZeroAddress.selector);
+        token2.initialize('Test', 'TST', 18, address(1), address(0));
     }
 
     // ============ Access Control After Initialization Tests ============

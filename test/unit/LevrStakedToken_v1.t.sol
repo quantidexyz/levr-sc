@@ -13,32 +13,41 @@ contract LevrStakedToken_v1_Test is Test {
     address internal _bob = makeAddr('bob');
 
     function setUp() public {
-        _stakedToken = new LevrStakedToken_v1(
-            'Levr Staked Token',
-            'sLEV',
-            18,
-            _underlying,
-            _staking
-        );
+        _stakedToken = new LevrStakedToken_v1(address(this));
+        _stakedToken.initialize('Levr Staked Token', 'sLEV', 18, _underlying, _staking);
     }
 
     ///////////////////////////////////////////////////////////////////////////
     // Test Initialization
 
-    /* Test: constructor */
-    function test_Constructor_SetsImmutableState() public view {
+    /* Test: initialize */
+    function test_Initialize_SetsState() public view {
         assertEq(_stakedToken.underlying(), _underlying);
         assertEq(_stakedToken.staking(), _staking);
     }
 
-    function test_Constructor_RevertIf_UnderlyingZero() public {
-        vm.expectRevert(ILevrStakedToken_v1.ZeroAddress.selector);
-        new LevrStakedToken_v1('Levr', 'sLEV', 18, address(0), _staking);
+    function test_Initialize_RevertIf_CalledTwice() public {
+        vm.expectRevert(ILevrStakedToken_v1.AlreadyInitialized.selector);
+        _stakedToken.initialize('Levr Staked Token', 'sLEV', 18, _underlying, _staking);
     }
 
-    function test_Constructor_RevertIf_StakingZero() public {
+    function test_Initialize_RevertIf_UnderlyingZero() public {
+        LevrStakedToken_v1 token = new LevrStakedToken_v1(address(this));
         vm.expectRevert(ILevrStakedToken_v1.ZeroAddress.selector);
-        new LevrStakedToken_v1('Levr', 'sLEV', 18, _underlying, address(0));
+        token.initialize('Levr', 'sLEV', 18, address(0), _staking);
+    }
+
+    function test_Initialize_RevertIf_StakingZero() public {
+        LevrStakedToken_v1 token = new LevrStakedToken_v1(address(this));
+        vm.expectRevert(ILevrStakedToken_v1.ZeroAddress.selector);
+        token.initialize('Levr', 'sLEV', 18, _underlying, address(0));
+    }
+
+    function test_Initialize_RevertIf_CallerNotFactory() public {
+        LevrStakedToken_v1 token = new LevrStakedToken_v1(address(this));
+        vm.prank(_alice);
+        vm.expectRevert(ILevrStakedToken_v1.OnlyFactory.selector);
+        token.initialize('Levr', 'sLEV', 18, _underlying, _staking);
     }
 
     ///////////////////////////////////////////////////////////////////////////

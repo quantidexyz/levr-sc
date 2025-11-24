@@ -9,7 +9,6 @@ import {ILevrFactory_v1} from './interfaces/ILevrFactory_v1.sol';
 import {ILevrDeployer_v1} from './interfaces/ILevrDeployer_v1.sol';
 import {ILevrGovernor_v1} from './interfaces/ILevrGovernor_v1.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
-import {LevrStakedToken_v1} from './LevrStakedToken_v1.sol';
 
 contract LevrDeployer_v1 is ILevrDeployer_v1 {
     /// @inheritdoc ILevrDeployer_v1
@@ -24,6 +23,9 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
     /// @inheritdoc ILevrDeployer_v1
     address public immutable governorImplementation;
 
+    /// @inheritdoc ILevrDeployer_v1
+    address public immutable stakedTokenImplementation;
+
     modifier onlyAuthorized() {
         if (address(this) != authorizedFactory) revert UnauthorizedFactory();
         _;
@@ -33,16 +35,19 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
         address factory_,
         address treasuryImplementation_,
         address stakingImplementation_,
-        address governorImplementation_
+        address governorImplementation_,
+        address stakedTokenImplementation_
     ) {
         if (factory_ == address(0)) revert ZeroAddress();
         if (treasuryImplementation_ == address(0)) revert ZeroAddress();
         if (stakingImplementation_ == address(0)) revert ZeroAddress();
         if (governorImplementation_ == address(0)) revert ZeroAddress();
+        if (stakedTokenImplementation_ == address(0)) revert ZeroAddress();
         authorizedFactory = factory_;
         treasuryImplementation = treasuryImplementation_;
         stakingImplementation = stakingImplementation_;
         governorImplementation = governorImplementation_;
+        stakedTokenImplementation = stakedTokenImplementation_;
     }
 
     /// @inheritdoc ILevrDeployer_v1
@@ -66,16 +71,15 @@ contract LevrDeployer_v1 is ILevrDeployer_v1 {
         project.treasury = treasury_;
         project.staking = staking_;
 
-        // Deploy new stakedToken instance
+        // Clone and initialize staked token
         IERC20Metadata token = IERC20Metadata(clankerToken);
-        project.stakedToken = address(
-            new LevrStakedToken_v1(
-                string(abi.encodePacked('Levr Staked ', token.name())),
-                string(abi.encodePacked('s', token.symbol())),
-                token.decimals(),
-                clankerToken,
-                project.staking
-            )
+        project.stakedToken = Clones.clone(stakedTokenImplementation);
+        ILevrStakedToken_v1(project.stakedToken).initialize(
+            string(abi.encodePacked('Levr Staked ', token.name())),
+            string(abi.encodePacked('s', token.symbol())),
+            token.decimals(),
+            clankerToken,
+            project.staking
         );
 
         // Clone and initialize governor
