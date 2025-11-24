@@ -153,7 +153,6 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
             // Swaps failed - use simulated fees
             console2.log('[INFO] Real swaps failed (expected in fork) - using simulated fees');
         }
-
         // If swaps failed or generated insufficient fees, use simulation
         if (!swapsSuccessful || actualFees < expectedFeeAmount / 10) {
             actualFees = expectedFeeAmount;
@@ -190,7 +189,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test 1: Complete integration flow with 50/50 split
      * @dev As outlined in spec: Deploy → Register → Deploy Splitter → Configure → Generate Fees → Distribute
      */
-    function test_completeIntegrationFlow_5050Split() public {
+    function test_e2e_completeIntegrationFlow_5050Split() public {
         console2.log('=== Test 1: Complete Integration Flow (50/50 Split) ===');
 
         // 1-2. Deploy Clanker token and register with Levr
@@ -283,7 +282,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test 2: Batch distribution (multi-token)
      * @dev Test distributing multiple reward tokens in a single transaction
      */
-    function test_batchDistribution_multiToken() public {
+    function test_e2e_batchDistribution_multiToken() public {
         console2.log('=== Test 2: Batch Distribution (Multi-Token) ===');
 
         // Setup
@@ -340,7 +339,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test 3: Migration from existing project
      * @dev Test adding fee splitter to an already-running project
      */
-    function test_migrationFromExistingProject() public {
+    function test_e2e_migrationFromExistingProject() public {
         console2.log('=== Test 3: Migration from Existing Project ===');
 
         // 1. Project already registered (staking initially receives 100% of fees)
@@ -398,7 +397,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test 4: Reconfiguration
      * @dev Test changing split percentages and verify new percentages apply
      */
-    function test_reconfiguration() public {
+    function test_e2e_reconfiguration() public {
         console2.log('=== Test 4: Reconfiguration ===');
 
         // Setup
@@ -462,7 +461,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test 5: Multi-receiver distribution (4 receivers)
      * @dev Test balanced distribution pattern from spec
      */
-    function test_multiReceiverDistribution() public {
+    function test_e2e_multiReceiverDistribution() public {
         console2.log('=== Test 5: Multi-Receiver Distribution ===');
 
         // Setup
@@ -506,7 +505,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test 6: Permissionless distribution
      * @dev Verify anyone can trigger distribution
      */
-    function test_permissionlessDistribution() public {
+    function test_e2e_permissionlessDistribution() public {
         console2.log('=== Test 6: Permissionless Distribution ===');
 
         // Setup
@@ -539,7 +538,7 @@ contract LevrV1_FeeSplitterE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test 7: Zero staking allocation
      * @dev Test configuration with 0% to staking (all fees to custom receivers)
      */
-    function test_zeroStakingAllocation() public {
+    function test_e2e_zeroStakingAllocation() public {
         console2.log('=== Test 7: Zero Staking Allocation ===');
 
         // Setup (no need for staking in splits)
