@@ -182,15 +182,15 @@ contract LevrFactoryDeployHelper is Test {
     }
 
     /// @notice Create default factory configuration for tests
-    /// @param protocolTreasury Protocol treasury address
+    /// @param protocolTreasury_ Protocol treasury address
     /// @return cfg Default configuration
     function createDefaultConfig(
-        address protocolTreasury
+        address protocolTreasury_
     ) internal pure returns (ILevrFactory_v1.FactoryConfig memory cfg) {
         cfg = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
-            protocolTreasury: protocolTreasury,
+            protocolTreasury: protocolTreasury_,
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 7,
