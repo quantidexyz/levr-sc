@@ -1,0 +1,87 @@
+---
+globs: test/unit/**/*.t.sol
+---
+
+// Administrative Functions
+
+/_
+Test: updateConfig
+└── Given: Caller is not owner
+└── When: updateConfig is called
+└── Then: It should revert (OwnableUnauthorizedAccount)
+_/
+
+function test_UpdateConfig_FailsIfNotOwner() public {
+// CONCRETE VALUES - just verify modifier is applied
+
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            Ownable.OwnableUnauthorizedAccount.selector,
+            address(0xB0B)
+        )
+    );
+    vm.prank(address(0xB0B));
+    _factory.updateConfig(newConfig);
+
+}
+
+//-----
+// Treasury Access
+
+/_
+Test: transfer
+├── Given: Caller is not governor
+│ └── When: transfer is called
+│ └── Then: It should revert with OnlyGovernor
+└── Given: Caller is governor
+└── When: transfer is called
+└── Then: It should succeed
+_/
+
+function test_Transfer_ModifierChecks() public {
+// Modifier: onlyGovernor
+vm.expectRevert(ILevrTreasury_v1.OnlyGovernor.selector);
+vm.prank(address(0xBAD));
+\_treasury.transfer(address(token), address(this), 100);
+}
+
+//-----
+// Staking Access
+
+/_
+Test: mint
+├── Given: Caller is not staking contract
+│ └── When: mint is called
+│ └── Then: It should revert with OnlyStaking
+_/
+
+function test_Mint_ModifierChecks() public {
+// Modifier: onlyStaking
+vm.expectRevert(ILevrStakedToken_v1.OnlyStaking.selector);
+vm.prank(address(0xBAD));
+\_stakedToken.mint(user, 100);
+}
+
+```
+
+## Summary - Critical Distinctions
+
+| Aspect              | Isolation Tests          | In Position Tests                 |
+| ---- | --- | --- |
+| **Location**        | "Test Modifier" section  | "Test External Functions" section |
+| **What**            | Test modifier logic      | Verify modifier applied           |
+| **Via**             | `exposed_modifierName()` | Actual function call              |
+| **Which Modifiers** | Custom only (e.g. `onlyGovernor`) | ALL (including `onlyOwner`) |
+| **Testing Method**  | **FUZZING**              | **CONCRETE VALUES**               |
+| **Gherkin Suffix**  | None                     | "(modifier check)"                |
+| **Goal**            | Prove logic works        | Prove modifier is on function     |
+
+## Checklist
+
+- [ ] Phase 1: Write ALL Gherkin (isolation + in position)
+- [ ] Phase 2: Add exposed functions to mock (for complex custom modifiers)
+- [ ] Phase 2: Implement isolation tests WITH FUZZING (if complex logic)
+- [ ] Phase 2: Implement in position tests WITH CONCRETE VALUES
+- [ ] Phase 3: Run `forge test --mc ContractName_Test`
+- [ ] Verify: Every function with ANY modifier has a modifier check test
+```

@@ -1,0 +1,152 @@
+---
+alwaysApply: false
+globs: test/e2e/**/*.t.sol
+---
+
+// Project Initialization
+//-----
+
+//-----
+// Setup Tokens & Roles
+//-----
+
+//-----
+// Execute Governance Logic
+//-----
+
+````
+
+Consistent 78-character dividers make tests scannable.
+
+### 2. Test Complete Workflows
+
+Don't just test that functions work - test realistic scenarios:
+
+- Admin deploys factory → Registers project → User stakes
+- User stakes → Gains voting power → Proposes change
+- Governance cycle starts → Users vote → Proposal executes
+- User stakes → Earns rewards → Claims rewards
+
+### 3. Make Tests Readable
+
+E2E tests serve as documentation. Other developers should be able to read your test and understand:
+
+- How to register a project via LevrFactory
+- How to stake and gain voting power
+- How the governance lifecycle works (Propose -> Vote -> Execute)
+- What restrictions exist (e.g., min stake to propose)
+
+## Setup Checklist
+
+When writing a new E2E test:
+
+**Test Structure:**
+
+- [ ] Extends `E2ETest` or `BaseForkTest`
+- [ ] Sets up necessary actors (admin, user, proposer) with `makeAddr()`
+- [ ] Deploys or mocks Clanker token
+
+**Protocol Setup:**
+
+- [ ] Deploys `LevrFactory` and dependencies (Deployer, Implementations)
+- [ ] Registers a new project via `factory.register(clankerToken)`
+- [ ] Verifies project components (Treasury, Governor, Staking, StakedToken)
+- [ ] Whitelists reward tokens if needed
+
+**Test Function:**
+
+- [ ] Has section dividers for organization
+- [ ] Funds users with Clanker tokens
+- [ ] Approves staking contract: `token.approve(staking, amount)`
+- [ ] Performs staking to gain VP
+- [ ] Advances blocks/time if testing governance (voting windows)
+- [ ] Verifies state changes (Balances, Proposal State, Cycles)
+- [ ] Uses `console.log()` for important milestones
+
+## Testing Strategy
+
+### What E2E Tests Should Cover
+
+**✅ Test:**
+
+- Complete workflows (Deploy -> Register -> Stake -> Govern)
+- Integration between modules (Staking VP -> Governor -> Treasury Execution)
+- Lifecycle events (Cycle transitions, Reward streaming)
+- State changes from user perspective
+- Realistic scenarios (Multiple voters, competing proposals)
+
+**❌ Don't Test:**
+
+- Internal function logic (that's unit testing)
+- Simple getters in isolation
+- Edge cases of math libraries (that's unit testing)
+
+## Examples
+
+### Complete Examples
+
+**Governance Lifecycle:**
+See `test/e2e/LevrV1.Governance.t.sol` (hypothetical)
+
+- Demonstrates project registration
+- Users staking to gain VP
+- Submitting a proposal (Boost or Transfer)
+- Voting process (Quorum/Approval checks)
+- Execution and cycle advancement
+
+**Staking and Rewards:**
+See `test/e2e/LevrV1.Staking.t.sol` (hypothetical)
+
+- Shows multi-user staking
+- Reward token whitelisting
+- Reward distribution and streaming
+- Claiming rewards (verifying debt calculation)
+
+### Running E2E Tests
+
+```bash
+# Run all E2E tests
+forge test --match-path "test/e2e/**/*.sol" -vv
+
+# Run specific E2E test
+forge test --match-test test_e2e_GovernanceFlow -vv
+
+# Run with very verbose output for debugging
+forge test --match-test test_e2e_YourTest -vvvv
+````
+
+## Key Principles
+
+### 1. E2E Tests Are Documentation
+
+Other developers should be able to read your E2E test and understand:
+
+- How the protocol works
+- How to interact with the main entry points
+- The relationship between Staking, Governor, and Treasury
+- Expected behaviors for users
+
+### 2. Simulate Real Usage
+
+Think like a user:
+
+- What tokens do they hold?
+- What approvals do they need?
+- How much time passes between actions?
+- What should they NOT be able to do (e.g., withdraw locked funds)?
+
+### 3. Focus on Integration
+
+E2E tests verify that:
+
+- Contracts talk to each other correctly
+- Permissions are enforced (only Governor can move Treasury funds)
+- Events are emitted properly
+- Workflows complete successfully
+
+### 4. Keep It Maintainable
+
+- Use descriptive names
+- Add explanatory comments
+- Organize with section dividers
+- Follow consistent patterns

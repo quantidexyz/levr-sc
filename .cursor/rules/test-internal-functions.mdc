@@ -1,0 +1,199 @@
+---
+globs: test/unit/**/*.t.sol
+---
+
+// Internal - Rewards
+
+/_
+Test: \_creditRewards
+├── Given: Token is not whitelisted
+│ └── When: \_creditRewards is called
+│ └── Then: It should revert with TokenNotWhitelisted
+├── Given: Amount is too small
+│ └── When: \_creditRewards is called
+│ └── Then: It should revert with RewardTooSmall
+└── Given: All parameters valid
+└── When: \_creditRewards is called
+└── Then: It should settle the pool
+└── And: It should reset the stream
+└── And: It should emit RewardsAccrued event
+_/
+
+//-----
+// Internal - Governance Logic
+
+/_
+Test: \_propose
+├── Given: Amount is zero
+│ └── When: \_propose is called
+│ └── Then: It should revert with InvalidAmount
+├── Given: Treasury balance insufficient
+│ └── When: \_propose is called
+│ └── Then: It should revert with InsufficientTreasuryBalance
+└── Given: Valid parameters
+└── When: \_propose is called
+└── Then: It should create proposal
+└── And: It should update active proposal count
+_/
+
+````
+
+**Phase 2: Implementation**
+
+```solidity
+///////////////////////////////////////////////////////////////////////////
+// Test Internal Functions
+
+//==========================================================================
+// Internal Functions
+
+//-----
+// Internal - Rewards
+
+/* Test: _creditRewards */
+
+function test_CreditRewards_FailsIfTokenNotWhitelisted() public {
+    vm.expectRevert(ILevrStaking_v1.TokenNotWhitelisted.selector);
+    _staking.exposed_creditRewards(address(0xBAD), 1e18);
+}
+
+function test_CreditRewards_FailsIfAmountTooSmall() public {
+    // Setup whitelisted token
+    address rewardToken = address(_mockToken);
+    // Assuming mock is already whitelisted in setup
+
+    vm.expectRevert(ILevrStaking_v1.RewardTooSmall.selector);
+    _staking.exposed_creditRewards(rewardToken, 1); // 1 wei < MIN_REWARD_AMOUNT
+}
+
+function test_CreditRewards_Success(uint256 amount) public {
+    address rewardToken = address(_mockToken);
+    amount = bound(amount, 1e18, 1000e18);
+
+    vm.expectEmit(true, true, true, true);
+    emit RewardsAccrued(rewardToken, amount, 0); // 0 initial pool
+
+    _staking.exposed_creditRewards(rewardToken, amount);
+
+    // Verify state via exposed getters or struct inspection if available
+    (,, uint256 streamTotal) = _staking.getTokenStreamInfo(rewardToken);
+    assertEq(streamTotal, amount);
+}
+
+//-----
+// Internal - Governance
+
+/* Test: _propose */
+
+// ... implementation ...
+````
+
+**Phase 3: Run Tests**
+
+```bash
+forge test --mc LevrStaking_v1_Test
+```
+
+## Function Categories
+
+Organize tests by category as in the skeleton:
+
+```solidity
+//-----
+// Internal - State Updates
+
+/* Test: _updateConfig */
+/* Test: _validateConfig */
+
+//-----
+// Internal - Logic Helpers
+
+/* Test: _creditRewards */
+/* Test: _settlePoolForToken */
+/* Test: _meetsQuorum */
+```
+
+## Testing Strategy by Function Type
+
+### Pure/View Functions (Calculations/Validators)
+
+- Failure cases: Fuzz invalid inputs.
+- Success cases: Fuzz valid inputs (PREFERRED).
+- Verify correctness of logic (e.g., math, validation rules).
+
+### State-Modifying Functions
+
+- Failure cases: Fuzz or use concrete invalid inputs.
+- Success cases: Fuzz valid inputs (PREFERRED).
+- Setup required state using helpers.
+- Verify ALL state changes.
+- Check events emitted.
+
+## Key Principles
+
+**1. Failure Cases First**
+
+- Test all reverts before testing success.
+
+**2. Exposed Contracts**
+
+- Use `ContractName_Exposed` pattern to test internal functions.
+- Place exposed contracts in `test/mocks/`.
+- Only expose functions needed for testing.
+
+**Example Exposed Contract:**
+
+```solidity
+contract LevrStaking_v1_Exposed is LevrStaking_v1 {
+    constructor(address factory, address forwarder) LevrStaking_v1(factory, forwarder) {}
+
+    function exposed_creditRewards(address token, uint256 amount) external {
+        _creditRewards(token, amount);
+    }
+
+    function exposed_settlePoolForToken(address token) external {
+        _settlePoolForToken(token);
+    }
+}
+```
+
+**3. No Modifier Testing Here**
+
+- Internal functions usually don't have modifiers.
+- Focus on the logic _inside_ the function.
+
+## Handling Complex Internal Functions
+
+### RULE: "Too Complex" is NOT a Valid Excuse
+
+**Never skip tests because:**
+
+- "Complex setup required" → Build helper functions.
+- "Tested through public functions" → Not good enough for critical logic.
+
+**Solution: Build Test Infrastructure**
+
+If `_settlePoolForToken` requires time passage and staking state:
+
+1. Create `_setupStakingState()` helper.
+2. Use `vm.warp()` to simulate time.
+3. Call exposed function.
+
+## Checklist
+
+**Phase 1 - Documentation:**
+
+- [ ] Analyze all internal functions.
+- [ ] Write Gherkin.
+- [ ] Review completeness.
+
+**Phase 2 - Implementation:**
+
+- [ ] Implement failure tests.
+- [ ] Implement success tests.
+- [ ] Add fuzzing.
+
+**Phase 3 - Verification:**
+
+- [ ] Run `forge test --mc ContractName_Test`.
+- [ ] Verify coverage.

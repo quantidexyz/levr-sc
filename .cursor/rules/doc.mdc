@@ -1,0 +1,46 @@
+---
+description: Rules for maintaining contract documentation
+globs: **/*.sol
+---
+
+# Documentation Maintenance
+
+You are responsible for maintaining the documentation in the `doc/` directory.
+
+## Rule
+
+**IF** you modify any Solidity file (`.sol`) in `src/` or `src/interfaces/`,
+**THEN** you MUST check the corresponding documentation file in `doc/` and update it if necessary.
+
+## Triggers for Update
+
+Update the markdown documentation if your changes involve:
+
+1.  **State Variables**: Adding, removing, or renaming public state variables.
+2.  **Functions**:
+    - Changing function signatures (parameters, returns).
+    - Changing access control (e.g., adding `onlyOwner`).
+    - Significant logic changes (e.g., new side effects, flow changes).
+3.  **Events/Errors**: Adding or removing events/errors.
+4.  **Architecture**: Changing inheritance or adding new dependencies.
+5.  **Key Concepts**: Introducing new mechanisms (e.g., a new fee type, a new governance rule).
+
+## Mapping
+
+- `src/LevrDeployer_v1.sol` -> `doc/LevrDeployer_v1.md`
+- `src/LevrFactory_v1.sol` -> `doc/LevrFactory_v1.md`
+- `src/LevrFeeSplitter_v1.sol` -> `doc/LevrFeeSplitter_v1.md`
+- `src/LevrFeeSplitterFactory_v1.sol` -> `doc/LevrFeeSplitterFactory_v1.md`
+- `src/LevrForwarder_v1.sol` -> `doc/LevrForwarder_v1.md`
+- `src/LevrGovernor_v1.sol` -> `doc/LevrGovernor_v1.md`
+- `src/LevrStakedToken_v1.sol` -> `doc/LevrStakedToken_v1.md`
+- `src/LevrStaking_v1.sol` -> `doc/LevrStaking_v1.md`
+- `src/LevrTreasury_v1.sol` -> `doc/LevrTreasury_v1.md`
+
+## Action
+
+When creating your plan or executing edits, always include a step to:
+
+1.  Read the relevant `.md` file.
+2.  Reflect your changes in the documentation.
+3.  If no changes are needed (e.g., simple bug fix without behavioral change), explicitly state that documentation remains up-to-date.

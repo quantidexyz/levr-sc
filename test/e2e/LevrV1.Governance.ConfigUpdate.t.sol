@@ -128,7 +128,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 1: Quorum Change Mid-Cycle (Before Voting Ends) ============
 
-    function test_config_update_quorum_increase_mid_cycle_fails_execution() public {
+    function test_e2e_config_update_quorum_increase_mid_cycle_fails_execution() public {
         // Setup: 3 users stake
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 10 ether);
@@ -196,7 +196,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 2: Quorum Decrease Mid-Cycle (Allows Previously Failing Proposal) ============
 
-    function test_config_update_quorum_decrease_mid_cycle_allows_execution() public {
+    function test_e2e_config_update_quorum_decrease_mid_cycle_allows_execution() public {
         // Setup: 3 users stake
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 10 ether);
@@ -268,7 +268,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 3: Approval Threshold Change Mid-Cycle ============
 
-    function test_config_update_approval_increase_mid_cycle_fails_execution() public {
+    function test_e2e_config_update_approval_increase_mid_cycle_fails_execution() public {
         // Setup: 3 users stake
         _stakeFor(alice, 10 ether);
         _stakeFor(bob, 10 ether);
@@ -339,7 +339,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 4: MaxActiveProposals Change Mid-Cycle ============
 
-    function test_config_update_maxActiveProposals_affects_new_proposals_only() public {
+    function test_e2e_config_update_maxActiveProposals_affects_new_proposals_only() public {
         // Setup: Alice stakes enough to propose
         _stakeFor(alice, 15 ether);
 
@@ -386,7 +386,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 5: MinSTokenBpsToSubmit Change Mid-Cycle ============
 
-    function test_config_update_minStake_affects_new_proposals_only() public {
+    function test_e2e_config_update_minStake_affects_new_proposals_only() public {
         // Setup: Alice stakes 1.5% of supply, Bob stakes rest
         _stakeFor(bob, 15 ether);
         _stakeFor(alice, 5 ether); // Total: 20 ether, Alice has 25% (well above 1%)
@@ -447,7 +447,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 6: CRITICAL - Two Proposals in Same Cycle After Config Update ============
 
-    function test_config_update_two_proposals_same_cycle_different_configs() public {
+    function test_e2e_config_update_two_proposals_same_cycle_different_configs() public {
         // Setup: Multiple users stake (need enough for 70% quorum)
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 10 ether);
@@ -561,7 +561,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 7: DETAILED TRACE - How Timestamps Work ============
 
-    function test_detailed_trace_cycle_vs_proposal_timestamps() public {
+    function test_e2e_detailed_trace_cycle_vs_proposal_timestamps() public {
         console2.log('\n=== DETAILED TRACE: How Timestamps Work ===\n');
 
         // Setup
@@ -693,7 +693,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 8: Recovery From Failed Cycle (No Execution) ============
 
-    function test_recovery_from_failed_cycle_manual() public {
+    function test_e2e_recovery_from_failed_cycle_manual() public {
         // Setup: Multiple users stake (alice alone won't meet 70% quorum)
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 10 ether);
@@ -749,7 +749,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
         console2.log('[RESULT] Governance recovered - new proposals work in cycle 2');
     }
 
-    function test_recovery_from_failed_cycle_auto() public {
+    function test_e2e_recovery_from_failed_cycle_auto() public {
         // Setup: Multiple users stake (alice alone won't meet quorum)
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 10 ether);
@@ -794,7 +794,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 9: Config Update Can Help Recovery ============
 
-    function test_recovery_via_quorum_decrease() public {
+    function test_e2e_recovery_via_quorum_decrease() public {
         // Setup: Users stake
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 10 ether);
@@ -869,7 +869,7 @@ contract LevrV1_Governance_ConfigUpdateE2E is BaseForkTest, LevrFactoryDeployHel
 
     // ============ Test 10: Auto-Cycle Creation After Config Update ============
 
-    function test_config_update_affects_auto_created_cycle() public {
+    function test_e2e_config_update_affects_auto_created_cycle() public {
         // Setup: Alice stakes
         _stakeFor(alice, 15 ether);
 

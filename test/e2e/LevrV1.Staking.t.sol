@@ -95,7 +95,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
     /**
      * @notice Test staking with treasury-funded boost rewards
      */
-    function test_stake_with_treasury_boost() public {
+    function test_e2e_stake_with_treasury_boost() public {
         (address governor, address treasury, address staking, ) = _deployRegisterAndGet(
             address(factory)
         );
@@ -172,7 +172,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test complete staking flow with real V4 swaps generating fees
      * @dev Uses actual Uniswap V4 swaps to generate fees and test ClankerFeeLocker integration
      */
-    function test_staking_with_real_v4_swaps() public {
+    function test_e2e_staking_with_real_v4_swaps() public {
         (, , address staking, address stakedToken) = _deployRegisterAndGet(address(factory));
 
         // Get tokens from LP locker for testing - but use deal for realistic amounts
@@ -373,7 +373,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test streaming logic fix - verify rewards accrue and are claimable
      * @dev Tests the fix for double-crediting issue in _claimFromClankerFeeLocker
      */
-    function test_streaming_logic_fix() public {
+    function test_e2e_streaming_logic_fix() public {
         (, , address staking, ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
@@ -464,7 +464,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test claimable rewards calculation - verify only accrued tokens show as claimable
      * @dev Tests that claimableRewards doesn't incorrectly show rewards for non-accrued tokens
      */
-    function test_claimable_rewards_accuracy() public {
+    function test_e2e_claimable_rewards_accuracy() public {
         (, , address staking, ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake
@@ -580,7 +580,7 @@ contract LevrV1_StakingE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Validate SwapV4Helper integration works (simplified test)
      * @dev Demonstrates that SwapV4Helper properly integrates with production contracts
      */
-    function test_swap_v4_helper_integration() public {
+    function test_e2e_swap_v4_helper_integration() public {
         (, , address staking, ) = _deployRegisterAndGet(address(factory));
 
         // Get tokens and stake

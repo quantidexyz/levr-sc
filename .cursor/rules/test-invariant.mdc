@@ -1,0 +1,224 @@
+---
+globs: test/invariant/**/*.t.sol
+---
+
+// State Variables
+//-----
+
+    /// @notice The contract being tested
+    ContractName public contractName;
+
+    /// @notice Additional contracts or constants if needed
+    address public immutable targetContract;
+
+    //-----
+    // Ghost Variables
+    //-----
+
+    /// @notice Track total staked
+    uint256 internal _ghostTotalStaked;
+
+    /// @notice Track actors
+    address[] internal _actors;
+    mapping(address => bool) internal _isKnownActor;
+
+    //-----
+    // Handler Functions
+    //-----
+
+    // ...
+
+}
+
+````
+
+#### Step 5: Implement Handler Functions
+
+**Critical Rules:**
+
+- ✅ Return early if preconditions fail (avoid reverts).
+- ✅ Bound all inputs to realistic ranges.
+- ✅ Track state in ghost variables.
+- ✅ Use `vm.prank()` for different callers.
+- ❌ Never let operations revert (unless checking for revert specifically).
+
+**Pattern A: Stake Operations**
+
+```solidity
+function stake(uint256 amountSeed, uint256 actorSeed) external {
+    address actor = _getValidActor(actorSeed);
+    uint256 amount = bound(amountSeed, 1e18, 1_000_000e18);
+
+    // Preconditions
+    if (token.balanceOf(actor) < amount) {
+        _mintTokens(actor, amount);
+    }
+
+    vm.prank(actor);
+    try staking.stake(amount) {
+        _ghostTotalStaked += amount;
+    } catch {
+        return;
+    }
+}
+````
+
+#### Step 6: Add View Functions for Invariants
+
+Expose ghost variables for invariant checking.
+
+#### Step 7: Add Helper Functions
+
+Internal helpers for common operations (`_addActor`, `_getValidActor`).
+
+### Phase 3: Write Invariant Test
+
+#### Step 8: Create Test Contract
+
+**File**: `test/invariant/LevrStaking_InvariantTest.t.sol`
+
+**Template:**
+
+```solidity
+// SPDX-License-Identifier: LGPL-3.0-only
+pragma solidity 0.8.30;
+
+import "forge-std/console.sol";
+import {InvariantTest} from "forge-std/InvariantTest.sol";
+import {LevrStaking_InvariantHandler} from "./handlers/LevrStaking_InvariantHandler.sol";
+// ... imports
+
+contract LevrStaking_InvariantTest is InvariantTest {
+    // ... setup ...
+
+    function setUp() public {
+        // Deploy factory, project, etc.
+        // Deploy handler
+        handler = new LevrStaking_InvariantHandler(staking, token);
+
+        targetContract(address(handler));
+    }
+
+    //-----
+    // Invariants
+    //-----
+
+    /// @notice Total staked matches contract balance (minus rewards)
+    function invariant_totalStaked_le_contractBalance() public view {
+        uint256 totalStaked = staking.totalStaked();
+        uint256 contractBalance = token.balanceOf(address(staking));
+
+        // Contract might hold more due to rewards, but never less than staked principal
+        // (Assuming no slashing/fees on principal)
+        assertGe(contractBalance, totalStaked, "Solvency Check");
+    }
+
+    /// @notice Ghost state matches contract state
+    function invariant_ghost_matches_totalStaked() public view {
+        assertEq(handler.ghostTotalStaked(), staking.totalStaked(), "Accounting Check");
+    }
+}
+```
+
+#### Step 9: Implement Invariants
+
+For each invariant identified in Phase 1:
+
+- Solvency checks (Assets >= Liabilities).
+- Consistency checks (Ghost state == Contract state).
+- Property checks (Voting power <= Total Supply).
+
+### Phase 4: Configuration & Execution
+
+#### Step 10: Verify foundry.toml Configuration
+
+```toml
+[invariant]
+runs = 16
+depth = 512
+fail_on_revert = true
+```
+
+#### Step 11: Run Tests
+
+```bash
+forge test --match-path "test/invariant/**/*.sol"
+```
+
+## Best Practices
+
+### Handler Design
+
+**DO:**
+
+- ✅ Check preconditions and return early.
+- ✅ Bound inputs.
+- ✅ Track state in ghost variables.
+- ✅ Use `try/catch`.
+
+**DON'T:**
+
+- ❌ Let operations revert (use `fail_on_revert = true`).
+- ❌ Use entire uint256 range for addresses.
+
+### Invariant Design
+
+**Good invariants are:**
+
+- **Specific**: "Total Staked == Sum of User Balances".
+- **Universal**: Must hold after ANY sequence.
+- **Checkable**: Can be verified in view function.
+
+**Examples:**
+
+✅ **Good**: "StakedToken TotalSupply == Staking.totalStaked()"
+✅ **Good**: "User Voting Power > 0 implies Balance > 0"
+
+### Ghost Variables
+
+**When to use:**
+
+- Track sum of user stakes.
+- Track expected reward accumulations.
+- Track number of active proposals.
+
+## Complete Example: Levr Staking
+
+**Invariants to test:**
+
+1. `totalStaked` equals `stakedToken.totalSupply()`.
+2. `underlying.balanceOf(staking)` >= `totalStaked` (Solvency).
+3. Sum of user Voting Power <= `totalStaked` (VP shouldn't exceed stake).
+4. Protocol fees collected + distributed rewards + remaining pool == Total Rewards In.
+
+## Debugging Failed Invariants
+
+1. **Copy sequence** from failure output.
+2. **Create reproduction test** in solidity.
+3. **Log state** before/after calls.
+4. **Fix bug** in contract or handler.
+
+## Checklist
+
+**Phase 1 - Identify Invariants:**
+
+- [ ] List critical properties (Solvency, Access Control).
+- [ ] Document each invariant.
+
+**Phase 2 - Build Handler:**
+
+- [ ] Create handler in `test/invariant/handlers/`.
+- [ ] Implement handler functions (stake, unstake, claim).
+- [ ] Add ghost variables.
+
+**Phase 3 - Write Tests:**
+
+- [ ] Create test contract.
+- [ ] Target handler.
+- [ ] Implement invariant checks.
+
+**Phase 4 - Run & Verify:**
+
+- [ ] Run tests.
+- [ ] Ensure 0 reverts.
+- [ ] Verify call distribution.

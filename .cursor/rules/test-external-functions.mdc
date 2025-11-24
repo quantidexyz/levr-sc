@@ -1,0 +1,213 @@
+---
+globs: test/unit/**/*.t.sol
+---
+
+// Internal - Calculations
+
+/_
+Test: stake
+├── Given: Amount is zero
+│ └── When: stake is called
+│ └── Then: It should revert with InvalidAmount
+├── Given: User has insufficient balance
+│ └── When: stake is called
+│ └── Then: It should revert (ERC20 transfer fail)
+├── Given: Token is not approved
+│ └── When: stake is called
+│ └── Then: It should revert (ERC20 transfer fail)
+└── Given: All parameters valid
+└── When: stake is called
+└── Then: It should transfer underlying to contract
+└── And: It should mint staked tokens to user
+└── And: It should update totalStaked
+└── And: It should update stakeStartTime and lastStakeBlock
+└── And: It should emit Staked event
+_/
+
+//-----
+// Governance - Proposals
+
+/_
+Test: proposeBoost
+├── Given: Token is zero address
+│ └── When: proposeBoost is called
+│ └── Then: It should revert with InvalidRecipient
+├── Given: Amount is zero
+│ └── When: proposeBoost is called
+│ └── Then: It should revert with InvalidAmount
+├── Given: Proposer has insufficient stake
+│ └── When: proposeBoost is called
+│ └── Then: It should revert with InsufficientStake
+├── Given: Active proposal limit reached
+│ └── When: proposeBoost is called
+│ └── Then: It should revert with MaxProposalsReached
+└── Given: All parameters valid
+└── When: proposeBoost is called
+└── Then: It should create a new proposal
+└── And: It should increment proposal count
+└── And: It should emit ProposalCreated event
+└── And: It should return the new proposal ID
+_/
+
+````
+
+**Phase 2: Implementation**
+
+```solidity
+///////////////////////////////////////////////////////////////////////////
+// Test External Functions
+
+//==========================================================================
+// Staking Functions
+
+//-----
+// Staking - Actions
+
+/* Test: stake */
+
+function test_Stake_FailsIfAmountZero() public {
+    vm.expectRevert(ILevrStaking_v1.InvalidAmount.selector);
+    vm.prank(user);
+    _staking.stake(0);
+}
+
+function test_Stake_Success(uint256 amount) public {
+    // FUZZED SUCCESS CASE
+    amount = bound(amount, 1e18, 100_000e18);
+
+    // Setup
+    _fundUser(user, amount);
+
+    vm.prank(user);
+    _staking.stake(amount);
+
+    // Verify State
+    assertEq(_stakedToken.balanceOf(user), amount);
+    assertEq(_staking.totalStaked(), amount);
+    assertEq(_token.balanceOf(address(_staking)), amount);
+}
+
+//-----
+// Governance - Actions
+
+/* Test: proposeBoost */
+
+function test_ProposeBoost_FailsIfInsufficientStake() public {
+    // Setup: User has no stake
+
+    vm.expectRevert(ILevrGovernor_v1.InsufficientStake.selector);
+    vm.prank(user);
+    _governor.proposeBoost(address(_token), 100e18);
+}
+
+function test_ProposeBoost_Success() public {
+    // Setup: User stakes enough
+    uint256 stakeAmount = 10_000e18;
+    _fundAndStake(user, stakeAmount);
+
+    // Setup: Treasury has funds
+    _fundTreasury(address(_token), 1000e18);
+
+    vm.expectEmit(true, true, true, true);
+    emit ProposalCreated(1, user, ILevrGovernor_v1.ProposalType.BoostStakingPool, address(_token), 100e18, address(0), "");
+
+    vm.prank(user);
+    uint256 pid = _governor.proposeBoost(address(_token), 100e18);
+
+    assertEq(pid, 1);
+}
+````
+
+**Phase 3: Run Tests**
+
+```bash
+forge test --mc LevrStaking_v1_Test
+```
+
+## Function Categories
+
+Organize tests by category as in the skeleton:
+
+```solidity
+//-----
+// External - View Functions
+
+/* Test: getVotingPower */
+/* Test: claimableRewards */
+
+//-----
+// External - Mutating Functions
+
+/* Test: stake */
+/* Test: unstake */
+/* Test: claimRewards */
+
+//-----
+// External - Admin Functions
+
+/* Test: whitelistToken */
+/* Test: cleanupFinishedRewardToken */
+```
+
+## Testing Strategy by Function Type
+
+### View Functions
+
+- Verify return values against expected state.
+- Test edge cases (e.g., 0 balance, no history).
+
+### Mutating Functions
+
+- Failure cases: Fuzz or use concrete invalid inputs.
+- Success cases: Fuzz valid inputs (PREFERRED).
+- Verify ALL state changes (Balances, Storage mappings).
+- Check events emitted.
+- Check interactions with other contracts (e.g., StakedToken mint/burn).
+
+## Key Principles
+
+**1. Failure Cases First**
+
+- Test all reverts before testing success.
+- Document why each revert happens.
+- Use specific error selectors (`Error.selector`).
+
+**2. Complete Success Testing with Fuzzing (PREFERRED)**
+
+- Use fuzzing for success cases to test across input ranges.
+- Verify state changes (use relationships, not exact values where appropriate).
+- Check events (with fuzzed params).
+
+**3. Modifier Testing in Context**
+
+- Test that modifiers (`nonReentrant`, `onlyOwner`) are applied correctly on external functions.
+- (Detailed logic testing of modifiers belongs in `test-modifiers.mdc`).
+
+## Handling Complex External Interactions
+
+If an external function relies on complex state (e.g., `governor.execute` depends on voting outcome):
+
+1.  **Use Helpers**: Create `_createPassedProposal()` helper to setup state.
+2.  **Verify Preconditions**: Ensure the helper sets up the exact state needed.
+3.  **Execute**: Call the external function.
+4.  **Verify**: Check final state (e.g., funds moved, proposal marked executed).
+
+## Checklist
+
+**Phase 1 - Documentation:**
+
+- [ ] Analyze all external functions.
+- [ ] Write Gherkin for all external functions (failures first).
+- [ ] Keep each function in its correct subsection.
+
+**Phase 2 - Implementation:**
+
+- [ ] Implement failure tests.
+- [ ] Implement success tests with fuzzing.
+- [ ] Verify events and state changes.
+
+**Phase 3 - Verification:**
+
+- [ ] Run `forge test --mc ContractName_Test`.
+- [ ] Generate coverage.
+- [ ] Verify all paths covered.
