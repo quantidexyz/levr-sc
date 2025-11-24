@@ -6,7 +6,10 @@ import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {ILevrForwarder_v1} from '../../src/interfaces/ILevrForwarder_v1.sol';
 import {ERC2771Target_Mock} from '../mocks/ERC2771Target_Mock.sol';
 import {PlainReceiver_Mock} from '../mocks/PlainReceiver_Mock.sol';
+import {RejectingReceiver_Mock} from '../mocks/RejectingReceiver_Mock.sol';
+import {ReentrantAttacker_Mock} from '../mocks/ReentrantAttacker_Mock.sol';
 import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
+import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
 
 contract LevrForwarder_v1_Test is Test {
@@ -114,6 +117,116 @@ contract LevrForwarder_v1_Test is Test {
         assertFalse(results[0].success);
     }
 
+    function test_ExecuteMulticall_RevertIf_ForbiddenSelectorOnSelf() public {
+        ILevrForwarder_v1.SingleCall[] memory empty = new ILevrForwarder_v1.SingleCall[](0);
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(_forwarder),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeWithSelector(LevrForwarder_v1.executeMulticall.selector, empty)
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ILevrForwarder_v1.ForbiddenSelectorOnSelf.selector,
+                LevrForwarder_v1.executeMulticall.selector
+            )
+        );
+        _forwarder.executeMulticall(calls);
+    }
+
+    function test_ExecuteMulticall_RevertIf_CallFailed() public {
+        _trustedTarget.setShouldRevert(true);
+
+        ILevrForwarder_v1.SingleCall memory failingCall = ILevrForwarder_v1.SingleCall({
+            target: address(_trustedTarget),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeWithSelector(ERC2771Target_Mock.execute.selector, bytes('fail'))
+        });
+
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = failingCall;
+
+        vm.expectRevert(abi.encodeWithSelector(ILevrForwarder_v1.CallFailed.selector, failingCall));
+        _forwarder.executeMulticall(calls);
+    }
+
+    function test_ExecuteMulticall_EmptyCalls() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](0);
+        ILevrForwarder_v1.Result[] memory results = _forwarder.executeMulticall(calls);
+        assertEq(results.length, 0);
+    }
+
+    function test_ExecuteMulticall_Fuzz_ValueValidation(uint256[] memory rawValues) public {
+        vm.assume(rawValues.length <= 5);
+
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](
+            rawValues.length
+        );
+        uint256 totalValue;
+
+        for (uint256 i = 0; i < rawValues.length; i++) {
+            uint256 value = bound(rawValues[i], 0, 1 ether);
+            totalValue += value;
+            calls[i] = ILevrForwarder_v1.SingleCall({
+                target: address(_trustedTarget),
+                allowFailure: false,
+                value: value,
+                callData: abi.encodeWithSelector(ERC2771Target_Mock.execute.selector, bytes('fuzz'))
+            });
+        }
+
+        ILevrForwarder_v1.Result[] memory results = _forwarder.executeMulticall{value: totalValue}(
+            calls
+        );
+        assertEq(results.length, rawValues.length);
+
+        if (totalValue > 0) {
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    ILevrForwarder_v1.ValueMismatch.selector,
+                    totalValue - 1,
+                    totalValue
+                )
+            );
+            _forwarder.executeMulticall{value: totalValue - 1}(calls);
+        }
+    }
+
+    function test_ExecuteMulticall_ReentrancyProtected() public {
+        ReentrantAttacker_Mock attacker = new ReentrantAttacker_Mock(
+            ILevrForwarder_v1(address(_forwarder))
+        );
+
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(_forwarder),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeWithSelector(
+                LevrForwarder_v1.executeTransaction.selector,
+                address(attacker),
+                abi.encodeWithSelector(ReentrantAttacker_Mock.attack.selector)
+            )
+        });
+
+        ILevrForwarder_v1.Result[] memory results = _forwarder.executeMulticall(calls);
+        assertEq(results.length, 1);
+
+        (bool innerSuccess, bytes memory innerData) = abi.decode(
+            results[0].returnData,
+            (bool, bytes)
+        );
+        assertFalse(innerSuccess, 'Inner executeTransaction should return failure flag');
+        assertEq(
+            bytes4(innerData),
+            ReentrancyGuard.ReentrancyGuardReentrantCall.selector,
+            'Reentrancy error selector mismatch'
+        );
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // executeTransaction
 
@@ -146,6 +259,16 @@ contract LevrForwarder_v1_Test is Test {
 
         assertEq(address(this).balance, beforeBal + 0.25 ether);
         assertEq(address(_forwarder).balance, 0);
+    }
+
+    function test_WithdrawTrappedETH_RevertIf_ETHTransferFailed() public {
+        RejectingReceiver_Mock rejector = new RejectingReceiver_Mock();
+        LevrForwarder_v1 rejectForwarder = rejector.deployForwarder('RejectingForwarder');
+
+        vm.deal(address(rejectForwarder), 0.1 ether);
+
+        vm.expectRevert(ILevrForwarder_v1.ETHTransferFailed.selector);
+        rejector.triggerWithdraw(rejectForwarder);
     }
 
     ///////////////////////////////////////////////////////////////////////////

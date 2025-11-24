@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
+import {Vm} from 'forge-std/Vm.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
 import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
 import {LevrTreasury_v1} from '../../src/LevrTreasury_v1.sol';
@@ -12,6 +13,8 @@ import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrStaking_v1} from '../../src/interfaces/ILevrStaking_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
+import {ILevrDeployer_v1} from '../../src/interfaces/ILevrDeployer_v1.sol';
+import {ClankerFactory_Mock, ClankerTokenForTest_Mock} from '../mocks/ClankerFactory_Mock.sol';
 import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
 import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 
@@ -30,6 +33,43 @@ contract LevrDeployer_v1_Test is Test {
     address owner = address(this);
     address attacker = address(0xBAD);
     address user = address(0x1234);
+
+    // ============ Constructor Tests ============
+
+    function test_Constructor_RevertIf_FactoryZero() public {
+        vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
+        new LevrDeployer_v1(address(0), address(1), address(1), address(1));
+    }
+
+    function test_Constructor_RevertIf_TreasuryImplZero() public {
+        vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
+        new LevrDeployer_v1(address(1), address(0), address(1), address(1));
+    }
+
+    function test_Constructor_RevertIf_StakingImplZero() public {
+        vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
+        new LevrDeployer_v1(address(1), address(1), address(0), address(1));
+    }
+
+    function test_Constructor_RevertIf_GovernorImplZero() public {
+        vm.expectRevert(ILevrDeployer_v1.ZeroAddress.selector);
+        new LevrDeployer_v1(address(1), address(1), address(1), address(0));
+    }
+
+    function test_Constructor_SetsImmutablesCorrectly() public view {
+        assertEq(deployer.authorizedFactory(), address(factory), 'Factory mismatch');
+        assertEq(
+            deployer.treasuryImplementation(),
+            address(treasuryImpl),
+            'Treasury impl mismatch'
+        );
+        assertEq(deployer.stakingImplementation(), address(stakingImpl), 'Staking impl mismatch');
+        assertEq(
+            deployer.governorImplementation(),
+            address(governorImpl),
+            'Governor impl mismatch'
+        );
+    }
 
     function setUp() public {
         // Deploy forwarder
@@ -89,6 +129,72 @@ contract LevrDeployer_v1_Test is Test {
 
         // Verify factory address matches prediction
         require(address(factory) == predictedFactory, 'Factory address mismatch');
+    }
+
+    function test_PrepareContracts_EmitsContractsPrepared() public {
+        vm.recordLogs();
+        (address treasury, address staking) = factory.prepareForDeployment();
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 expectedSig = keccak256('ContractsPrepared(address,address)');
+        bool found;
+
+        for (uint256 i = 0; i < entries.length; i++) {
+            if (entries[i].emitter == address(factory) && entries[i].topics[0] == expectedSig) {
+                address loggedTreasury = address(uint160(uint256(entries[i].topics[1])));
+                address loggedStaking = address(uint160(uint256(entries[i].topics[2])));
+                if (loggedTreasury == treasury && loggedStaking == staking) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        assertTrue(found, 'ContractsPrepared event not emitted');
+    }
+
+    function test_DeployProject_EmitsProjectDeployed() public {
+        ClankerFactory_Mock clankerFactory = new ClankerFactory_Mock();
+        factory.addTrustedClankerFactory(address(clankerFactory));
+        ClankerTokenForTest_Mock clanker = clankerFactory.deployToken(
+            address(this),
+            'Clanker',
+            'CLK'
+        );
+
+        factory.prepareForDeployment();
+
+        vm.recordLogs();
+        ILevrFactory_v1.Project memory project = factory.register(address(clanker));
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 expectedSig = keccak256('ProjectDeployed(address,address,address,address,address)');
+        bool found;
+
+        for (uint256 i = 0; i < entries.length; i++) {
+            if (entries[i].emitter == address(factory) && entries[i].topics[0] == expectedSig) {
+                address loggedToken = address(uint160(uint256(entries[i].topics[1])));
+                address loggedTreasury = address(uint160(uint256(entries[i].topics[2])));
+                address loggedStaking = address(uint160(uint256(entries[i].topics[3])));
+                (address loggedStakedToken, address loggedGovernor) = abi.decode(
+                    entries[i].data,
+                    (address, address)
+                );
+
+                if (
+                    loggedToken == address(clanker) &&
+                    loggedTreasury == project.treasury &&
+                    loggedStaking == project.staking &&
+                    loggedStakedToken == project.stakedToken &&
+                    loggedGovernor == project.governor
+                ) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        assertTrue(found, 'ProjectDeployed event not emitted');
     }
 
     // ============ Implementation Contract Security Tests ============
