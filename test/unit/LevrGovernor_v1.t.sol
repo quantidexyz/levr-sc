@@ -107,13 +107,23 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
     function test_Initialize_RevertIf_NotFactory() public {
         LevrGovernor_v1 governor = new LevrGovernor_v1(address(_factory), address(_forwarder));
         vm.expectRevert(ILevrGovernor_v1.OnlyFactory.selector);
-        governor.initialize(address(_treasury), address(_staking), address(_stakedToken), address(_underlying));
+        governor.initialize(
+            address(_treasury),
+            address(_staking),
+            address(_stakedToken),
+            address(_underlying)
+        );
     }
 
     function test_Initialize_RevertIf_AlreadyInitialized() public {
         vm.prank(address(_factory));
         vm.expectRevert(ILevrGovernor_v1.AlreadyInitialized.selector);
-        _governor.initialize(address(_treasury), address(_staking), address(_stakedToken), address(_underlying));
+        _governor.initialize(
+            address(_treasury),
+            address(_staking),
+            address(_stakedToken),
+            address(_underlying)
+        );
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -155,10 +165,51 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
         assertEq(proposalId, 1, 'first proposal id should be 1');
 
         ILevrGovernor_v1.Proposal memory proposal = _governor.getProposal(proposalId);
-        assertEq(uint256(proposal.proposalType), uint256(ILevrGovernor_v1.ProposalType.BoostStakingPool));
+        assertEq(
+            uint256(proposal.proposalType),
+            uint256(ILevrGovernor_v1.ProposalType.BoostStakingPool)
+        );
         assertEq(proposal.token, address(_underlying));
         assertEq(proposal.amount, 500 ether);
         assertEq(proposal.proposer, _alice);
+    }
+
+    function test_ProposeBoost_RevertIf_AmountExceedsMaxLimit() public {
+        _fundTreasury(TREASURY_BUFFER);
+        _fundAndStake(_alice, 2_000 ether);
+
+        uint16 maxBps = _factory.maxProposalAmountBps(address(_underlying));
+        uint256 treasuryBal = _underlying.balanceOf(address(_treasury));
+        uint256 limit = (treasuryBal * maxBps) / 10_000;
+
+        vm.prank(_alice);
+        vm.expectRevert(ILevrGovernor_v1.ProposalAmountExceedsLimit.selector);
+        _governor.proposeBoost(address(_underlying), limit + 1);
+    }
+
+    function test_ProposeBoost_RevertIf_AlreadyProposedInCycle() public {
+        _fundTreasury(TREASURY_BUFFER);
+        _fundAndStake(_alice, 2_000 ether);
+
+        vm.prank(_alice);
+        _governor.proposeBoost(address(_underlying), 500 ether);
+
+        vm.prank(_alice);
+        vm.expectRevert(ILevrGovernor_v1.AlreadyProposedInCycle.selector);
+        _governor.proposeBoost(address(_underlying), 400 ether);
+    }
+
+    function test_ProposeBoost_RevertIf_ProposalWindowClosed() public {
+        _fundTreasury(TREASURY_BUFFER);
+        uint256 proposalId = _createBoostProposal(_alice, 1_000 ether, TREASURY_BUFFER, 500 ether);
+        assertEq(proposalId, 1);
+
+        _advanceToVoting();
+        _fundAndStake(_bob, 1_000 ether);
+
+        vm.prank(_bob);
+        vm.expectRevert(ILevrGovernor_v1.ProposalWindowClosed.selector);
+        _governor.proposeBoost(address(_underlying), 250 ether);
     }
 
     /* Test: proposeTransfer */
@@ -221,6 +272,28 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
         assertGt(updated.totalBalanceVoted, 0, 'quorum balance recorded');
     }
 
+    function test_Vote_RevertIf_AlreadyVoted() public {
+        uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 500 ether);
+        _fundAndStake(_bob, 2_000 ether);
+        _advanceToVoting();
+
+        vm.startPrank(_bob);
+        _governor.vote(proposalId, true);
+        vm.expectRevert(ILevrGovernor_v1.AlreadyVoted.selector);
+        _governor.vote(proposalId, true);
+        vm.stopPrank();
+    }
+
+    function test_Vote_RevertIf_InsufficientVotingPower() public {
+        uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 500 ether);
+        _fundAndStake(_bob, 1); // stake too small to accumulate voting power
+        _advanceToVoting();
+
+        vm.prank(_bob);
+        vm.expectRevert(ILevrGovernor_v1.InsufficientVotingPower.selector);
+        _governor.vote(proposalId, true);
+    }
+
     // ========================================================================
     // External - Execution
 
@@ -251,7 +324,12 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
     }
 
     function test_Execute_SuccessTransfersFunds() public {
-        uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 1_000 ether);
+        uint256 proposalId = _createBoostProposal(
+            _alice,
+            2_000 ether,
+            TREASURY_BUFFER,
+            1_000 ether
+        );
         _fundAndStake(_bob, 2_000 ether);
         _advanceToVoting();
 
@@ -267,6 +345,116 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
         uint256 stakingBalanceAfter = _underlying.balanceOf(address(_staking));
 
         assertEq(stakingBalanceAfter - stakingBalanceBefore, 1_000 ether, 'boost moved to staking');
+    }
+
+    function test_Execute_RevertIf_NotWinner() public {
+        _fundTreasury(TREASURY_BUFFER);
+        _fundAndStake(_alice, 3_000 ether);
+        _fundAndStake(_bob, 3_000 ether);
+        _fundAndStake(_carol, 3_000 ether);
+
+        vm.prank(_alice);
+        uint256 proposalA = _governor.proposeBoost(address(_underlying), 2_000 ether);
+        vm.prank(_bob);
+        uint256 proposalB = _governor.proposeTransfer(
+            address(_underlying),
+            _carol,
+            1_000 ether,
+            'alt'
+        );
+
+        _advanceToVoting();
+
+        vm.prank(_alice);
+        _governor.vote(proposalA, true);
+        vm.prank(_bob);
+        _governor.vote(proposalA, true);
+        vm.prank(_carol);
+        _governor.vote(proposalA, true);
+
+        vm.prank(_alice);
+        _governor.vote(proposalB, true);
+        vm.prank(_bob);
+        _governor.vote(proposalB, true);
+        vm.prank(_carol);
+        _governor.vote(proposalB, false);
+
+        _advanceToExecution();
+
+        vm.expectRevert(ILevrGovernor_v1.NotWinner.selector);
+        _governor.execute(proposalB);
+    }
+
+    function test_Execute_RevertIf_ProposalNotInCurrentCycle() public {
+        uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 500 ether);
+        _advanceToVoting();
+        _advanceToExecution();
+
+        _governor.startNewCycle();
+
+        vm.expectRevert(ILevrGovernor_v1.ProposalNotInCurrentCycle.selector);
+        _governor.execute(proposalId);
+    }
+
+    function test_Execute_RevertIf_ExecutionAttemptTooSoon() public {
+        RevertingToken revertToken = new RevertingToken();
+        uint256 treasuryAmount = 100_000 ether;
+        revertToken.mint(address(_treasury), treasuryAmount);
+
+        _fundAndStake(_alice, 2_000 ether);
+        _fundAndStake(_bob, 2_000 ether);
+
+        vm.prank(_alice);
+        uint256 proposalId = _governor.proposeTransfer(
+            address(revertToken),
+            _bob,
+            1_000 ether,
+            'fail'
+        );
+
+        _advanceToVoting();
+        vm.prank(_alice);
+        _governor.vote(proposalId, true);
+        vm.prank(_bob);
+        _governor.vote(proposalId, true);
+
+        _advanceToExecution();
+
+        uint64 attemptTime = uint64(block.timestamp);
+        // First attempt fails but does not revert
+        _governor.execute(proposalId);
+
+        vm.expectRevert(ILevrGovernor_v1.ExecutionAttemptTooSoon.selector);
+        _governor.execute(proposalId);
+
+        ILevrGovernor_v1.ExecutionAttemptInfo memory info = _governor.executionAttempts(proposalId);
+        assertEq(info.count, 1);
+        assertEq(info.lastAttemptTime, attemptTime);
+    }
+
+    function test_Execute_RevertIf_AlreadyExecuted() public {
+        uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 500 ether);
+        _fundAndStake(_bob, 2_000 ether);
+        _advanceToVoting();
+        vm.prank(_bob);
+        _governor.vote(proposalId, true);
+        _advanceToExecution();
+
+        _governor.execute(proposalId);
+
+        vm.expectRevert(ILevrGovernor_v1.AlreadyExecuted.selector);
+        _governor.execute(proposalId);
+    }
+
+    function test_InternalExecute_RevertIf_CalledExternally() public {
+        vm.expectRevert(ILevrGovernor_v1.InternalOnly.selector);
+        _governor._executeProposal(
+            0,
+            ILevrGovernor_v1.ProposalType.BoostStakingPool,
+            address(_underlying),
+            0,
+            address(0)
+        );
     }
 
     // ========================================================================
@@ -293,13 +481,22 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
     /* Test: state */
     function test_State_TransitionsAcrossLifecycle() public {
         uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 500 ether);
-        assertEq(uint256(_governor.state(proposalId)), uint256(ILevrGovernor_v1.ProposalState.Pending));
+        assertEq(
+            uint256(_governor.state(proposalId)),
+            uint256(ILevrGovernor_v1.ProposalState.Pending)
+        );
 
         _advanceToVoting();
-        assertEq(uint256(_governor.state(proposalId)), uint256(ILevrGovernor_v1.ProposalState.Active));
+        assertEq(
+            uint256(_governor.state(proposalId)),
+            uint256(ILevrGovernor_v1.ProposalState.Active)
+        );
 
         _advanceToExecution();
-        assertEq(uint256(_governor.state(proposalId)), uint256(ILevrGovernor_v1.ProposalState.Defeated));
+        assertEq(
+            uint256(_governor.state(proposalId)),
+            uint256(ILevrGovernor_v1.ProposalState.Defeated)
+        );
     }
 
     function test_ViewHelpers_ReturnExpectedData() public {
@@ -313,6 +510,30 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
         assertEq(_governor.activeProposalCount(ILevrGovernor_v1.ProposalType.BoostStakingPool), 1);
     }
 
+    function test_View_MeetsQuorumAndApprovalReflectVotes() public {
+        uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 500 ether);
+        _fundAndStake(_bob, 2_000 ether);
+
+        assertFalse(_governor.meetsQuorum(proposalId));
+        assertFalse(_governor.meetsApproval(proposalId));
+
+        _advanceToVoting();
+        vm.prank(_alice);
+        _governor.vote(proposalId, true);
+        vm.prank(_bob);
+        _governor.vote(proposalId, true);
+
+        assertTrue(_governor.meetsQuorum(proposalId));
+        assertTrue(_governor.meetsApproval(proposalId));
+    }
+
+    function test_View_ExecutionAttempts_DefaultsToZero() public {
+        uint256 proposalId = _createBoostProposal(_alice, 2_000 ether, TREASURY_BUFFER, 500 ether);
+        ILevrGovernor_v1.ExecutionAttemptInfo memory info = _governor.executionAttempts(proposalId);
+        assertEq(info.count, 0);
+        assertEq(info.lastAttemptTime, 0);
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Test Internal Functions
 
@@ -320,3 +541,14 @@ contract LevrGovernor_v1_Test is Test, LevrFactoryDeployHelper {
     // through the public APIs above (cycle creation, quorum/approval, winner selection).
 }
 
+contract RevertingToken is ERC20_Mock {
+    constructor() ERC20_Mock('Reverting', 'REV') {}
+
+    function transfer(address, uint256) public pure override returns (bool) {
+        revert('Transfer failed');
+    }
+
+    function transferFrom(address, address, uint256) public pure override returns (bool) {
+        revert('Transfer failed');
+    }
+}

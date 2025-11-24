@@ -16,6 +16,8 @@ contract LevrStaking_v1_Handler is CommonBase, StdUtils {
     ERC20_Mock public immutable underlying;
 
     uint256 internal _ghostTotalStaked;
+    uint256 internal _ghostRewardsAccrued;
+    uint256 internal _ghostRewardsClaimed;
     address[] internal _actors;
 
     constructor(LevrStaking_v1 staking_, LevrStakedToken_v1 stakedToken_, ERC20_Mock underlying_) {
@@ -49,9 +51,11 @@ contract LevrStaking_v1_Handler is CommonBase, StdUtils {
 
         uint256 amount = bound(amountSeed, minAmount, cap);
 
+        uint256 reservesBefore = _currentRewardReserves();
         vm.startPrank(actor);
         try staking.stake(amount) {
             _ghostTotalStaked += amount;
+            _recordClaimed(reservesBefore);
         } catch {
             // ignore failures to keep run going
         }
@@ -66,6 +70,7 @@ contract LevrStaking_v1_Handler is CommonBase, StdUtils {
         uint256 minAmount = 1;
         uint256 amount = bal <= minAmount ? bal : bound(amountSeed, minAmount, bal);
 
+        uint256 reservesBefore = _currentRewardReserves();
         vm.startPrank(actor);
         try staking.unstake(amount, actor) {
             if (_ghostTotalStaked >= amount) {
@@ -73,6 +78,7 @@ contract LevrStaking_v1_Handler is CommonBase, StdUtils {
             } else {
                 _ghostTotalStaked = 0;
             }
+            _recordClaimed(reservesBefore);
         } catch {
             // ignore
         }
@@ -86,13 +92,17 @@ contract LevrStaking_v1_Handler is CommonBase, StdUtils {
         address[] memory tokens = new address[](1);
         tokens[0] = address(underlying);
 
+        uint256 reservesBefore = _currentRewardReserves();
         vm.prank(actor);
-        try staking.claimRewards(tokens, actor) {} catch {}
+        try staking.claimRewards(tokens, actor) {
+            _recordClaimed(reservesBefore);
+        } catch {}
     }
 
     function accrue(uint256 rawAmount) external {
         uint256 amount = bound(rawAmount, 1e18, 50_000e18);
         underlying.mint(address(staking), amount);
+        _ghostRewardsAccrued += amount;
         try staking.accrueRewards(address(underlying)) {} catch {}
     }
 
@@ -108,10 +118,31 @@ contract LevrStaking_v1_Handler is CommonBase, StdUtils {
         return _ghostTotalStaked;
     }
 
+    function ghostRewardsAccrued() external view returns (uint256) {
+        return _ghostRewardsAccrued;
+    }
+
+    function ghostRewardsClaimed() external view returns (uint256) {
+        return _ghostRewardsClaimed;
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Helpers
 
     function _actor(uint256 seed) internal view returns (address) {
         return _actors[seed % _actors.length];
+    }
+
+    function _currentRewardReserves() internal view returns (uint256) {
+        uint256 balance = underlying.balanceOf(address(staking));
+        uint256 escrow = staking.escrowBalance(address(underlying));
+        return balance > escrow ? balance - escrow : 0;
+    }
+
+    function _recordClaimed(uint256 reservesBefore) internal {
+        uint256 reservesAfter = _currentRewardReserves();
+        if (reservesBefore > reservesAfter) {
+            _ghostRewardsClaimed += reservesBefore - reservesAfter;
+        }
     }
 }

@@ -96,6 +96,16 @@ contract LevrStakedToken_v1_Test is Test {
     }
 
     /* Test: transfer (non-transferable) */
+
+    function test_Approve_AllowsAllowanceUpdates() public {
+        vm.prank(_alice);
+        _stakedToken.approve(_bob, 100 ether);
+        assertEq(_stakedToken.allowance(_alice, _bob), 100 ether);
+
+        vm.prank(_alice);
+        _stakedToken.approve(_bob, 50 ether);
+        assertEq(_stakedToken.allowance(_alice, _bob), 50 ether);
+    }
     function test_Transfer_RevertIf_Attempted() public {
         vm.prank(_staking);
         _stakedToken.mint(_alice, 10 ether);

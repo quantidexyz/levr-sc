@@ -28,7 +28,11 @@ contract LevrFeeSplitter_v1_Test is Test {
 
         _projectRegistry.setProject(address(0), address(0), address(_staking), address(0), false);
 
-        _splitter = new LevrFeeSplitter_v1(address(_clanker), address(_projectRegistry), address(0));
+        _splitter = new LevrFeeSplitter_v1(
+            address(_clanker),
+            address(_projectRegistry),
+            address(0)
+        );
         _rewardToken = new ERC20_Mock('Reward', 'RWD');
         _secondRewardToken = new ERC20_Mock('Alt Reward', 'ALT');
     }
@@ -77,6 +81,71 @@ contract LevrFeeSplitter_v1_Test is Test {
 
         vm.prank(_admin);
         vm.expectRevert(ILevrFeeSplitter_v1.NoReceivers.selector);
+        _splitter.configureSplits(splits);
+    }
+
+    function test_ConfigureSplits_RevertIf_TooManyReceivers() public {
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](21);
+        for (uint256 i = 0; i < splits.length; i++) {
+            address receiver = address(uint160(i + 1));
+            uint16 bps = i == splits.length - 1 ? 2000 : 400;
+            splits[i] = ILevrFeeSplitter_v1.SplitConfig({receiver: receiver, bps: bps});
+        }
+
+        vm.prank(_admin);
+        vm.expectRevert(ILevrFeeSplitter_v1.TooManyReceivers.selector);
+        _splitter.configureSplits(splits);
+    }
+
+    function test_ConfigureSplits_RevertIf_DuplicateReceiver() public {
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: _receiverA, bps: 5000});
+        splits[1] = ILevrFeeSplitter_v1.SplitConfig({receiver: _receiverA, bps: 5000});
+
+        vm.prank(_admin);
+        vm.expectRevert(ILevrFeeSplitter_v1.DuplicateReceiver.selector);
+        _splitter.configureSplits(splits);
+    }
+
+    function test_ConfigureSplits_RevertIf_DuplicateStakingReceiver() public {
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](3);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: _receiverA, bps: 4000});
+        splits[1] = ILevrFeeSplitter_v1.SplitConfig({receiver: address(_staking), bps: 3000});
+        splits[2] = ILevrFeeSplitter_v1.SplitConfig({receiver: address(_staking), bps: 3000});
+
+        vm.prank(_admin);
+        // Duplicate staking receivers currently revert via the general duplicate check.
+        vm.expectRevert(ILevrFeeSplitter_v1.DuplicateReceiver.selector);
+        _splitter.configureSplits(splits);
+    }
+
+    function test_ConfigureSplits_RevertIf_ZeroBps() public {
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: _receiverA, bps: 0});
+        splits[1] = ILevrFeeSplitter_v1.SplitConfig({receiver: address(_staking), bps: 10_000});
+
+        vm.prank(_admin);
+        vm.expectRevert(ILevrFeeSplitter_v1.ZeroBps.selector);
+        _splitter.configureSplits(splits);
+    }
+
+    function test_ConfigureSplits_RevertIf_ReceiverZeroAddress() public {
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = new ILevrFeeSplitter_v1.SplitConfig[](2);
+        splits[0] = ILevrFeeSplitter_v1.SplitConfig({receiver: address(0), bps: 5_000});
+        splits[1] = ILevrFeeSplitter_v1.SplitConfig({receiver: address(_staking), bps: 5_000});
+
+        vm.prank(_admin);
+        vm.expectRevert(ILevrFeeSplitter_v1.ZeroAddress.selector);
+        _splitter.configureSplits(splits);
+    }
+
+    function test_ConfigureSplits_RevertIf_ProjectNotRegistered() public {
+        _projectRegistry.setProject(address(0), address(0), address(0), address(0), false);
+
+        ILevrFeeSplitter_v1.SplitConfig[] memory splits = _buildDefaultSplits();
+
+        vm.prank(_admin);
+        vm.expectRevert(ILevrFeeSplitter_v1.ProjectNotRegistered.selector);
         _splitter.configureSplits(splits);
     }
 
@@ -146,10 +215,19 @@ contract LevrFeeSplitter_v1_Test is Test {
         _rewardToken.mint(address(_splitter), 100 ether);
 
         vm.expectEmit(true, true, false, true);
-        emit ILevrFeeSplitter_v1.FeeDistributed(address(_clanker), address(_rewardToken), _receiverA, 60 ether);
+        emit ILevrFeeSplitter_v1.FeeDistributed(
+            address(_clanker),
+            address(_rewardToken),
+            _receiverA,
+            60 ether
+        );
 
         vm.expectEmit(true, true, false, true);
-        emit ILevrFeeSplitter_v1.StakingDistribution(address(_clanker), address(_rewardToken), 40 ether);
+        emit ILevrFeeSplitter_v1.StakingDistribution(
+            address(_clanker),
+            address(_rewardToken),
+            40 ether
+        );
 
         vm.expectEmit(true, false, false, true);
         emit ILevrFeeSplitter_v1.AutoAccrualSuccess(address(_clanker), address(_rewardToken));
@@ -159,7 +237,9 @@ contract LevrFeeSplitter_v1_Test is Test {
         assertEq(_rewardToken.balanceOf(_receiverA), 60 ether);
         assertEq(_rewardToken.balanceOf(address(_staking)), 40 ether);
 
-        ILevrFeeSplitter_v1.DistributionState memory state = _splitter.getDistributionState(address(_rewardToken));
+        ILevrFeeSplitter_v1.DistributionState memory state = _splitter.getDistributionState(
+            address(_rewardToken)
+        );
         assertEq(state.totalDistributed, 100 ether);
         assertEq(state.lastDistribution, block.timestamp);
     }
@@ -263,4 +343,3 @@ contract MockProjectRegistry {
         return _project;
     }
 }
-

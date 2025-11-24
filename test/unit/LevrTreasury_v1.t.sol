@@ -45,6 +45,37 @@ contract LevrTreasury_v1_Test is Test, LevrFactoryDeployHelper {
 
     // Included in setup implicitly via factory registration
 
+    function test_Constructor_RevertIf_FactoryZero() public {
+        vm.expectRevert(ILevrTreasury_v1.ZeroAddress.selector);
+        new LevrTreasury_v1(address(0), address(0));
+    }
+
+    function test_Initialize_RevertIf_NotFactory() public {
+        LevrTreasury_v1 treasury = new LevrTreasury_v1(address(this), address(0));
+
+        vm.prank(_user);
+        vm.expectRevert(ILevrTreasury_v1.OnlyFactory.selector);
+        treasury.initialize(address(this), address(_token));
+    }
+
+    function test_Initialize_RevertIf_AlreadyInitialized() public {
+        LevrTreasury_v1 treasury = new LevrTreasury_v1(address(this), address(0));
+        treasury.initialize(address(this), address(_token));
+
+        vm.expectRevert(ILevrTreasury_v1.AlreadyInitialized.selector);
+        treasury.initialize(address(this), address(_token));
+    }
+
+    function test_Initialize_RevertIf_ZeroAddresses() public {
+        LevrTreasury_v1 treasury = new LevrTreasury_v1(address(this), address(0));
+
+        vm.expectRevert(ILevrTreasury_v1.ZeroAddress.selector);
+        treasury.initialize(address(0), address(_token));
+
+        vm.expectRevert(ILevrTreasury_v1.ZeroAddress.selector);
+        treasury.initialize(address(this), address(0));
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Test External Functions
 

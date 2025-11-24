@@ -114,6 +114,106 @@ contract LevrStaking_v1_Test is Test, LevrFactoryDeployHelper {
     // Test External Functions
 
     // ========================================================================
+    // External - View Functions
+
+    /* Test: getVotingPower */
+
+    function test_GetVotingPower_ReturnsZeroWhenUserHasNoStake() public {
+        vm.roll(block.number + 1); // advance block so function is not view-only
+        assertEq(_staking.getVotingPower(_user), 0);
+    }
+
+    function test_GetVotingPower_AccumulatesLinearlyWithTime() public {
+        uint256 amount = 100 ether;
+
+        vm.startPrank(_user);
+        _underlying.approve(address(_staking), amount);
+        _staking.stake(amount);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 10 days);
+
+        uint256 expected = (amount * 10 days) / (_staking.PRECISION() * _staking.SECONDS_PER_DAY());
+
+        assertEq(_staking.getVotingPower(_user), expected);
+    }
+
+    /* Test: getTokenStreamInfo */
+
+    function test_GetTokenStreamInfo_ReturnsLatestStreamState() public {
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
+        whitelistRewardToken(_staking, address(rewardToken), address(this));
+
+        uint32 window = uint32(3 days);
+        uint256 rewardAmount = uint256(window) * 2 ether;
+        rewardToken.mint(address(_staking), rewardAmount);
+
+        uint256 accrueTime = block.timestamp;
+        _staking.accrueRewards(address(rewardToken));
+        (uint64 streamStart, uint64 streamEnd, uint256 streamTotal) = _staking.getTokenStreamInfo(
+            address(rewardToken)
+        );
+
+        assertEq(streamStart, uint64(accrueTime));
+        assertEq(streamEnd - streamStart, window);
+        assertEq(streamTotal, rewardAmount);
+    }
+
+    /* Test: getWhitelistedTokens */
+
+    function test_GetWhitelistedTokens_ReturnsActiveList() public {
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
+        whitelistRewardToken(_staking, address(rewardToken), address(this));
+
+        address[] memory tokens = _staking.getWhitelistedTokens();
+
+        assertEq(tokens.length, 2);
+        assertEq(tokens[0], address(_underlying));
+        assertEq(tokens[1], address(rewardToken));
+    }
+
+    /* Test: rewardRatePerSecond */
+
+    function test_RewardRatePerSecond_MatchesStreamAmount() public {
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
+        whitelistRewardToken(_staking, address(rewardToken), address(this));
+
+        uint32 window = uint32(3 days);
+        uint256 rewardAmount = uint256(window) * 5 ether;
+        rewardToken.mint(address(_staking), rewardAmount);
+
+        _staking.accrueRewards(address(rewardToken));
+
+        uint256 expectedRate = rewardAmount / window;
+        assertEq(_staking.rewardRatePerSecond(address(rewardToken)), expectedRate);
+    }
+
+    /* Test: aprBps */
+
+    function test_AprBps_ComputesAnnualizedRate() public {
+        uint256 stakeAmount = 1_000_000 ether;
+
+        vm.startPrank(_user);
+        _underlying.approve(address(_staking), stakeAmount);
+        _staking.stake(stakeAmount);
+        vm.stopPrank();
+
+        ERC20_Mock rewardToken = new ERC20_Mock('Reward', 'RWD');
+        whitelistRewardToken(_staking, address(rewardToken), address(this));
+
+        uint32 window = uint32(3 days);
+        uint256 rewardAmount = uint256(window) * 1 ether;
+        rewardToken.mint(address(_staking), rewardAmount);
+        _staking.accrueRewards(address(rewardToken));
+
+        uint256 perSecond = rewardAmount / window;
+        uint256 annualRate = perSecond * 365 days;
+        uint256 expectedApr = (annualRate * 10_000) / stakeAmount;
+
+        assertEq(_staking.aprBps(), expectedApr);
+    }
+
+    // ========================================================================
     // External - Staking Actions
 
     /* Test: stake */

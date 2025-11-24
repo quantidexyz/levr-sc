@@ -81,4 +81,17 @@ contract LevrStaking_v1_InvariantTest is StdInvariant, LevrFactoryDeployHelper {
         assertEq(_stakedToken.staking(), address(_staking), 'Receipt token staking mismatch');
         assertEq(_stakedToken.underlying(), _staking.underlying(), 'Underlying mismatch');
     }
+
+    function invariant_rewardsAccountingMatchesGhost() public view {
+        uint256 accrued = _handler.ghostRewardsAccrued();
+        uint256 claimed = _handler.ghostRewardsClaimed();
+        assertGe(accrued, claimed, 'claimed rewards cannot exceed accrued amounts');
+
+        uint256 stakingBalance = _underlying.balanceOf(address(_staking));
+        uint256 escrowedPrincipal = _staking.escrowBalance(address(_underlying));
+        assertGe(stakingBalance, escrowedPrincipal, 'staking balance must cover escrow');
+
+        uint256 rewardReserves = stakingBalance - escrowedPrincipal;
+        assertEq(accrued - claimed, rewardReserves, 'reward reserves mismatch ghost accounting');
+    }
 }
