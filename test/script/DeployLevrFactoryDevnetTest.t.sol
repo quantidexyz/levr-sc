@@ -2,12 +2,12 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
-import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
-import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
-import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
-import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
-import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
-import {LevrFactoryDeployHelper} from './utils/LevrFactoryDeployHelper.sol';
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
+import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrFeeSplitterFactory_v1} from '../../src/LevrFeeSplitterFactory_v1.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 /**
  * @title DeployLevrFactoryDevnet Test
@@ -58,7 +58,7 @@ contract DeployLevrFactoryDevnetTest is Test, LevrFactoryDeployHelper {
         assertEq(factory.minSTokenBpsToSubmit(address(0)), 100);
     }
 
-    function test_DevnetDeployment_constants() public {
+    function test_DevnetDeployment_constants() public pure {
         // Verify constants match script expectations
         assertEq(PROTOCOL_FEE_BPS, 50, 'Protocol fee should be 50 BPS (0.5%)');
         assertEq(STREAM_WINDOW_SECONDS, 259200, 'Stream window should be 3 days');
@@ -132,7 +132,7 @@ contract DeployLevrFactoryDevnetTest is Test, LevrFactoryDeployHelper {
         assertEq(feeSplitterFactory.trustedForwarder(), address(forwarder), 'Fee splitter should trust forwarder');
     }
 
-    function test_DevnetDeployment_getWETH() public {
+    function test_DevnetDeployment_getWETH() public view {
         // Test getWETH helper for different chains (as in script)
         
         // Base mainnet

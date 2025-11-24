@@ -2,10 +2,10 @@
 pragma solidity 0.8.30;
 
 import {Test, console} from 'forge-std/Test.sol';
-import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
-import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
-import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
-import {LevrFactoryDeployHelper} from './utils/LevrFactoryDeployHelper.sol';
+import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
+import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 /**
  * @title TransferFactoryOwnership Test
@@ -109,7 +109,7 @@ contract TransferFactoryOwnershipTest is Test, LevrFactoryDeployHelper {
 
     // ============ Script Environment Validation Tests ============
 
-    function test_scriptEnvironment_factoryAddressRequired() public {
+    function test_scriptEnvironment_factoryAddressRequired() public view {
         // Test that LEVR_FACTORY_ADDRESS is required
         // In real deployment, this would be checked in the script
         address factoryAddress = address(factory);
@@ -118,7 +118,7 @@ contract TransferFactoryOwnershipTest is Test, LevrFactoryDeployHelper {
         assertTrue(factoryAddress.code.length > 0, 'Factory should be a contract');
     }
 
-    function test_scriptEnvironment_multisigAddressRequired() public {
+    function test_scriptEnvironment_multisigAddressRequired() public view {
         // Test that GNOSIS_SAFE_ADDRESS is required
         address multisigAddress = multisig;
 

@@ -2,13 +2,13 @@
 pragma solidity ^0.8.30;
 
 import {Test, console} from 'forge-std/Test.sol';
-import {DeployLevrFeeSplitter} from '../script/DeployLevrFeeSplitter.s.sol';
-import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
-import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
-import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
-import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
-import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
-import {LevrFactoryDeployHelper} from './utils/LevrFactoryDeployHelper.sol';
+import {DeployLevrFeeSplitter} from '../../script/DeployLevrFeeSplitter.s.sol';
+import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
+import {LevrFeeSplitterFactory_v1} from '../../src/LevrFeeSplitterFactory_v1.sol';
+import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 /**
  * @title DeployLevrFeeSplitter Test
@@ -139,7 +139,7 @@ contract DeployLevrFeeSplitterTest is Test, LevrFactoryDeployHelper {
         assertEq(splitter, address(0), 'Random token should not have splitter');
     }
 
-    function test_feeSplitterFactory_queryTrustedForwarderFromFactory() public {
+    function test_feeSplitterFactory_queryTrustedForwarderFromFactory() public view {
         // Test querying trusted forwarder from factory (as in script)
         address queriedForwarder = factory.trustedForwarder();
 
@@ -152,20 +152,17 @@ contract DeployLevrFeeSplitterTest is Test, LevrFactoryDeployHelper {
         assertTrue(queriedForwarder.code.length > 0, 'Forwarder should be a contract');
     }
 
-    function test_feeSplitterFactory_networkValidation() public {
+    function test_feeSplitterFactory_networkValidation() public view {
         // Test network validation logic (Base mainnet and Sepolia only)
 
         // Base mainnet (8453) - should be valid
-        vm.chainId(8453);
-        assertTrue(block.chainid == 8453, 'Should be Base mainnet');
+        assertTrue(deployScript.isSupportedNetwork(8453), 'Should be Base mainnet');
 
         // Base Sepolia (84532) - should be valid
-        vm.chainId(84532);
-        assertTrue(block.chainid == 84532, 'Should be Base Sepolia');
+        assertTrue(deployScript.isSupportedNetwork(84532), 'Should be Base Sepolia');
 
         // Ethereum mainnet (1) - should be invalid (tested implicitly by script logic)
-        vm.chainId(1);
-        assertFalse(block.chainid == 8453 || block.chainid == 84532, 'Should be invalid chain');
+        assertFalse(deployScript.isSupportedNetwork(1), 'Should be invalid chain');
     }
 
     function test_feeSplitterFactory_minimumBalance() public {
@@ -189,7 +186,7 @@ contract DeployLevrFeeSplitterTest is Test, LevrFactoryDeployHelper {
         );
     }
 
-    function test_feeSplitterFactory_factoryValidation() public {
+    function test_feeSplitterFactory_factoryValidation() public view {
         // Test factory address validation (should be a contract with code)
 
         // Valid factory
@@ -205,7 +202,7 @@ contract DeployLevrFeeSplitterTest is Test, LevrFactoryDeployHelper {
         assertEq(eoaFactory.code.length, 0, 'EOA should have no code');
     }
 
-    function test_feeSplitterFactory_trustedForwarderValidation() public {
+    function test_feeSplitterFactory_trustedForwarderValidation() public view {
         // Test trusted forwarder validation
 
         // Valid forwarder

@@ -2,12 +2,12 @@
 pragma solidity ^0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
-import {LevrForwarder_v1} from '../src/LevrForwarder_v1.sol';
-import {LevrDeployer_v1} from '../src/LevrDeployer_v1.sol';
-import {ILevrFactory_v1} from '../src/interfaces/ILevrFactory_v1.sol';
-import {LevrFactory_v1} from '../src/LevrFactory_v1.sol';
-import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
-import {LevrFactoryDeployHelper} from './utils/LevrFactoryDeployHelper.sol';
+import {LevrForwarder_v1} from '../../src/LevrForwarder_v1.sol';
+import {LevrDeployer_v1} from '../../src/LevrDeployer_v1.sol';
+import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
+import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
+import {LevrFeeSplitterFactory_v1} from '../../src/LevrFeeSplitterFactory_v1.sol';
+import {LevrFactoryDeployHelper} from '../utils/LevrFactoryDeployHelper.sol';
 
 /**
  * @title DeployLevr Test
@@ -383,13 +383,13 @@ contract DeployLevrTest is Test, LevrFactoryDeployHelper {
         this.getClankerFactoryHelper(1); // Ethereum mainnet
     }
 
-    function test_DeployLevr_getWETH_baseMainnet() public {
+    function test_DeployLevr_getWETH_baseMainnet() public view {
         // Test Base mainnet (8453)
         address weth = this.getWETHHelper(8453);
         assertEq(weth, 0x4200000000000000000000000000000000000006, 'Base mainnet WETH mismatch');
     }
 
-    function test_DeployLevr_getWETH_baseSepolia() public {
+    function test_DeployLevr_getWETH_baseSepolia() public view {
         // Test Base Sepolia (84532)
         address weth = this.getWETHHelper(84532);
         assertEq(weth, 0x4200000000000000000000000000000000000006, 'Base Sepolia WETH mismatch');
