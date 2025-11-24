@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 import {Test} from 'forge-std/Test.sol';
 import {LevrFactory_v1} from '../../src/LevrFactory_v1.sol';
@@ -15,10 +15,10 @@ import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
 import {MockERC20} from '../mocks/MockERC20.sol';
 
-/// @title LevrClone Security Test
+/// @title LevrDeployer_v1 Test
 /// @notice Comprehensive security testing for clone-based deployment infrastructure
 /// @dev Tests frontrunning protection, authorization, and initialization security
-contract LevrCloneSecurityTest is Test {
+contract LevrDeployer_v1_Test is Test {
     LevrFactory_v1 factory;
     LevrDeployer_v1 deployer;
     LevrForwarder_v1 forwarder;
