@@ -18,6 +18,7 @@ import {ILevrDeployer_v1} from '../../src/interfaces/ILevrDeployer_v1.sol';
 import {ClankerFactory_Mock, ClankerTokenForTest_Mock} from '../mocks/ClankerFactory_Mock.sol';
 import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
 import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
+import {RevertingInitializer_Mock, RevertingMetadataToken_Mock} from '../mocks/RevertingMocks.sol';
 
 /// @title LevrDeployer_v1 Test
 /// @notice Comprehensive security testing for clone-based deployment infrastructure
@@ -436,12 +437,23 @@ contract LevrDeployer_v1_Test is Test {
 
     function test_Deployer_OnlyFactoryCanDelegatecall() public {
         // Attacker tries to call deployer directly (not via delegatecall)
+        vm.expectRevert(ILevrDeployer_v1.UnauthorizedFactory.selector);
         vm.prank(attacker);
-        vm.expectRevert();
         deployer.prepareContracts();
 
+        vm.expectRevert(ILevrDeployer_v1.UnauthorizedFactory.selector);
         vm.prank(attacker);
-        vm.expectRevert();
+        deployer.deployProject(address(1), address(2), address(3), new address[](0));
+    }
+
+    function test_Deployer_FactoryAddressCannotCallDirectly() public {
+        // Even the authorized factory address must use delegatecall context
+        vm.expectRevert(ILevrDeployer_v1.UnauthorizedFactory.selector);
+        vm.prank(address(factory));
+        deployer.prepareContracts();
+
+        vm.expectRevert(ILevrDeployer_v1.UnauthorizedFactory.selector);
+        vm.prank(address(factory));
         deployer.deployProject(address(1), address(2), address(3), new address[](0));
     }
 
@@ -488,6 +500,287 @@ contract LevrDeployer_v1_Test is Test {
             abi.encodeWithSignature('prepareContracts()')
         );
         assertFalse(success, 'Unauthorized factory should not be able to use deployer');
+    }
+
+    // ============ Deployer Edge Case Tests ============
+
+    function test_DeployProject_RevertIf_ClankerTokenHasNoCode() public {
+        (LevrDeployer_v1 harnessDeployer, DelegateCallerHarness harness) = _createHarnessDeployer(
+            address(0),
+            address(0),
+            address(0),
+            address(0)
+        );
+        (address treasuryClone, address stakingClone) = _delegatePrepare(harnessDeployer, harness);
+
+        (bool success, bytes memory data) = _delegateDeploy(
+            harnessDeployer,
+            harness,
+            address(0xBEEF),
+            treasuryClone,
+            stakingClone,
+            new address[](0)
+        );
+
+        assertFalse(success, 'deploy should fail when token has no code');
+        assertGt(data.length, 0, 'missing revert data for no-code token');
+    }
+
+    function test_DeployProject_RevertIf_ClankerTokenRevertsMetadata() public {
+        (LevrDeployer_v1 harnessDeployer, DelegateCallerHarness harness) = _createHarnessDeployer(
+            address(0),
+            address(0),
+            address(0),
+            address(0)
+        );
+        (address treasuryClone, address stakingClone) = _delegatePrepare(harnessDeployer, harness);
+
+        RevertingMetadataToken_Mock metadataToken = new RevertingMetadataToken_Mock();
+        (bool success, bytes memory data) = _delegateDeploy(
+            harnessDeployer,
+            harness,
+            address(metadataToken),
+            treasuryClone,
+            stakingClone,
+            new address[](0)
+        );
+
+        assertFalse(success, 'deploy should fail when metadata calls revert');
+        assertEq(
+            bytes4(data),
+            RevertingMetadataToken_Mock.MetadataQueryFailed.selector,
+            'unexpected metadata revert selector'
+        );
+    }
+
+    function test_DeployProject_RevertIf_TreasuryInitFails() public {
+        (LevrDeployer_v1 harnessDeployer, DelegateCallerHarness harness) = _createHarnessDeployer(
+            address(0),
+            address(0),
+            address(0),
+            address(0)
+        );
+        (, address stakingClone) = _delegatePrepare(harnessDeployer, harness);
+
+        ERC20_Mock token = new ERC20_Mock('Harness Token', 'HARN');
+        RevertingInitializer_Mock revertingTreasury = new RevertingInitializer_Mock();
+
+        (bool success, bytes memory data) = _delegateDeploy(
+            harnessDeployer,
+            harness,
+            address(token),
+            address(revertingTreasury),
+            stakingClone,
+            new address[](0)
+        );
+
+        assertFalse(success, 'deploy should fail when treasury initialize reverts');
+        assertEq(
+            bytes4(data),
+            RevertingInitializer_Mock.RevertingInitializerTriggered.selector,
+            'treasury revert selector mismatch'
+        );
+    }
+
+    function test_DeployProject_RevertIf_StakingInitFails() public {
+        (LevrDeployer_v1 harnessDeployer, DelegateCallerHarness harness) = _createHarnessDeployer(
+            address(0),
+            address(0),
+            address(0),
+            address(0)
+        );
+        (address treasuryClone, ) = _delegatePrepare(harnessDeployer, harness);
+
+        ERC20_Mock token = new ERC20_Mock('Harness Token', 'HARN');
+        RevertingInitializer_Mock revertingStaking = new RevertingInitializer_Mock();
+
+        (bool success, bytes memory data) = _delegateDeploy(
+            harnessDeployer,
+            harness,
+            address(token),
+            treasuryClone,
+            address(revertingStaking),
+            new address[](0)
+        );
+
+        assertFalse(success, 'deploy should fail when staking initialize reverts');
+        assertEq(
+            bytes4(data),
+            RevertingInitializer_Mock.RevertingInitializerTriggered.selector,
+            'staking revert selector mismatch'
+        );
+    }
+
+    function test_DeployProject_RevertIf_GovernorInitFails() public {
+        RevertingInitializer_Mock revertingGovernor = new RevertingInitializer_Mock();
+        (LevrDeployer_v1 harnessDeployer, DelegateCallerHarness harness) = _createHarnessDeployer(
+            address(0),
+            address(0),
+            address(revertingGovernor),
+            address(0)
+        );
+        (address treasuryClone, address stakingClone) = _delegatePrepare(harnessDeployer, harness);
+
+        ERC20_Mock token = new ERC20_Mock('Harness Token', 'HARN');
+        (bool success, bytes memory data) = _delegateDeploy(
+            harnessDeployer,
+            harness,
+            address(token),
+            treasuryClone,
+            stakingClone,
+            new address[](0)
+        );
+
+        assertFalse(success, 'deploy should fail when governor initialize reverts');
+        assertEq(
+            bytes4(data),
+            RevertingInitializer_Mock.RevertingInitializerTriggered.selector,
+            'governor revert selector mismatch'
+        );
+    }
+
+    function test_DeployProject_RevertIf_StakedTokenInitFails() public {
+        RevertingInitializer_Mock revertingStakedToken = new RevertingInitializer_Mock();
+        (LevrDeployer_v1 harnessDeployer, DelegateCallerHarness harness) = _createHarnessDeployer(
+            address(0),
+            address(0),
+            address(0),
+            address(revertingStakedToken)
+        );
+        (address treasuryClone, address stakingClone) = _delegatePrepare(harnessDeployer, harness);
+
+        ERC20_Mock token = new ERC20_Mock('Harness Token', 'HARN');
+        (bool success, bytes memory data) = _delegateDeploy(
+            harnessDeployer,
+            harness,
+            address(token),
+            treasuryClone,
+            stakingClone,
+            new address[](0)
+        );
+
+        assertFalse(success, 'deploy should fail when staked token initialize reverts');
+        assertEq(
+            bytes4(data),
+            RevertingInitializer_Mock.RevertingInitializerTriggered.selector,
+            'staked token revert selector mismatch'
+        );
+    }
+
+    function test_DeployProject_PassesWhitelistToStaking() public {
+        StakingInitSpy stakingSpyImpl = new StakingInitSpy();
+        (LevrDeployer_v1 harnessDeployer, DelegateCallerHarness harness) = _createHarnessDeployer(
+            address(0),
+            address(stakingSpyImpl),
+            address(0),
+            address(0)
+        );
+        (address treasuryClone, address stakingClone) = _delegatePrepare(harnessDeployer, harness);
+
+        ERC20_Mock token = new ERC20_Mock('Whitelist Token', 'WLST');
+        address[] memory whitelist = new address[](2);
+        whitelist[0] = address(0xAAA1);
+        whitelist[1] = address(0xBBB2);
+
+        (bool success, ) = _delegateDeploy(
+            harnessDeployer,
+            harness,
+            address(token),
+            treasuryClone,
+            stakingClone,
+            whitelist
+        );
+
+        assertTrue(success, 'delegate deploy should succeed with spy staking implementation');
+
+        address[] memory recorded = StakingInitSpy(stakingClone).getLastWhitelist();
+        assertEq(recorded.length, whitelist.length, 'whitelist length mismatch');
+        for (uint256 i = 0; i < whitelist.length; i++) {
+            assertEq(recorded[i], whitelist[i], 'whitelist entry mismatch');
+        }
+
+        assertEq(
+            StakingInitSpy(stakingClone).initializeCount(),
+            1,
+            'staking should initialize exactly once'
+        );
+        assertEq(
+            StakingInitSpy(stakingClone).lastUnderlying(),
+            address(token),
+            'underlying mismatch'
+        );
+        assertEq(StakingInitSpy(stakingClone).lastTreasury(), treasuryClone, 'treasury mismatch');
+    }
+
+    function _createHarnessDeployer(
+        address treasuryImplOverride,
+        address stakingImplOverride,
+        address governorImplOverride,
+        address stakedTokenImplOverride
+    ) internal returns (LevrDeployer_v1 customDeployer, DelegateCallerHarness harness) {
+        harness = new DelegateCallerHarness();
+        address harnessFactory = address(harness);
+
+        address treasuryImplAddr = treasuryImplOverride;
+        if (treasuryImplAddr == address(0)) {
+            treasuryImplAddr = address(new LevrTreasury_v1(harnessFactory, address(forwarder)));
+        }
+
+        address stakingImplAddr = stakingImplOverride;
+        if (stakingImplAddr == address(0)) {
+            stakingImplAddr = address(new LevrStaking_v1(harnessFactory, address(forwarder)));
+        }
+
+        address governorImplAddr = governorImplOverride;
+        if (governorImplAddr == address(0)) {
+            governorImplAddr = address(new LevrGovernor_v1(harnessFactory, address(forwarder)));
+        }
+
+        address stakedTokenImplAddr = stakedTokenImplOverride;
+        if (stakedTokenImplAddr == address(0)) {
+            stakedTokenImplAddr = address(new LevrStakedToken_v1(harnessFactory));
+        }
+
+        customDeployer = new LevrDeployer_v1(
+            harnessFactory,
+            treasuryImplAddr,
+            stakingImplAddr,
+            governorImplAddr,
+            stakedTokenImplAddr
+        );
+    }
+
+    function _delegatePrepare(
+        LevrDeployer_v1 target,
+        DelegateCallerHarness harness
+    ) internal returns (address treasury, address staking) {
+        (bool success, bytes memory data) = harness.delegateCall(
+            address(target),
+            abi.encodeWithSelector(LevrDeployer_v1.prepareContracts.selector)
+        );
+        assertTrue(success, 'prepareContracts delegatecall failed');
+        (treasury, staking) = abi.decode(data, (address, address));
+    }
+
+    function _delegateDeploy(
+        LevrDeployer_v1 target,
+        DelegateCallerHarness harness,
+        address clankerToken,
+        address treasury_,
+        address staking_,
+        address[] memory whitelist
+    ) internal returns (bool success, bytes memory data) {
+        return
+            harness.delegateCall(
+                address(target),
+                abi.encodeWithSelector(
+                    LevrDeployer_v1.deployProject.selector,
+                    clankerToken,
+                    treasury_,
+                    staking_,
+                    whitelist
+                )
+            );
     }
 
     // ============ Full Flow Integration Tests ============
@@ -655,5 +948,44 @@ contract LevrDeployer_v1_Test is Test {
         // Governor can call
         vm.prank(user);
         // Would succeed if treasury had balance (not testing transfer logic here)
+    }
+}
+
+contract DelegateCallerHarness {
+    function delegateCall(address target, bytes memory data) external returns (bool, bytes memory) {
+        (bool success, bytes memory returnData) = target.delegatecall(data);
+        return (success, returnData);
+    }
+}
+
+contract StakingInitSpy {
+    address[] private _lastWhitelist;
+    address public lastUnderlying;
+    address public lastStakedToken;
+    address public lastTreasury;
+    uint256 public initializeCount;
+
+    function initialize(
+        address underlying,
+        address stakedToken,
+        address treasury,
+        address[] memory whitelist
+    ) external {
+        lastUnderlying = underlying;
+        lastStakedToken = stakedToken;
+        lastTreasury = treasury;
+        initializeCount++;
+
+        delete _lastWhitelist;
+        for (uint256 i = 0; i < whitelist.length; i++) {
+            _lastWhitelist.push(whitelist[i]);
+        }
+    }
+
+    function getLastWhitelist() external view returns (address[] memory whitelist) {
+        whitelist = new address[](_lastWhitelist.length);
+        for (uint256 i = 0; i < _lastWhitelist.length; i++) {
+            whitelist[i] = _lastWhitelist[i];
+        }
     }
 }
