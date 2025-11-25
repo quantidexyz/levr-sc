@@ -54,8 +54,19 @@ interface ILevrForwarder_v1 {
     /// @notice ETH transfer failed
     error ETHTransferFailed();
 
+    /// @notice Token transfer failed
+    error TokenTransferFailed();
+
     /// @notice Caller is not the deployer
     error OnlyDeployer();
+
+    /// @notice Target contract trusts this forwarder, use executeMulticall instead
+    /// @param target The target contract that is trusted
+    error TargetTrustsForwarder(address target);
+
+    /// @notice Attempted to call executeTransaction on a forbidden target (e.g. ERC20 held by forwarder)
+    /// @param target The target contract that is forbidden
+    error ForbiddenTarget(address target);
 
     // ============ Functions ============
 
@@ -99,6 +110,14 @@ interface ILevrForwarder_v1 {
     ///      Reverts with NoETHToWithdraw if balance is zero
     ///      Reverts with ETHTransferFailed if transfer fails
     function withdrawTrappedETH() external;
+
+    /// @notice Withdraw any ERC20 tokens accidentally trapped in the forwarder
+    /// @dev Only deployer can call this function
+    ///      Protected by nonReentrant modifier
+    ///      Reverts with OnlyDeployer if caller is not deployer
+    /// @param token The ERC20 token to withdraw
+    /// @param amount The amount to withdraw
+    function withdrawTrappedTokens(address token, uint256 amount) external;
 
     /// @notice Get the address of the forwarder deployer
     /// @return The deployer address (immutable, set at construction)

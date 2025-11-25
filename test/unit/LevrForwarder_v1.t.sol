@@ -11,6 +11,7 @@ import {ReentrantAttacker_Mock} from '../mocks/ReentrantAttacker_Mock.sol';
 import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.sol';
 import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 
 contract LevrForwarder_v1_Test is Test {
     bytes32 private constant _REQUEST_TYPEHASH =
@@ -235,6 +236,25 @@ contract LevrForwarder_v1_Test is Test {
         _forwarder.executeTransaction(address(_plainTarget), '');
     }
 
+    function test_ExecuteTransaction_RevertIf_TargetTrustsForwarder() public {
+        ILevrForwarder_v1.SingleCall[] memory calls = new ILevrForwarder_v1.SingleCall[](1);
+        calls[0] = ILevrForwarder_v1.SingleCall({
+            target: address(_forwarder),
+            allowFailure: false,
+            value: 0,
+            callData: abi.encodeWithSelector(
+                LevrForwarder_v1.executeTransaction.selector,
+                address(_trustedTarget),
+                ''
+            )
+        });
+
+        // The inner call reverts with TargetTrustsForwarder
+        // But because it's inside executeMulticall, executeMulticall catches it and reverts with CallFailed
+        vm.expectRevert(abi.encodeWithSelector(ILevrForwarder_v1.CallFailed.selector, calls[0]));
+        _forwarder.executeMulticall(calls);
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // withdrawTrappedETH
 
@@ -269,6 +289,28 @@ contract LevrForwarder_v1_Test is Test {
 
         vm.expectRevert(ILevrForwarder_v1.ETHTransferFailed.selector);
         rejector.triggerWithdraw(rejectForwarder);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // withdrawTrappedTokens
+
+    function test_WithdrawTrappedTokens_RevertIf_NotDeployer() public {
+        ERC20_Mock token = new ERC20_Mock('Mock', 'MCK');
+        vm.prank(_alice);
+        vm.expectRevert(ILevrForwarder_v1.OnlyDeployer.selector);
+        _forwarder.withdrawTrappedTokens(address(token), 1 ether);
+    }
+
+    function test_WithdrawTrappedTokens_Success() public {
+        ERC20_Mock token = new ERC20_Mock('Mock', 'MCK');
+        token.mint(address(_forwarder), 1 ether);
+
+        assertEq(token.balanceOf(address(_forwarder)), 1 ether);
+
+        _forwarder.withdrawTrappedTokens(address(token), 1 ether);
+
+        assertEq(token.balanceOf(address(_forwarder)), 0);
+        assertEq(token.balanceOf(address(this)), 1 ether);
     }
 
     ///////////////////////////////////////////////////////////////////////////
