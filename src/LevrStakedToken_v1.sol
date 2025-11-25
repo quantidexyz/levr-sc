@@ -5,22 +5,39 @@ import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {ILevrStakedToken_v1} from './interfaces/ILevrStakedToken_v1.sol';
 
 contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
-    address public immutable override underlying;
-    address public immutable override staking;
-    uint8 private immutable _decimals;
+    address public immutable factory;
 
-    constructor(
+    address public override underlying;
+    address public override staking;
+
+    uint8 private _decimalsValue;
+    string private _nameValue;
+    string private _symbolValue;
+    bool private _initialized;
+
+    constructor(address factory_) ERC20('', '') {
+        if (factory_ == address(0)) revert ZeroAddress();
+        factory = factory_;
+    }
+
+    /// @inheritdoc ILevrStakedToken_v1
+    function initialize(
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
         address underlying_,
         address staking_
-    ) ERC20(name_, symbol_) {
+    ) external override {
+        if (_initialized) revert AlreadyInitialized();
+        if (_msgSender() != factory) revert OnlyFactory();
         if (underlying_ == address(0) || staking_ == address(0)) revert ZeroAddress();
 
         underlying = underlying_;
         staking = staking_;
-        _decimals = decimals_;
+        _decimalsValue = decimals_;
+        _nameValue = name_;
+        _symbolValue = symbol_;
+        _initialized = true;
     }
 
     /// @inheritdoc ILevrStakedToken_v1
@@ -37,9 +54,19 @@ contract LevrStakedToken_v1 is ERC20, ILevrStakedToken_v1 {
         emit Burn(from, amount);
     }
 
+    /// @inheritdoc ERC20
+    function name() public view override returns (string memory) {
+        return _nameValue;
+    }
+
+    /// @inheritdoc ERC20
+    function symbol() public view override returns (string memory) {
+        return _symbolValue;
+    }
+
     /// @inheritdoc ILevrStakedToken_v1
     function decimals() public view override(ERC20, ILevrStakedToken_v1) returns (uint8) {
-        return _decimals;
+        return _decimalsValue;
     }
 
     /// @notice Block transfers (staked tokens are non-transferable positions)

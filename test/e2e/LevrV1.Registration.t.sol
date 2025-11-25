@@ -39,7 +39,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test registering an existing Clanker token
      * Matches use case: existing-token.screen.tsx register flow
      */
-    function test_RegisterExistingToken() public {
+    function test_e2e_RegisterExistingToken() public {
         // Prepare infrastructure first
         factory.prepareForDeployment();
 
@@ -73,7 +73,7 @@ contract LevrV1_RegistrationE2E is BaseForkTest, LevrFactoryDeployHelper {
      * @notice Test updating fee receiver to staking contract
      * Matches use case: existing-token.screen.tsx update fee receiver flow
      */
-    function test_UpdateFeeReceiverToStaking() public {
+    function test_e2e_UpdateFeeReceiverToStaking() public {
         // Prepare infrastructure first
         factory.prepareForDeployment();
 

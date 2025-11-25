@@ -5,6 +5,7 @@ import {ERC2771Forwarder} from '@openzeppelin/contracts/metatx/ERC2771Forwarder.
 import {ERC2771Context} from '@openzeppelin/contracts/metatx/ERC2771Context.sol';
 import {Context} from '@openzeppelin/contracts/utils/Context.sol';
 import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {ILevrForwarder_v1} from './interfaces/ILevrForwarder_v1.sol';
 
 /**
@@ -78,6 +79,11 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
         // Only callable via executeMulticall (prevents impersonation)
         if (msg.sender != address(this)) revert OnlyMulticallCanExecuteTransaction();
 
+        // Prevent calling trusted targets via executeTransaction to avoid ERC2771 spoofing
+        if (_isTrustedByTarget(target)) {
+            revert TargetTrustsForwarder(target);
+        }
+
         (success, returnData) = target.call{value: msg.value}(data);
     }
 
@@ -99,6 +105,16 @@ contract LevrForwarder_v1 is ILevrForwarder_v1, ERC2771Forwarder, ReentrancyGuar
         // Send ETH to deployer
         (bool success, ) = payable(deployer).call{value: balance}('');
         if (!success) revert ETHTransferFailed();
+    }
+
+    /// @inheritdoc ILevrForwarder_v1
+    function withdrawTrappedTokens(address token, uint256 amount) external nonReentrant {
+        // Only deployer can withdraw trapped tokens
+        if (msg.sender != deployer) revert OnlyDeployer();
+
+        // Send tokens to deployer
+        bool success = IERC20(token).transfer(deployer, amount);
+        if (!success) revert TokenTransferFailed();
     }
 
     // ============ Internal Functions ============

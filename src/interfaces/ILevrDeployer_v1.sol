@@ -50,6 +50,10 @@ interface ILevrDeployer_v1 {
     /// @return The governor implementation contract address
     function governorImplementation() external view returns (address);
 
+    /// @notice Implementation address used for staked token clones
+    /// @return The staked token implementation contract address
+    function stakedTokenImplementation() external view returns (address);
+
     /// @notice Prepare treasury and staking contracts (called via delegatecall)
     /// @dev Executed in factory context to reduce factory bytecode size
     ///      Uses minimal proxy clones to reduce deployment gas and bytecode
@@ -61,7 +65,7 @@ interface ILevrDeployer_v1 {
     /// @dev Called via delegatecall from factory during register()
     ///      During delegatecall, address(this) is the calling contract's address
     ///      This function reverts if address(this) != authorizedFactory
-    ///      Governor, treasury, and staking use clones; stakedToken is deployed as new instance
+    ///      All contracts (treasury, staking, governor, stakedToken) use clones with initialize flows
     /// @param clankerToken The underlying Clanker token address
     /// @param treasury_ Pre-deployed treasury address from prepareContracts()
     /// @param staking_ Pre-deployed staking address from prepareContracts()

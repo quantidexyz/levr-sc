@@ -150,7 +150,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 1: Full Governance Cycle ============
 
-    function test_FullGovernanceCycle() public {
+    function test_e2e_FullGovernanceCycle() public {
         // Setup: 3 users stake different amounts at different times
         // Locker has ~22 ether, so use smaller amounts
         _stakeFor(alice, 5 ether); // Alice stakes at T0
@@ -243,7 +243,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 2: Anti-Gaming - Staking Reset ============
 
-    function test_AntiGaming_StakingReset() public {
+    function test_e2e_AntiGaming_StakingReset() public {
         // Alice stakes 5 tokens
         _stakeFor(alice, 5 ether);
 
@@ -287,7 +287,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 3: Anti-Gaming - Time-Weighted VP Protects Against Late Staking ============
 
-    function test_AntiGaming_LastMinuteStaking() public {
+    function test_e2e_AntiGaming_LastMinuteStaking() public {
         // Alice stakes early
         _stakeFor(alice, 5 ether);
 
@@ -339,7 +339,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 4: Concurrency Limits ============
 
-    function test_ConcurrencyLimits() public {
+    function test_e2e_ConcurrencyLimits() public {
         // Give alice enough tokens to meet minStake requirement
         _stakeFor(alice, 15 ether); // Use most of locker balance
 
@@ -373,7 +373,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 5: Quorum Not Met ============
 
-    function test_QuorumNotMet() public {
+    function test_e2e_QuorumNotMet() public {
         // Setup initial supply
         _stakeFor(bob, 10 ether);
 
@@ -429,7 +429,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 6: Approval Not Met ============
 
-    function test_ApprovalNotMet() public {
+    function test_e2e_ApprovalNotMet() public {
         // Stake for alice, bob, charlie with equal amounts
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 5 ether);
@@ -476,7 +476,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 7: Only Winner Executes ============
 
-    function test_OnlyWinnerExecutes() public {
+    function test_e2e_OnlyWinnerExecutes() public {
         // Stake for users
         _stakeFor(alice, 4 ether);
         _stakeFor(bob, 6 ether);
@@ -544,7 +544,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 8: Minimum Stake To Propose ============
 
-    function test_MinimumStakeToPropose() public {
+    function test_e2e_MinimumStakeToPropose() public {
         // First, create some supply by having bob stake
         _stakeFor(bob, 10 ether);
 
@@ -582,7 +582,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 9: Proposal Window Timing & Auto-Cycle Management ============
 
-    function test_ProposalWindowTiming() public {
+    function test_e2e_ProposalWindowTiming() public {
         // Alice has enough stake
         _stakeFor(alice, 15 ether);
 
@@ -645,7 +645,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
     //
     // Related: https://github.com/xxx/issues/xxx
 
-    function test_SingleProposalStateConsistency_MeetsQuorumAndApproval() public {
+    function test_e2e_SingleProposalStateConsistency_MeetsQuorumAndApproval() public {
         // Setup: Single staker with votes
         uint256 stakeAmount = 10 ether;
         _stakeFor(alice, stakeAmount);
@@ -741,7 +741,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 11: Cannot Start New Cycle With Executable Proposals ============
 
-    function test_cannotStartNewCycleWithExecutableProposals() public {
+    function test_e2e_cannotStartNewCycleWithExecutableProposals() public {
         // Setup: Single user with sufficient voting power
         _stakeFor(alice, 10 ether);
 
@@ -800,7 +800,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 12: Can Start New Cycle After Executing All Proposals ============
 
-    function test_canStartNewCycleAfterExecutingProposals() public {
+    function test_e2e_canStartNewCycleAfterExecutingProposals() public {
         // Setup: Multiple proposals, only one is winner
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 10 ether);
@@ -887,7 +887,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 13: Can Start New Cycle If Proposal Is Defeated ============
 
-    function test_canStartNewCycleIfProposalDefeated() public {
+    function test_e2e_canStartNewCycleIfProposalDefeated() public {
         // Setup: Create a proposal that will fail quorum (not enough participation)
         _stakeFor(alice, 5 ether);
         _stakeFor(bob, 5 ether);
@@ -927,7 +927,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
 
     // ============ Test 14: Supply Invariant Testing - Comprehensive Snapshot Behavior ============
 
-    function test_supplyInvariant_tinySupplyAtCreation_singleVoterCanPass() public {
+    function test_e2e_supplyInvariant_tinySupplyAtCreation_singleVoterCanPass() public {
         // SCENARIO 1: Proposal created with TINY supply (1 token), then supply explodes
         // EDGE CASE: Single early voter can meet quorum alone (snapshot is tiny)
         // This demonstrates potential manipulation if early proposer colludes
@@ -974,7 +974,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // if the original stakers vote, regardless of how much supply grows later
     }
 
-    function test_supplyInvariant_supplyIncreaseAfterCreation() public {
+    function test_e2e_supplyInvariant_supplyIncreaseAfterCreation() public {
         // SCENARIO 2: Proposal created with 10 ether supply, then supply DOUBLES to 20 ether
         // EXPECTED: Quorum uses snapshot (10 ether), so 70% quorum = 7 ether minimum
 
@@ -1021,7 +1021,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // This demonstrates that new stakers AFTER proposal don't affect quorum calculation
     }
 
-    function test_supplyInvariant_supplyDecreaseAfterCreation() public {
+    function test_e2e_supplyInvariant_supplyDecreaseAfterCreation() public {
         // SCENARIO 3: Proposal created with 20 ether supply, then supply HALVES to 10 ether
         // EXPECTED: Quorum uses snapshot (20 ether), so 70% quorum = 14 ether minimum
 
@@ -1068,7 +1068,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         assertEq(uint256(prop.state), 2, 'Succeeded');
     }
 
-    function test_supplyInvariant_extremeSupplyIncrease() public {
+    function test_e2e_supplyInvariant_extremeSupplyIncrease() public {
         // SCENARIO 4: Proposal created with 1 ether supply, then 10x increase to 10 ether
         // EXPECTED: Quorum uses snapshot (1 ether), so 70% = 0.7 ether minimum
 
@@ -1112,7 +1112,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // if most original stakers vote, even if supply explodes later
     }
 
-    function test_supplyInvariant_extremeSupplyDecrease() public {
+    function test_e2e_supplyInvariant_extremeSupplyDecrease() public {
         // SCENARIO 5: Proposal created with 10 ether supply, then 70% decrease to 3 ether
         // WITH ADAPTIVE QUORUM: Quorum adapts to current supply to prevent deadlock
         // Adaptive quorum = 70% of current (3 ether) = 2.1 ether (remaining voters can pass)
@@ -1167,7 +1167,7 @@ contract LevrV1_GovernanceE2E is BaseForkTest, LevrFactoryDeployHelper {
         // Remaining stakers can pass proposals even after mass exodus
     }
 
-    function test_supplyInvariant_multipleProposalsDifferentSnapshots() public {
+    function test_e2e_supplyInvariant_multipleProposalsDifferentSnapshots() public {
         // SCENARIO 6: Multiple proposals created at different times with different snapshots
         // EXPECTED: Each proposal uses its own snapshot for quorum calculation
 

@@ -1,0 +1,121 @@
+---
+globs: test/**/*.t.sol
+---
+
+// Function Category
+
+    /* Test: functionName */
+
+````
+
+#### d. Test Internal Functions
+
+**Note:** Create a placeholder (`/* Test: _internalFunction */`) for **each internal function** in the contract, organized by category, to ensure tests are positioned correctly. Gherkin scenarios are added during implementation following guidance from `@test-internal-functions.mdc`.
+
+```solidity
+    ///////////////////////////////////////////////////////////////////////////
+    // Test Internal Functions
+
+    // ========================================================================
+    // Internal Functions
+
+    // ----
+    // Internal - Function Category
+
+    /* Test: _internalFunction */
+````
+
+### 7. Helper Functions
+
+```solidity
+    ///////////////////////////////////////////////////////////////////////////
+    // Helper Functions
+}
+```
+
+## Exposed Mock Contract
+
+Create an exposed version in `test/mocks/` to test internal functions:
+
+```solidity
+// SPDX-License-Identifier: LGPL-3.0-only
+pragma solidity 0.8.30;
+
+import {ContractName} from "src/path/ContractName.sol";
+
+contract ContractName_Exposed is ContractName {
+    constructor(/* params */) ContractName(/* params */) {}
+
+    function exposed_internalFunction(/* params */) external {
+        _internalFunction(/* params */);
+    }
+}
+```
+
+## Naming Conventions
+
+- Test contract: `ContractName_Test`
+- Test functions: `test_FunctionName_Condition` or `test_InternalFunction_Condition`
+- Exposed contract: `ContractName_Exposed`
+- Exposed functions: `exposed_internalFunction`
+- State variables: `_variableName`
+- Function parameters: `paramName_` (trailing underscore)
+
+## Section Order
+
+1. Test Initialization (constructor, initialize)
+2. Test Modifiers (if any isolation tests needed)
+3. Test External Functions
+   - View / Pure
+   - State Modifying (by category)
+   - Admin / Restricted
+4. Test Internal Functions (by category)
+5. Helper Functions
+
+## Example Template
+
+```solidity
+// SPDX-License-Identifier: LGPL-3.0-only
+pragma solidity 0.8.30;
+
+import {Test} from "forge-std/Test.sol";
+import {ContractName} from "src/ContractName.sol";
+
+contract ContractName_Test is Test {
+    ContractName internal _contract;
+    address internal _admin = makeAddr("admin");
+    address internal _user = makeAddr("user");
+
+    function setUp() public {
+        vm.prank(_admin);
+        _contract = new ContractName();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Test Initialization
+
+    /* Test: constructor */
+    /* Test: initialize */
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Test External Functions
+
+    // ========================================================================
+    // External Functions
+
+    // ----
+    // Category 1
+
+    /* Test: functionOne */
+
+    // ----
+    // Category 2
+
+    /* Test: functionTwo */
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Test Internal Functions
+
+    // ...
+}
+```

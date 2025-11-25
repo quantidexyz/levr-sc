@@ -11,8 +11,8 @@ import {LevrStaking_v1} from '../../src/LevrStaking_v1.sol';
 import {LevrGovernor_v1} from '../../src/LevrGovernor_v1.sol';
 import {LevrStakedToken_v1} from '../../src/LevrStakedToken_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
-import {MockClankerFactory} from '../mocks/MockClankerFactory.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
+import {ClankerFactory_Mock} from '../mocks/ClankerFactory_Mock.sol';
 
 /// @title Levr Factory Deployment Helper
 /// @notice Helper contract for deploying LevrFactory_v1 with all dependencies in tests
@@ -74,30 +74,31 @@ contract LevrFactoryDeployHelper is Test {
         forwarder = new LevrForwarder_v1('LevrForwarder_v1');
 
         // Step 2: Calculate factory address (will be deployed after implementations and deployer)
-        // Current nonce is after forwarder, +3 implementations, +1 deployer logic, +1 for factory
+        // Current nonce is after forwarder, +4 implementations, +1 deployer logic, +1 for factory
         uint64 currentNonce = vm.getNonce(address(this));
-        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 4);
+        address predictedFactory = vm.computeCreateAddress(address(this), currentNonce + 5);
 
         // Step 3: Deploy implementation contracts with predicted factory
         LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
         LevrStaking_v1 stakingImpl = new LevrStaking_v1(predictedFactory, address(forwarder));
         LevrGovernor_v1 governorImpl = new LevrGovernor_v1(predictedFactory, address(forwarder));
+        LevrStakedToken_v1 stakedTokenImpl = new LevrStakedToken_v1(predictedFactory);
 
         // Step 4: Deploy deployer logic with predicted factory address and implementations
-        // Note: StakedToken is deployed as new instance per project, not cloned
         levrDeployer = new LevrDeployer_v1(
             predictedFactory,
             address(treasuryImpl),
             address(stakingImpl),
-            address(governorImpl)
+            address(governorImpl),
+            address(stakedTokenImpl)
         );
 
         // Step 5: Deploy mock WETH at hardcoded Base WETH address (if not already deployed)
         address weth = 0x4200000000000000000000000000000000000006; // Base WETH
         if (weth.code.length == 0) {
-            // Deploy MockERC20 at this address using deployCodeTo
+            // Deploy ERC20_Mock at this address using deployCodeTo
             deployCodeTo(
-                'test/mocks/MockERC20.sol:MockERC20',
+                'test/mocks/ERC20_Mock.sol:ERC20_Mock',
                 abi.encode('Wrapped Ether', 'WETH'),
                 weth
             );
@@ -164,7 +165,7 @@ contract LevrFactoryDeployHelper is Test {
         // If running in unit test mode (Clanker factory not deployed), deploy a mock factory
         // In fork tests, the real Clanker factory will have code deployed
         if (clankerFactory.code.length == 0) {
-            MockClankerFactory mockFactory = new MockClankerFactory();
+            ClankerFactory_Mock mockFactory = new ClankerFactory_Mock();
             clankerFactory = address(mockFactory);
             mockClankerFactory = clankerFactory;
         }
@@ -173,24 +174,24 @@ contract LevrFactoryDeployHelper is Test {
     }
 
     /// @notice Register a token with the mock Clanker factory (for unit tests)
-    /// @dev This allows MockERC20 tokens to pass Clanker factory validation
+    /// @dev This allows ERC20_Mock tokens to pass Clanker factory validation
     /// @param token Token address to register
     function registerTokenWithMockClanker(address token) internal {
         if (mockClankerFactory != address(0)) {
-            MockClankerFactory(mockClankerFactory).registerToken(token);
+            ClankerFactory_Mock(mockClankerFactory).registerToken(token);
         }
     }
 
     /// @notice Create default factory configuration for tests
-    /// @param protocolTreasury Protocol treasury address
+    /// @param protocolTreasury_ Protocol treasury address
     /// @return cfg Default configuration
     function createDefaultConfig(
-        address protocolTreasury
+        address protocolTreasury_
     ) internal pure returns (ILevrFactory_v1.FactoryConfig memory cfg) {
         cfg = ILevrFactory_v1.FactoryConfig({
             protocolFeeBps: 0,
             streamWindowSeconds: 3 days,
-            protocolTreasury: protocolTreasury,
+            protocolTreasury: protocolTreasury_,
             proposalWindowSeconds: 2 days,
             votingWindowSeconds: 5 days,
             maxActiveProposals: 7,
@@ -310,8 +311,9 @@ contract LevrFactoryDeployHelper is Test {
         address underlying,
         address staking
     ) internal returns (LevrStakedToken_v1) {
-        // Deploy new instance directly (no clone pattern)
-        return new LevrStakedToken_v1(name, symbol, decimals, underlying, staking);
+        LevrStakedToken_v1 token = new LevrStakedToken_v1(address(this));
+        token.initialize(name, symbol, decimals, underlying, staking);
+        return token;
     }
 
     /// @notice Create an initialized governor for unit tests
@@ -367,7 +369,8 @@ contract LevrFactoryDeployHelper is Test {
         LevrTreasury_v1 ti = new LevrTreasury_v1(factory, address(0));
         LevrStaking_v1 si = new LevrStaking_v1(factory, address(0));
         LevrGovernor_v1 gi = new LevrGovernor_v1(factory, address(0));
+        LevrStakedToken_v1 sti = new LevrStakedToken_v1(factory);
 
-        return new LevrDeployer_v1(factory, address(ti), address(si), address(gi));
+        return new LevrDeployer_v1(factory, address(ti), address(si), address(gi), address(sti));
     }
 }

@@ -10,6 +10,7 @@ import {LevrFeeSplitterFactory_v1} from '../src/LevrFeeSplitterFactory_v1.sol';
 import {LevrTreasury_v1} from '../src/LevrTreasury_v1.sol';
 import {LevrStaking_v1} from '../src/LevrStaking_v1.sol';
 import {LevrGovernor_v1} from '../src/LevrGovernor_v1.sol';
+import {LevrStakedToken_v1} from '../src/LevrStakedToken_v1.sol';
 
 /**
  * @title DeployLevr
@@ -311,10 +312,10 @@ contract DeployLevr is Script {
         console.log('');
 
         // 2. Calculate the factory address BEFORE deploying implementations
-        // The factory will be deployed at nonce = vm.getNonce(params.deployer) + 4
-        // (current nonce + forwarder=1, +3 implementations, +1 deployer logic, +1 factory)
+        // The factory will be deployed at nonce = vm.getNonce(params.deployer) + 5
+        // (current nonce + forwarder=1, +4 implementations, +1 deployer logic, +1 factory)
         uint64 currentNonce = vm.getNonce(params.deployer);
-        address predictedFactory = vm.computeCreateAddress(params.deployer, currentNonce + 4);
+        address predictedFactory = vm.computeCreateAddress(params.deployer, currentNonce + 5);
         console.log('Predicted Factory Address:', predictedFactory);
         console.log('Current Deployer Nonce:', currentNonce);
         console.log('');
@@ -324,10 +325,11 @@ contract DeployLevr is Script {
         LevrTreasury_v1 treasuryImpl = new LevrTreasury_v1(predictedFactory, address(forwarder));
         LevrStaking_v1 stakingImpl = new LevrStaking_v1(predictedFactory, address(forwarder));
         LevrGovernor_v1 governorImpl = new LevrGovernor_v1(predictedFactory, address(forwarder));
+        LevrStakedToken_v1 stakedTokenImpl = new LevrStakedToken_v1(predictedFactory);
         console.log('- Treasury Implementation:', address(treasuryImpl));
         console.log('- Staking Implementation:', address(stakingImpl));
         console.log('- Governor Implementation:', address(governorImpl));
-        console.log('- Note: StakedToken is deployed as new instance per project, not cloned');
+        console.log('- Staked Token Implementation:', address(stakedTokenImpl));
         console.log('');
 
         // 4. Deploy the deployer logic contract with predicted factory address and implementations
@@ -336,7 +338,8 @@ contract DeployLevr is Script {
             predictedFactory,
             address(treasuryImpl),
             address(stakingImpl),
-            address(governorImpl)
+            address(governorImpl),
+            address(stakedTokenImpl)
         );
         console.log('- Deployer Logic deployed at:', address(levrDeployer));
         console.log('- Authorized Factory:', levrDeployer.authorizedFactory());

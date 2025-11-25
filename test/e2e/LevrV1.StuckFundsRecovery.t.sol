@@ -12,9 +12,9 @@ import {LevrFeeSplitter_v1} from '../../src/LevrFeeSplitter_v1.sol';
 import {ILevrFactory_v1} from '../../src/interfaces/ILevrFactory_v1.sol';
 import {ILevrGovernor_v1} from '../../src/interfaces/ILevrGovernor_v1.sol';
 import {ILevrFeeSplitter_v1} from '../../src/interfaces/ILevrFeeSplitter_v1.sol';
-import {MockERC20} from '../mocks/MockERC20.sol';
+import {ERC20_Mock} from '../mocks/ERC20_Mock.sol';
 
-import {MockClankerToken} from '../mocks/MockClankerToken.sol';
+import {ClankerToken_Mock} from '../mocks/ClankerToken_Mock.sol';
 
 /**
  * @title LevrV1 Stuck Funds Recovery E2E Test Suite
@@ -28,19 +28,19 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
     LevrTreasury_v1 internal treasury;
     LevrStakedToken_v1 internal sToken;
     LevrFeeSplitter_v1 internal feeSplitter;
-    MockERC20 internal underlying;
-    MockERC20 internal weth;
+    ERC20_Mock internal underlying;
+    ERC20_Mock internal weth;
 
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
     address internal charlie = address(0xC1E);
 
-    MockClankerToken internal clankerToken;
+    ClankerToken_Mock internal clankerToken;
 
     function setUp() public {
-        underlying = new MockERC20('Underlying', 'UND');
-        weth = new MockERC20('WETH', 'WETH');
-        clankerToken = new MockClankerToken('Clanker', 'CLK', address(this));
+        underlying = new ERC20_Mock('Underlying', 'UND');
+        weth = new ERC20_Mock('WETH', 'WETH');
+        clankerToken = new ClankerToken_Mock('Clanker', 'CLK', address(this));
 
         // Deploy factory
         ILevrFactory_v1.FactoryConfig memory config = ILevrFactory_v1.FactoryConfig({
@@ -482,8 +482,8 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         console2.log('\n=== E2E: Multi-Token Zero-Staker Preservation ===');
 
         // 1. Accrue multiple reward tokens with no stakers
-        MockERC20 token1 = new MockERC20('Token1', 'TK1');
-        MockERC20 token2 = new MockERC20('Token2', 'TK2');
+        ERC20_Mock token1 = new ERC20_Mock('Token1', 'TK1');
+        ERC20_Mock token2 = new ERC20_Mock('Token2', 'TK2');
 
         // Whitelist tokens before accruing rewards
         staking.whitelistToken(address(token1));
@@ -583,9 +583,9 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         uint256 rewardAmount = sToken.totalSupply();
 
         // 2. Add multiple reward tokens (all must be whitelisted)
-        MockERC20[] memory tokens = new MockERC20[](10);
+        ERC20_Mock[] memory tokens = new ERC20_Mock[](10);
         for (uint256 i = 0; i < 9; i++) {
-            tokens[i] = new MockERC20(string(abi.encodePacked('Token', vm.toString(i))), 'TK');
+            tokens[i] = new ERC20_Mock(string(abi.encodePacked('Token', vm.toString(i))), 'TK');
             staking.whitelistToken(address(tokens[i]));
             tokens[i].mint(address(staking), rewardAmount);
             staking.accrueRewards(address(tokens[i]));
@@ -594,12 +594,12 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
         console2.log('9 tokens added (10 total with underlying)');
 
         // 3. Add more tokens (no limit with whitelist-only system)
-        MockERC20 extra1 = new MockERC20('Extra1', 'EX1');
+        ERC20_Mock extra1 = new ERC20_Mock('Extra1', 'EX1');
         staking.whitelistToken(address(extra1));
         extra1.mint(address(staking), rewardAmount);
         staking.accrueRewards(address(extra1));
 
-        MockERC20 extra2 = new MockERC20('Extra2', 'EX2');
+        ERC20_Mock extra2 = new ERC20_Mock('Extra2', 'EX2');
         staking.whitelistToken(address(extra2));
         extra2.mint(address(staking), rewardAmount);
         staking.accrueRewards(address(extra2));
@@ -672,7 +672,7 @@ contract LevrV1_StuckFundsRecoveryTest is Test, LevrFactoryDeployHelper {
 
         // 4. Issue 3: Add multiple reward tokens (must whitelist first)
         for (uint256 i = 0; i < 9; i++) {
-            MockERC20 token = new MockERC20('TK', 'TK');
+            ERC20_Mock token = new ERC20_Mock('TK', 'TK');
             staking.whitelistToken(address(token));
             token.mint(address(staking), 10 ether);
             staking.accrueRewards(address(token));

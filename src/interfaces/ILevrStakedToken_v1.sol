@@ -17,6 +17,12 @@ interface ILevrStakedToken_v1 is IERC20 {
     /// @notice Revert if attempting to modify underlying (staked tokens are non-transferable)
     error CannotModifyUnderlying();
 
+    /// @notice Revert if the contract has already been initialized
+    error AlreadyInitialized();
+
+    /// @notice Revert if caller is not the factory during initialize
+    error OnlyFactory();
+
     // ============ Events ============
 
     /// @notice Emitted when tokens are minted to `to`.
@@ -26,6 +32,20 @@ interface ILevrStakedToken_v1 is IERC20 {
     event Burn(address indexed from, uint256 amount);
 
     // ============ Functions ============
+
+    /// @notice Initialize clone metadata and wiring.
+    /// @param name_ Token name (e.g., Levr Staked CLANKER)
+    /// @param symbol_ Token symbol (e.g., sCLANKER)
+    /// @param decimals_ Number of decimals (mirrors underlying)
+    /// @param underlying_ Underlying token being staked
+    /// @param staking_ Staking contract that can mint/burn
+    function initialize(
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        address underlying_,
+        address staking_
+    ) external;
 
     /// @notice Mint staked tokens (staking-only).
     function mint(address to, uint256 amount) external;

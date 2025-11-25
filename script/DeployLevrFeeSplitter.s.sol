@@ -54,6 +54,11 @@ contract DeployLevrFeeSplitter is Script {
     // Minimum ETH balance required for deployment (0.05 ETH)
     uint256 constant MIN_DEPLOYER_BALANCE = 0.05 ether;
 
+    /// @notice Returns true when the provided chain id is supported by the deploy script
+    function isSupportedNetwork(uint256 chainId) public pure returns (bool) {
+        return chainId == 8453 || chainId == 84532;
+    }
+
     function run() external {
         // =======================================================================
         // CONFIGURATION - READ FROM ENVIRONMENT
@@ -80,7 +85,7 @@ contract DeployLevrFeeSplitter is Script {
 
         // Validate network is supported (Base mainnet or Base Sepolia)
         require(
-            block.chainid == 8453 || block.chainid == 84532,
+            isSupportedNetwork(block.chainid),
             'Unsupported network - deploy on Base mainnet (8453) or Base Sepolia (84532)'
         );
 
