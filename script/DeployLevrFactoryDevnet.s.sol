@@ -169,8 +169,12 @@ contract DeployLevrFactoryDevnet is Script {
         );
         console.log('Factory address verified:', address(factory));
 
-        // Add Base mainnet Clanker factory to trusted list
-        address clankerFactory = 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+        // Add Clanker factory to trusted list
+        // Use env var for anvil/devnet, fallback to mainnet address
+        address clankerFactory = vm.envOr(
+            'CLANKER_FACTORY_ADDRESS',
+            address(0xE85A59c628F7d27878ACeB4bf3b35733630083a9)
+        );
         console.log('Adding Clanker factory to trusted list...');
         factory.addTrustedClankerFactory(clankerFactory);
         console.log('Clanker factory trusted:', clankerFactory);
