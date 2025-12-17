@@ -26,11 +26,13 @@ optimism-sepolia = "https://lb.drpc.live/optimism-sepolia/${DRPC_API_KEY}"
 base-sepolia = "https://lb.drpc.live/base-sepolia/${DRPC_API_KEY}"
 sepolia = "https://lb.drpc.live/sepolia/${DRPC_API_KEY}"
 base-mainnet = "https://lb.drpc.live/base/${DRPC_API_KEY}"
+bnb-mainnet = "https://lb.drpc.org/ogrpc?network=bsc&dkey=${DRPC_API_KEY}"
 
 [etherscan]
 optimism-sepolia = { key = "${ETHERSCAN_KEY}", url = "https://api.etherscan.io/v2/api?chainid=11155420" }
 base-sepolia = { key = "${ETHERSCAN_KEY}", url = "https://api.etherscan.io/v2/api?chainid=84532" }
 sepolia = { key = "${ETHERSCAN_KEY}", url = "https://api.etherscan.io/v2/api?chainid=11155111" }
 base-mainnet = { key = "${ETHERSCAN_KEY}", url = "https://api.etherscan.io/v2/api?chainid=8453" }
+bnb-mainnet = { key = "${ETHERSCAN_KEY}", url = "https://api.etherscan.io/v2/api?chainid=56" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

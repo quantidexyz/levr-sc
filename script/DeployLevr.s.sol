@@ -63,8 +63,6 @@ import {LevrStakedToken_v1} from '../src/LevrStakedToken_v1.sol';
  *
  * Safety checks:
  * - Validates network is supported (Base mainnet/testnet or BNB mainnet)
- * - Locks required gas amount based on current gas price (with 20% buffer)
- * - Verifies deployer has sufficient native token balance before proceeding
  * - Validates all configuration parameters
  * - Confirms factory deployment at predicted address
  * - Outputs all deployed addresses for verification
@@ -81,21 +79,6 @@ contract DeployLevr is Script {
     uint16 constant DEFAULT_MIN_STOKEN_BPS_TO_SUBMIT = 100; // 1%
     uint16 constant DEFAULT_MAX_PROPOSAL_AMOUNT_BPS = 500; // 5%
     uint16 constant DEFAULT_MINIMUM_QUORUM_BPS = 25; // 0.25% minimum quorum to prevent early capture
-
-    // Estimated gas costs for deployment (conservative estimates)
-    uint256 constant ESTIMATED_FORWARDER_GAS = 500_000; // ~0.0005 ETH at 1 gwei
-    uint256 constant ESTIMATED_DEPLOYER_GAS = 300_000; // ~0.0003 ETH at 1 gwei
-    uint256 constant ESTIMATED_FACTORY_GAS = 3_000_000; // ~0.003 ETH at 1 gwei
-    uint256 constant ESTIMATED_FEE_SPLITTER_GAS = 500_000; // ~0.0005 ETH at 1 gwei
-    uint256 constant TOTAL_ESTIMATED_GAS =
-        ESTIMATED_FORWARDER_GAS +
-            ESTIMATED_DEPLOYER_GAS +
-            ESTIMATED_FACTORY_GAS +
-            ESTIMATED_FEE_SPLITTER_GAS; // ~4.3M gas
-
-    // Minimum ETH balance required (gas estimate * gas price + 20% buffer)
-    uint256 constant SAFETY_BUFFER_BPS = 2000; // 20% buffer
-    uint256 constant MIN_DEPLOYER_BALANCE = 0.1 ether; // Fallback minimum
 
     // Deployment parameters struct to avoid stack-too-deep
     struct DeployParams {
@@ -227,42 +210,7 @@ contract DeployLevr is Script {
         }
         console.log('');
 
-        // =======================================================================
-        // GAS REQUIREMENT VALIDATION (Lock Required Amount)
-        // =======================================================================
-
-        console.log('=== GAS REQUIREMENT VALIDATION ===');
-
-        // Scope for gas calculations to avoid stack-too-deep
-        {
-            uint256 currentGasPrice = tx.gasprice > 0 ? tx.gasprice : 1 gwei;
-            uint256 estimatedCostWei = TOTAL_ESTIMATED_GAS * currentGasPrice;
-            uint256 requiredWithBuffer = estimatedCostWei +
-                ((estimatedCostWei * SAFETY_BUFFER_BPS) / 10000);
-            uint256 requiredBalance = requiredWithBuffer > MIN_DEPLOYER_BALANCE
-                ? requiredWithBuffer
-                : MIN_DEPLOYER_BALANCE;
-
-            console.log('Current Gas Price:', currentGasPrice / 1 gwei, 'gwei');
-            console.log('Estimated Total Gas:', TOTAL_ESTIMATED_GAS);
-            console.log('Estimated Cost:', estimatedCostWei / 1e18, 'ETH');
-            console.log('Required (with 20% buffer):', requiredBalance / 1e18, 'ETH');
-            console.log('Deployer Balance:', params.deployer.balance / 1e18, 'ETH');
-
-            require(
-                params.deployer.balance >= requiredBalance,
-                string(
-                    abi.encodePacked(
-                        'Insufficient deployer balance - need at least ',
-                        vm.toString(requiredBalance / 1e18),
-                        ' ETH'
-                    )
-                )
-            );
-
-            console.log('[OK] Sufficient balance locked for deployment');
-            console.log('');
-        }
+        // Note: Balance checks are skipped - Foundry validates during broadcast
 
         // Show if protocol treasury is using default
         if (params.protocolTreasury == params.deployer) {

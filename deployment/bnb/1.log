@@ -1,0 +1,374 @@
+ ✔ make deploy
+Available deploy scripts:
+  1) script/DeployLevr.s.sol
+  2) script/DeployLevrFactoryDevnet.s.sol
+  3) script/DeployLevrFeeSplitter.s.sol
+Select script name or number (default: script/DeployLevr.s.sol): 1
+Available RPC aliases from foundry.toml:
+  1) anvil
+  2) base-mainnet
+  3) base-sepolia
+  4) bnb-mainnet
+  5) optimism-sepolia
+  6) sepolia
+Select RPC alias (name or number, default: base-sepolia): 4
+Is this a mainnet? [y/n] (default: n): y
+Verify on explorer? [y/n] (default: y): y
+Broadcast transaction? [y/n] (default: y): y
+Deploying script/DeployLevr.s.sol to bnb-mainnet
+[⠊] Compiling...
+[⠔] Compiling 97 files with Solc 0.8.30
+[⠒] Solc 0.8.30 finished in 9.79s
+Compiler run successful!
+Script ran successfully.
+
+== Logs ==
+  === LEVR PROTOCOL V1 DEPLOYMENT ===
+  Network Chain ID: 56
+  Deployer Address: 0x6C02C5FCF82d2951Af85C12e8469Ab6f16c58e32
+  Deployer Balance: 0 ETH
+  
+  Network: BNB Mainnet
+  Clanker Factory (auto-selected): 0xFb28402068d716C82D8Cd80567d1B0e2539AdFB2
+  Multisig (final owner): 0x4B7ddAc59cEeC3dE4706C460f34Bbce758a58bED
+  
+  Protocol Treasury: 0x4B7ddAc59cEeC3dE4706C460f34Bbce758a58bED
+  
+  === DEPLOYMENT CONFIGURATION ===
+  Protocol Treasury: 0x4B7ddAc59cEeC3dE4706C460f34Bbce758a58bED (custom)
+  Clanker Factory: 0xFb28402068d716C82D8Cd80567d1B0e2539AdFB2
+  
+  Factory Configuration:
+  - Protocol Fee BPS: 50
+  - Stream Window (seconds): 259200
+  - Proposal Window (seconds): 172800
+  - Voting Window (seconds): 432000
+  - Max Active Proposals (per type): 7
+  - Quorum BPS: 7000
+  - Approval BPS: 5100
+  - Min sToken BPS to Submit: 100
+  - Max Proposal Amount BPS: 500
+  - Minimum Quorum BPS: 25
+  
+  === STARTING DEPLOYMENT ===
+  
+  Deploying LevrForwarder_v1...
+  - Forwarder deployed at: 0xF2A54Bef682F1F8070d2c5275f0378f672B68A69
+  
+  Predicted Factory Address: 0xEe144ec00280ff42EEfaEB9f2dd7421c962e8aae
+  Current Deployer Nonce: 36
+  
+  Deploying implementation contracts...
+  - Treasury Implementation: 0xdeD0dCc5D9B74c743Bd680921d2A4eA220Ab5608
+  - Staking Implementation: 0xC2F96058c4c0CF1A0d6a8Caa9cFfD70d22B5ad06
+  - Governor Implementation: 0xA9E622d2De261e65353F56CCA25c45AeA7B6bb34
+  - Staked Token Implementation: 0x2D2aa51BD05B186CE550290f9e9ce8a789B0Cd99
+  
+  Deploying LevrDeployer_v1...
+  - Deployer Logic deployed at: 0x2045820b4Ca6432cD96310ECA6006d69CDC915F0
+  - Authorized Factory: 0xEe144ec00280ff42EEfaEB9f2dd7421c962e8aae
+  
+  Initial whitelist:
+  - Wrapped Native (WETH/WBNB): 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c
+  
+  Deploying LevrFactory_v1...
+  - Factory deployed at: 0xEe144ec00280ff42EEfaEB9f2dd7421c962e8aae
+  - Factory address verified!
+  
+  Adding Clanker factory to trusted list...
+  - Clanker factory trusted: 0xFb28402068d716C82D8Cd80567d1B0e2539AdFB2
+  
+  Deploying LevrFeeSplitterFactory_v1...
+  - LevrFeeSplitterFactory_v1: 0xC1EDca74aF41744be593a37a845ea1F735DA47be
+  
+  === TRANSFERRING OWNERSHIP TO MULTISIG ===
+  Multisig address: 0x4B7ddAc59cEeC3dE4706C460f34Bbce758a58bED
+  
+  - LevrFactory_v1 ownership transferred
+  
+  All ownership transfers complete!
+  
+  === DEPLOYMENT VERIFICATION ===
+  All configuration parameters verified!
+  
+  === DEPLOYMENT SUCCESSFUL ===
+  
+  Deployed Contracts:
+  - LevrForwarder_v1: 0xF2A54Bef682F1F8070d2c5275f0378f672B68A69
+  - LevrDeployer_v1: 0x2045820b4Ca6432cD96310ECA6006d69CDC915F0
+  - LevrFactory_v1: 0xEe144ec00280ff42EEfaEB9f2dd7421c962e8aae
+  - LevrFeeSplitterFactory_v1: 0xC1EDca74aF41744be593a37a845ea1F735DA47be
+  
+  Factory Configuration:
+  - Owner (Multisig): 0x4B7ddAc59cEeC3dE4706C460f34Bbce758a58bED
+  - Protocol Treasury: 0x4B7ddAc59cEeC3dE4706C460f34Bbce758a58bED
+  - Clanker Factory: 0xFb28402068d716C82D8Cd80567d1B0e2539AdFB2
+  - Trusted Forwarder: 0xF2A54Bef682F1F8070d2c5275f0378f672B68A69
+  
+  Governance Parameters:
+  - Proposal Window: 2 days
+  - Voting Window: 5 days
+  - Max Active Proposals: 7
+  - Quorum: 70 %
+  - Approval Threshold: 51 %
+  - Min sToken to Propose: 1 %
+  - Max Proposal Amount: 5 %
+  
+  === NEXT STEPS ===
+  1. Verify contracts on block explorer (if applicable)
+  2. Update UI configuration with factory address
+  3. Deploy Clanker tokens via UI or separate script
+  4. Register projects using factory.register()
+  5. Start governance cycles and test staking flows
+  
+  Deployment completed successfully!
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 56
+
+Estimated gas price: 0.000000001 gwei
+
+Estimated total gas used for script: 16253058
+
+Estimated amount required: 0.000000000016253058 BNB
+
+==========================
+
+##### bsc
+✅  [Success] Hash: 0xaa9dbc09ef984b0cf079651a3d7b898c23912a5d15a895a86dcd6d1ee4759c77
+Contract Address: 0x2D2aa51BD05B186CE550290f9e9ce8a789B0Cd99
+Block: 72008277
+Paid: 0.00003796105 BNB (759221 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0xb28f69bfc9e7ce2305f48514f9d963eacef11f38868a8e62588b4fcb8b9f8a89
+Contract Address: 0xF2A54Bef682F1F8070d2c5275f0378f672B68A69
+Block: 72008277
+Paid: 0.0000668073 BNB (1336146 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0xcdf027e0b06bfa39c5928247ff880d805469c06ae441c47eb1cdf3845735c719
+Contract Address: 0xdeD0dCc5D9B74c743Bd680921d2A4eA220Ab5608
+Block: 72008277
+Paid: 0.0000166453 BNB (332906 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0x67c8a351effa17b0aafe306eb382b24fe555a3608a35dbafada127264fa4465b
+Contract Address: 0xA9E622d2De261e65353F56CCA25c45AeA7B6bb34
+Block: 72008277
+Paid: 0.00014101945 BNB (2820389 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0x1867df1addbd9234cbf928a3a1226250adb247fdd3d5b39afd80ef00796ee348
+Contract Address: 0x2045820b4Ca6432cD96310ECA6006d69CDC915F0
+Block: 72008277
+Paid: 0.0000311539 BNB (623078 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0x00ed883bbadda3743ee081647b4df8d0dbe5cbee463b07bfdd298bfedc20cd0f
+Contract Address: 0xEe144ec00280ff42EEfaEB9f2dd7421c962e8aae
+Block: 72008277
+Paid: 0.0001327853 BNB (2655706 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0x966daf381f8d8491c09e4521d6c4e08eb8140a7f145aa6837c5899d4fcbe2f04
+Contract Address: 0xC2F96058c4c0CF1A0d6a8Caa9cFfD70d22B5ad06
+Block: 72008277
+Paid: 0.0001233374 BNB (2466748 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0xa373458a34f18a5f0f2be701c566c8283ba90bc99a9c1c6a168750c5436b4446
+Block: 72008278
+Paid: 0.0000046101 BNB (92202 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0xd6c6ff92b75decd61ee85c5cb0549ed797d815b1207852b90e317db92571a634
+Block: 72008280
+Paid: 0.00000145935 BNB (29187 gas * 0.05 gwei)
+
+
+##### bsc
+✅  [Success] Hash: 0x18fa54632478ee6cff67fdbe1a0232c53ba15a5ace9c6770b1b14f40c327e5ec
+Contract Address: 0xC1EDca74aF41744be593a37a845ea1F735DA47be
+Block: 72008280
+Paid: 0.00006858 BNB (1371600 gas * 0.05 gwei)
+
+✅ Sequence #1 on bsc | Total Paid: 0.00062435915 BNB (12487183 gas * avg 0.05 gwei)
+                                                                                 
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+##
+Start verification for (8) contracts
+Start verifying contract `0xF2A54Bef682F1F8070d2c5275f0378f672B68A69` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000104c657672466f727761726465725f763100000000000000000000000000000000
+
+Submitting verification for [src/LevrForwarder_v1.sol:LevrForwarder_v1] 0xF2A54Bef682F1F8070d2c5275f0378f672B68A69.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `xrdhvig1qfnnruhwu1dxfnf4aka9ccbcthezx8nievuhnkhh3h`
+        URL: https://bscscan.com/address/0xf2a54bef682f1f8070d2c5275f0378f672b68a69
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0xdeD0dCc5D9B74c743Bd680921d2A4eA220Ab5608` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 000000000000000000000000ee144ec00280ff42eefaeb9f2dd7421c962e8aae000000000000000000000000f2a54bef682f1f8070d2c5275f0378f672b68a69
+
+Submitting verification for [src/LevrTreasury_v1.sol:LevrTreasury_v1] 0xdeD0dCc5D9B74c743Bd680921d2A4eA220Ab5608.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `mawvfrm1pnq3kfq8jisd2qjpiib2ebjzj6u4nbek6272jrdubr`
+        URL: https://bscscan.com/address/0xded0dcc5d9b74c743bd680921d2a4ea220ab5608
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0xC2F96058c4c0CF1A0d6a8Caa9cFfD70d22B5ad06` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 000000000000000000000000ee144ec00280ff42eefaeb9f2dd7421c962e8aae000000000000000000000000f2a54bef682f1f8070d2c5275f0378f672b68a69
+
+Submitting verification for [src/LevrStaking_v1.sol:LevrStaking_v1] 0xC2F96058c4c0CF1A0d6a8Caa9cFfD70d22B5ad06.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `bbbpkzlqv7a5fwn35se2kbihqfwbygutvwktvuqv4yc4rfynxd`
+        URL: https://bscscan.com/address/0xc2f96058c4c0cf1a0d6a8caa9cffd70d22b5ad06
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0xA9E622d2De261e65353F56CCA25c45AeA7B6bb34` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 000000000000000000000000ee144ec00280ff42eefaeb9f2dd7421c962e8aae000000000000000000000000f2a54bef682f1f8070d2c5275f0378f672b68a69
+
+Submitting verification for [src/LevrGovernor_v1.sol:LevrGovernor_v1] 0xA9E622d2De261e65353F56CCA25c45AeA7B6bb34.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `4v9kckqj91dbbmqnincnmyisdbpusit8f5uhkkqxlnvdf29kci`
+        URL: https://bscscan.com/address/0xa9e622d2de261e65353f56cca25c45aea7b6bb34
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0x2D2aa51BD05B186CE550290f9e9ce8a789B0Cd99` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 000000000000000000000000ee144ec00280ff42eefaeb9f2dd7421c962e8aae
+
+Submitting verification for [src/LevrStakedToken_v1.sol:LevrStakedToken_v1] 0x2D2aa51BD05B186CE550290f9e9ce8a789B0Cd99.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `ixubi8h1pgtznycb2nzkaajuvzzd2zc7ejcmagcwvm4p7dj7f7`
+        URL: https://bscscan.com/address/0x2d2aa51bd05b186ce550290f9e9ce8a789b0cd99
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0x2045820b4Ca6432cD96310ECA6006d69CDC915F0` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 000000000000000000000000ee144ec00280ff42eefaeb9f2dd7421c962e8aae000000000000000000000000ded0dcc5d9b74c743bd680921d2a4ea220ab5608000000000000000000000000c2f96058c4c0cf1a0d6a8caa9cffd70d22b5ad06000000000000000000000000a9e622d2de261e65353f56cca25c45aea7b6bb340000000000000000000000002d2aa51bd05b186ce550290f9e9ce8a789b0cd99
+
+Submitting verification for [src/LevrDeployer_v1.sol:LevrDeployer_v1] 0x2045820b4Ca6432cD96310ECA6006d69CDC915F0.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `mzzltj86j6fytzcvkckqzh3ejmbaphvlsepn8gflgvcbre3m9c`
+        URL: https://bscscan.com/address/0x2045820b4ca6432cd96310eca6006d69cdc915f0
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0xEe144ec00280ff42EEfaEB9f2dd7421c962e8aae` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 0000000000000000000000000000000000000000000000000000000000000032000000000000000000000000000000000000000000000000000000000003f4800000000000000000000000004b7ddac59ceec3de4706c460f34bbce758a58bed000000000000000000000000000000000000000000000000000000000002a300000000000000000000000000000000000000000000000000000000000006978000000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000001b5800000000000000000000000000000000000000000000000000000000000013ec000000000000000000000000000000000000000000000000000000000000006400000000000000000000000000000000000000000000000000000000000001f4000000000000000000000000000000000000000000000000000000000000001900000000000000000000000000000000000000000000000000000000000151800000000000000000000000000000000000000000000000000000000000005460000000000000000000000000000000000000000000000000000000000002a30000000000000000000000000000000000000000000000000000000000000007d00000000000000000000000000000000000000000000000000000000000001388000000000000000000000000000000000000000000000000000000000000006400000000000000000000000000000000000000000000000000000000000000190000000000000000000000006c02c5fcf82d2951af85c12e8469ab6f16c58e32000000000000000000000000f2a54bef682f1f8070d2c5275f0378f672b68a690000000000000000000000002045820b4ca6432cd96310eca6006d69cdc915f000000000000000000000000000000000000000000000000000000000000002c00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c
+
+Submitting verification for [src/LevrFactory_v1.sol:LevrFactory_v1] 0xEe144ec00280ff42EEfaEB9f2dd7421c962e8aae.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `ynt4e6xu36izhsbu7pbqn4xa9u6te6jerdj8snzirde937ea1v`
+        URL: https://bscscan.com/address/0xee144ec00280ff42eefaeb9f2dd7421c962e8aae
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0xC1EDca74aF41744be593a37a845ea1F735DA47be` deployed on bsc
+EVM version: prague
+Compiler version: 0.8.30
+Optimizations:    1
+Constructor args: 000000000000000000000000ee144ec00280ff42eefaeb9f2dd7421c962e8aae000000000000000000000000f2a54bef682f1f8070d2c5275f0378f672b68a69
+
+Submitting verification for [src/LevrFeeSplitterFactory_v1.sol:LevrFeeSplitterFactory_v1] 0xC1EDca74aF41744be593a37a845ea1F735DA47be.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `xdnd3issltpwnriazadkift4i86cx3ujgz583pbmaphzgkdqec`
+        URL: https://bscscan.com/address/0xc1edca74af41744be593a37a845ea1f735da47be
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Warning: Verification is still pending...; waiting 15 seconds before trying again (7 tries remaining)
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+All (8) contracts were verified!
+
+Transactions saved to: /Users/anon/Desktop/quantide/levr/packages/levr-sdk/contracts/broadcast/DeployLevr.s.sol/56/run-latest.json
+
+Sensitive values saved to: /Users/anon/Desktop/quantide/levr/packages/levr-sdk/contracts/cache/DeployLevr.s.sol/56/run-latest.json
+
+contracts on  feat/fork (641cd8e) +1  [bold #AE81FF!+bold #8f8f8f] took 2m57s 
+ ✔ 
