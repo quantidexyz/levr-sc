@@ -19,6 +19,11 @@ import {LevrStakedToken_v1} from '../src/LevrStakedToken_v1.sol';
  *
  * This script integrates with the common.mk deployment system.
  *
+ * Supported Networks:
+ * - Base Mainnet (8453)
+ * - Base Sepolia (84532)
+ * - BNB Mainnet (56)
+ *
  * Usage:
  * 1. Set environment variables in .env file:
  *    MAINNET_PRIVATE_KEY=0x...  # For mainnet
@@ -34,6 +39,7 @@ import {LevrStakedToken_v1} from '../src/LevrStakedToken_v1.sol';
  *
  * Environment Variables (Optional - special defaults):
  * - PROTOCOL_TREASURY: Address to receive protocol fees (default: deployer address)
+ * - MULTISIG_ADDRESS: Final owner for ownership transfer (default: no transfer, deployer keeps ownership)
  *
  * Environment Variables (Optional - with defaults):
  * - PROTOCOL_FEE_BPS: Protocol fee in basis points (default: 50 = 0.5%)
@@ -51,13 +57,14 @@ import {LevrStakedToken_v1} from '../src/LevrStakedToken_v1.sol';
  * MAINNET_PRIVATE_KEY=0xabcd...
  * TESTNET_PRIVATE_KEY=0xef01...
  * PROTOCOL_TREASURY=0x1234...  # Optional, defaults to deployer
+ * MULTISIG_ADDRESS=0x5678...   # Optional, transfers ownership after deployment
  * PROTOCOL_FEE_BPS=50
  * STREAM_WINDOW_SECONDS=259200
  *
  * Safety checks:
- * - Validates network is supported (Base mainnet/testnet only)
+ * - Validates network is supported (Base mainnet/testnet or BNB mainnet)
  * - Locks required gas amount based on current gas price (with 20% buffer)
- * - Verifies deployer has sufficient ETH balance before proceeding
+ * - Verifies deployer has sufficient native token balance before proceeding
  * - Validates all configuration parameters
  * - Confirms factory deployment at predicted address
  * - Outputs all deployed addresses for verification
@@ -96,6 +103,7 @@ contract DeployLevr is Script {
         address deployer;
         address protocolTreasury;
         address clankerFactory;
+        address multisig; // Final owner for ownership transfer (optional)
         uint16 protocolFeeBps;
         uint32 streamWindowSeconds;
         uint32 proposalWindowSeconds;
@@ -118,22 +126,26 @@ contract DeployLevr is Script {
         if (chainId == 8453) return 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
         // Base Sepolia (84532): 0xE85A59c628F7d27878ACeB4bf3b35733630083a9
         if (chainId == 84532) return 0xE85A59c628F7d27878ACeB4bf3b35733630083a9;
+        // BNB Mainnet (56): 0xFb28402068d716C82D8Cd80567d1B0e2539AdFB2
+        if (chainId == 56) return 0xFb28402068d716C82D8Cd80567d1B0e2539AdFB2;
         // Fallback for unsupported chains
         revert('Unsupported chain - no Clanker factory available');
     }
 
     /**
-     * @notice Get WETH address for the current chain
-     * @param chainId The chain ID to get WETH for
-     * @return The WETH address
+     * @notice Get wrapped native token address for the current chain (WETH/WBNB)
+     * @param chainId The chain ID to get the wrapped native token for
+     * @return The wrapped native token address
      */
-    function getWETH(uint256 chainId) internal pure returns (address) {
-        // Base mainnet (8453): 0x4200000000000000000000000000000000000006
+    function getWrappedNative(uint256 chainId) internal pure returns (address) {
+        // Base mainnet (8453): WETH
         if (chainId == 8453) return 0x4200000000000000000000000000000000000006;
-        // Base Sepolia (84532): 0x4200000000000000000000000000000000000006
+        // Base Sepolia (84532): WETH
         if (chainId == 84532) return 0x4200000000000000000000000000000000000006;
+        // BNB Mainnet (56): WBNB
+        if (chainId == 56) return 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
         // Fallback for unsupported chains
-        revert('Unsupported chain - no WETH available');
+        revert('Unsupported chain - no wrapped native token available');
     }
 
     /**
@@ -146,6 +158,9 @@ contract DeployLevr is Script {
         params.protocolTreasury = vm.envExists('PROTOCOL_TREASURY')
             ? vm.envAddress('PROTOCOL_TREASURY')
             : params.deployer;
+        params.multisig = vm.envExists('MULTISIG_ADDRESS')
+            ? vm.envAddress('MULTISIG_ADDRESS')
+            : address(0);
         params.protocolFeeBps = vm.envExists('PROTOCOL_FEE_BPS')
             ? uint16(vm.envUint('PROTOCOL_FEE_BPS'))
             : DEFAULT_PROTOCOL_FEE_BPS;
@@ -193,13 +208,23 @@ contract DeployLevr is Script {
         console.log('');
 
         require(
-            block.chainid == 8453 || block.chainid == 84532,
-            'Unsupported network - deploy on Base mainnet (8453) or Base Sepolia (84532)'
+            block.chainid == 8453 || block.chainid == 84532 || block.chainid == 56,
+            'Unsupported network - deploy on Base mainnet (8453), Base Sepolia (84532), or BNB Mainnet (56)'
         );
 
-        string memory networkName = block.chainid == 8453 ? 'Base Mainnet' : 'Base Sepolia';
+        string memory networkName;
+        if (block.chainid == 8453) {
+            networkName = 'Base Mainnet';
+        } else if (block.chainid == 84532) {
+            networkName = 'Base Sepolia';
+        } else {
+            networkName = 'BNB Mainnet';
+        }
         console.log('Network:', networkName);
         console.log('Clanker Factory (auto-selected):', params.clankerFactory);
+        if (params.multisig != address(0) && params.multisig != params.deployer) {
+            console.log('Multisig (final owner):', params.multisig);
+        }
         console.log('');
 
         // =======================================================================
@@ -345,12 +370,12 @@ contract DeployLevr is Script {
         console.log('- Authorized Factory:', levrDeployer.authorizedFactory());
         console.log('');
 
-        // 5. Build initial whitelist (WETH always included)
-        address weth = getWETH(block.chainid);
+        // 5. Build initial whitelist (wrapped native token always included)
+        address wrappedNative = getWrappedNative(block.chainid);
         address[] memory initialWhitelist = new address[](1);
-        initialWhitelist[0] = weth;
+        initialWhitelist[0] = wrappedNative;
         console.log('Initial whitelist:');
-        console.log('- WETH:', weth);
+        console.log('- Wrapped Native (WETH/WBNB):', wrappedNative);
         console.log('');
 
         ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
@@ -389,7 +414,7 @@ contract DeployLevr is Script {
         console.log('- Clanker factory trusted:', params.clankerFactory);
         console.log('');
 
-        // 6. Deploy the fee splitter deployer (creates per-project splitters)
+        // 7. Deploy the fee splitter deployer (creates per-project splitters)
         console.log('Deploying LevrFeeSplitterFactory_v1...');
         LevrFeeSplitterFactory_v1 feeSplitterFactory = new LevrFeeSplitterFactory_v1(
             address(factory),
@@ -397,6 +422,26 @@ contract DeployLevr is Script {
         );
         console.log('- LevrFeeSplitterFactory_v1:', address(feeSplitterFactory));
         console.log('');
+
+        // 8. Transfer ownership to multisig (if configured)
+        if (params.multisig != address(0) && params.multisig != params.deployer) {
+            console.log('=== TRANSFERRING OWNERSHIP TO MULTISIG ===');
+            console.log('Multisig address:', params.multisig);
+            console.log('');
+
+            factory.transferOwnership(params.multisig);
+            console.log('- LevrFactory_v1 ownership transferred');
+
+            console.log('');
+            console.log('All ownership transfers complete!');
+            console.log('');
+        } else {
+            console.log('=== SKIPPING OWNERSHIP TRANSFER ===');
+            console.log(
+                'No multisig configured or same as deployer - ownership remains with deployer'
+            );
+            console.log('');
+        }
 
         vm.stopBroadcast();
 
@@ -460,7 +505,11 @@ contract DeployLevr is Script {
         console.log('- LevrFeeSplitterFactory_v1:', address(feeSplitterFactory));
         console.log('');
         console.log('Factory Configuration:');
-        console.log('- Owner (Admin):', params.deployer);
+        if (params.multisig != address(0) && params.multisig != params.deployer) {
+            console.log('- Owner (Multisig):', params.multisig);
+        } else {
+            console.log('- Owner (Deployer):', params.deployer);
+        }
         console.log('- Protocol Treasury:', params.protocolTreasury);
         console.log('- Clanker Factory:', params.clankerFactory);
         console.log('- Trusted Forwarder:', address(forwarder));
