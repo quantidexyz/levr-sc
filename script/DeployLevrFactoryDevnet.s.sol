@@ -135,12 +135,15 @@ contract DeployLevrFactoryDevnet is Script {
         console.log('Deployer Logic deployed at:', address(levrDeployer));
         console.log('Authorized Factory:', levrDeployer.authorizedFactory());
 
-        // Build initial whitelist (WETH always included)
+        // Build initial whitelist (WETH and DAI included)
         address weth = getWETH(block.chainid);
-        address[] memory initialWhitelist = new address[](1);
+        address dai = 0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb; // DAI on Base
+        address[] memory initialWhitelist = new address[](2);
         initialWhitelist[0] = weth;
+        initialWhitelist[1] = dai;
         console.log('Initial whitelist:');
         console.log('- WETH:', weth);
+        console.log('- DAI:', dai);
 
         ILevrFactory_v1.ConfigBounds memory bounds = ILevrFactory_v1.ConfigBounds({
             minStreamWindowSeconds: 1 days,
