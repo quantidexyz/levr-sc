@@ -1,4 +1,5 @@
 # Levr Protocol v1 — Smart Contracts
+Currently deplpoyed on BNB Chain and Base. 
 
 **Time-weighted governance for token projects.** A modular system that enables projects to deploy treasury, staking, and governance infrastructure with gasless meta-transaction support.
 
